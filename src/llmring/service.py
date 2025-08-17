@@ -274,13 +274,7 @@ class LLMRing:
                         prompt_tokens = response.usage.get("prompt_tokens", 0)
                         completion_tokens = response.usage.get("completion_tokens", 0)
 
-                    # System prompt logging is disabled by default
-                    system_prompt = None
-                    if os.getenv("LLMRING_LOG_SYSTEM_PROMPT", "false").lower() in {"1", "true", "yes", "on"}:
-                        for msg in request.messages:
-                            if msg.role == "system":
-                                system_prompt = _redact_and_truncate(str(msg.content))
-                                break
+                    # System prompt logging removed for privacy
 
                     # Extract tool names if tools are used
                     tools_used = None
@@ -302,7 +296,6 @@ class LLMRing:
                         "response_time_ms": response_time_ms,
                         "temperature": request.temperature,
                         "max_tokens": request.max_tokens,
-                        "system_prompt": system_prompt,
                         "tools_used": [
                             _truncate(t, 256) for t in tools_used
                         ]

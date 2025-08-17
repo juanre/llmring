@@ -129,7 +129,7 @@ class LLMDatabase:
             """,
         )
 
-        # API call recording - second most frequent
+        # API call recording - second most frequent (without system prompt fields)
         self.db.add_prepared_statement(
             "record_api_call",
             """
@@ -137,14 +137,14 @@ class LLMDatabase:
                 origin, id_at_origin, provider, model_name,
                 prompt_tokens, completion_tokens, total_tokens,
                 response_time_ms, temperature, max_tokens,
-                top_p, stream, stop_sequences, system_prompt,
+                top_p, stream, stop_sequences,
                 tools_used, json_mode, response_format, seed,
                 tool_choice, parallel_tool_calls, status,
                 error_type, error_message, estimated_cost
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-                $21, $22, $23, $24
+                $11, $12, $13, $14, $15, $16, $17, $18, $19,
+                $20, $21, $22, $23
             ) RETURNING id
             """,
         )
@@ -515,14 +515,14 @@ class LLMDatabase:
                 origin, id_at_origin, provider, model_name,
                 prompt_tokens, completion_tokens, total_tokens,
                 response_time_ms, temperature, max_tokens,
-                top_p, stream, stop_sequences, system_prompt,
+                top_p, stream, stop_sequences,
                 tools_used, json_mode, response_format, seed,
                 tool_choice, parallel_tool_calls, status,
                 error_type, error_message, estimated_cost
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-                $21, $22, $23, $24
+                $11, $12, $13, $14, $15, $16, $17, $18, $19,
+                $20, $21, $22, $23
             ) RETURNING id
         """
         )
@@ -542,7 +542,6 @@ class LLMDatabase:
             top_p,
             stream,
             stop_sequences_json,
-            system_prompt,
             tools_used_json,
             json_mode,
             response_format_json,
@@ -598,7 +597,7 @@ class LLMDatabase:
                 if result["stop_sequences"]
                 else None
             ),
-            system_prompt=result["system_prompt"],
+            system_prompt_hash=None,
             tools_used=(
                 json.loads(result["tools_used"]) if result["tools_used"] else None
             ),
@@ -759,7 +758,7 @@ class LLMDatabase:
                         if row["stop_sequences"]
                         else None
                     ),
-                    system_prompt=row["system_prompt"],
+                    system_prompt_hash=None,
                     tools_used=(
                         json.loads(row["tools_used"]) if row["tools_used"] else None
                     ),

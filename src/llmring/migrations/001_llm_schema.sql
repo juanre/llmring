@@ -86,8 +86,6 @@ CREATE TABLE IF NOT EXISTS {{tables.llm_api_calls}} (
     top_p FLOAT,
     stream BOOLEAN DEFAULT FALSE,
     stop_sequences JSONB,
-    system_prompt TEXT,
-    system_prompt_hash VARCHAR(64), -- SHA-256 hash of system prompt for privacy
     tools_used JSONB, -- array of tool names used
     json_mode BOOLEAN DEFAULT FALSE,
     response_format JSONB,
@@ -191,7 +189,6 @@ CREATE OR REPLACE FUNCTION {{schema}}.record_api_call(
     p_response_time_ms INTEGER DEFAULT NULL,
     p_temperature FLOAT DEFAULT NULL,
     p_max_tokens INTEGER DEFAULT NULL,
-    p_system_prompt_hash VARCHAR(64) DEFAULT NULL,
     p_tools_used JSONB DEFAULT NULL,
     p_status VARCHAR(20) DEFAULT 'success',
     p_error_type VARCHAR(100) DEFAULT NULL,
@@ -226,13 +223,13 @@ BEGIN
         origin, id_at_origin, model_id, provider, model_name,
         prompt_tokens, completion_tokens, total_tokens,
         estimated_cost, dollars_per_million_tokens_input_used, dollars_per_million_tokens_output_used,
-        response_time_ms, temperature, max_tokens, system_prompt_hash, tools_used,
+        response_time_ms, temperature, max_tokens, tools_used,
         status, error_type, error_message
     ) VALUES (
         p_origin, p_id_at_origin, v_model_id, p_provider, p_model_name,
         p_prompt_tokens, p_completion_tokens, v_total_tokens,
         v_estimated_cost, v_cost_input, v_cost_output,
-        p_response_time_ms, p_temperature, p_max_tokens, p_system_prompt_hash, p_tools_used,
+        p_response_time_ms, p_temperature, p_max_tokens, p_tools_used,
         p_status, p_error_type, p_error_message
     ) RETURNING id INTO v_call_id;
 
