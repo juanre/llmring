@@ -7,6 +7,9 @@ import os
 from typing import Any, Dict, List, Optional, Union
 
 from anthropic import AsyncAnthropic
+import asyncio
+from llmring.net.retry import retry_async
+from llmring.net.circuit_breaker import CircuitBreaker
 from anthropic.types import Message as AnthropicMessage
 from dotenv import load_dotenv
 from llmring.base import BaseLLMProvider
@@ -65,6 +68,7 @@ class AnthropicProvider(BaseLLMProvider):
             "claude-3-sonnet-20240229",
             "claude-3-haiku-20240307",
         ]
+        self._breaker = CircuitBreaker()
 
     def validate_model(self, model: str) -> bool:
         """
@@ -335,10 +339,23 @@ class AnthropicProvider(BaseLLMProvider):
 
         # Make the API call using the SDK
         try:
-            response: AnthropicMessage = await self.client.messages.create(
-                **request_params
-            )
+            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+
+            async def _do_call():
+                return await asyncio.wait_for(
+                    self.client.messages.create(**request_params), timeout=timeout_s
+                )
+
+            breaker_key = f"anthropic:{model}"
+            if not await self._breaker.allow(breaker_key):
+                raise Exception("Anthropic circuit open for model")
+            response: AnthropicMessage = await retry_async(_do_call)
+            await self._breaker.record_success(breaker_key)
         except Exception as e:
+            try:
+                await self._breaker.record_failure(f"anthropic:{model}")
+            except Exception:
+                pass
             # Handle specific Anthropic errors with more context
             error_msg = str(e)
             if "API key" in error_msg.lower():

@@ -11,6 +11,9 @@ import copy
 import warnings
 
 from dotenv import load_dotenv
+from llmring.net.safe_fetcher import fetch_bytes as safe_fetch_bytes, SafeFetchError
+from llmring.net.retry import retry_async, RetryError
+from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.base import BaseLLMProvider
 from llmring.model_refresh.models import ModelInfo
 from llmring.schemas import LLMResponse, Message
@@ -59,6 +62,8 @@ class OpenAIProvider(BaseLLMProvider):
             "o1",
             "o1-mini",
         ]
+        # Simple circuit breaker per model
+        self._breaker = CircuitBreaker()
 
     def validate_model(self, model: str) -> bool:
         """
@@ -186,11 +191,15 @@ class OpenAIProvider(BaseLLMProvider):
             for info in uploaded_files:
                 content_items.append({"type": "input_file", "file_id": info["file_id"]})
 
-            resp = await self.client.responses.create(
-                model=model,
-                input=[{"role": "user", "content": content_items}],
-                **({"temperature": temperature} if temperature is not None else {}),
-                **({"max_output_tokens": max_tokens} if max_tokens is not None else {}),
+            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+            resp = await asyncio.wait_for(
+                self.client.responses.create(
+                    model=model,
+                    input=[{"role": "user", "content": content_items}],
+                    **({"temperature": temperature} if temperature is not None else {}),
+                    **({"max_output_tokens": max_tokens} if max_tokens is not None else {}),
+                ),
+                timeout=timeout_s,
             )
 
             response_content = (
@@ -457,28 +466,25 @@ class OpenAIProvider(BaseLLMProvider):
                         }
                     )
 
-        # Inline remote images to avoid provider-side fetch timeouts on URLs
-        for message in openai_messages:
-            if isinstance(message, dict) and isinstance(message.get("content"), list):
-                for part in message["content"]:
-                    if (
-                        isinstance(part, dict)
-                        and part.get("type") == "image_url"
-                        and isinstance(part.get("image_url"), dict)
-                    ):
-                        url = part["image_url"].get("url")
-                        if isinstance(url, str) and url.startswith(("http://", "https://")):
-                            try:
-                                import httpx  # local import to avoid hard dependency at import time
-                                resp = httpx.get(url, timeout=10.0)
-                                resp.raise_for_status()
-                                data = resp.content
-                                mime = resp.headers.get("content-type") or "image/png"
-                                b64 = base64.b64encode(data).decode("utf-8")
-                                part["image_url"]["url"] = f"data:{mime};base64,{b64}"
-                            except Exception:
-                                # Leave URL as-is if fetch fails
-                                pass
+        # Optional: inline remote images using safe fetcher if enabled
+        if os.getenv("LLMRING_INLINE_REMOTE_IMAGES", "false").lower() in {"1", "true", "yes", "on"}:
+            for message in openai_messages:
+                if isinstance(message, dict) and isinstance(message.get("content"), list):
+                    for part in message["content"]:
+                        if (
+                            isinstance(part, dict)
+                            and part.get("type") == "image_url"
+                            and isinstance(part.get("image_url"), dict)
+                        ):
+                            url = part["image_url"].get("url")
+                            if isinstance(url, str) and url.startswith(("http://", "https://")):
+                                try:
+                                    data, mime = await safe_fetch_bytes(url)
+                                    b64 = base64.b64encode(data).decode("utf-8")
+                                    part["image_url"]["url"] = f"data:{mime};base64,{b64}"
+                                except (SafeFetchError, Exception):
+                                    # Leave URL as-is if fetch fails or not allowed
+                                    pass
 
         # Build the request parameters
         request_params = {
@@ -539,10 +545,27 @@ class OpenAIProvider(BaseLLMProvider):
 
         # Make the API call using the SDK
         try:
-            response: ChatCompletion = await self.client.chat.completions.create(
-                **request_params
-            )
+            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+
+            async def _do_call():
+                return await asyncio.wait_for(
+                    self.client.chat.completions.create(**request_params), timeout=timeout_s
+                )
+
+            # Circuit breaker key per model
+            breaker_key = f"openai:{model}"
+            if not await self._breaker.allow(breaker_key):
+                raise Exception("OpenAI circuit open for model")
+
+            response: ChatCompletion = await retry_async(_do_call)
+            await self._breaker.record_success(breaker_key)
         except Exception as e:
+            # record failure for breaker
+            try:
+                breaker_key = f"openai:{model}"
+                await self._breaker.record_failure(breaker_key)
+            except Exception:
+                pass
             # Handle specific OpenAI errors with more context
             error_msg = str(e)
             if "API key" in error_msg.lower() or "unauthorized" in error_msg.lower():

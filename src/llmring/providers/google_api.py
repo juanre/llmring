@@ -9,6 +9,10 @@ import os
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
+import asyncio
+import os
+from llmring.net.retry import retry_async
+from llmring.net.circuit_breaker import CircuitBreaker
 from google import genai
 from google.genai import types
 from llmring.base import BaseLLMProvider
@@ -82,6 +86,7 @@ class GoogleProvider(BaseLLMProvider):
             "gemini-pro": "gemini-1.5-pro",
             "gemini-pro-vision": "gemini-1.5-pro",
         }
+        self._breaker = CircuitBreaker()
 
     def _convert_content_to_google_format(
         self, content: Union[str, List[Dict[str, Any]]]
@@ -347,12 +352,22 @@ class GoogleProvider(BaseLLMProvider):
                 converted_content = self._convert_content_to_google_format(msg.content)
 
                 # Run synchronous operation in thread pool
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: self.client.models.generate_content(
-                        model=api_model, contents=converted_content, config=config
-                    ),
-                )
+                total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+                async def _do_call():
+                    return await asyncio.wait_for(
+                        loop.run_in_executor(
+                            None,
+                            lambda: self.client.models.generate_content(
+                                model=api_model, contents=converted_content, config=config
+                            ),
+                        ),
+                        timeout=total_timeout,
+                    )
+                key = f"google:{api_model}"
+                if not await self._breaker.allow(key):
+                    raise Exception("Google circuit open for model")
+                response = await retry_async(_do_call)
+                await self._breaker.record_success(key)
 
                 response_text = response.text
 
@@ -405,7 +420,16 @@ class GoogleProvider(BaseLLMProvider):
                         return chat.send_message(converted_content)
 
                     # Run the chat in thread pool
-                    response = await loop.run_in_executor(None, _run_chat)
+                    total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+                    async def _do_chat():
+                        return await asyncio.wait_for(
+                            loop.run_in_executor(None, _run_chat), timeout=total_timeout
+                        )
+                    key = f"google:{api_model}"
+                    if not await self._breaker.allow(key):
+                        raise Exception("Google circuit open for model")
+                    response = await retry_async(_do_chat)
+                    await self._breaker.record_success(key)
                     response_text = response.text
                 else:
                     # No messages? This shouldn't happen but handle gracefully

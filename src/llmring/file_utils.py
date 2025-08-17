@@ -251,7 +251,13 @@ def create_file_content(
             )
 
     elif file_path_url_or_base64.startswith(("http://", "https://")):
-        # It's an HTTP(S) URL - assume image for now (documents via URL are less common)
+        # Default behavior: pass through remote URLs (no fetching here)
+        # Security: deployments can disable remote URLs via env if desired
+        import os as _os
+
+        if _os.getenv("LLMRING_ALLOW_REMOTE_URLS", "true").lower() not in {"1", "true", "yes", "on"}:
+            raise ValueError("Remote URL inputs are disabled by configuration. Use data URLs or base64.")
+
         content_parts.append(
             {"type": "image_url", "image_url": {"url": file_path_url_or_base64}}
         )
@@ -348,7 +354,10 @@ def create_image_content(
         # It's already a data URL - use directly
         url = file_path_url_or_base64
     elif file_path_url_or_base64.startswith(("http://", "https://")):
-        # It's an HTTP(S) URL - use directly
+        import os as _os
+        if _os.getenv("LLMRING_ALLOW_REMOTE_URLS", "true").lower() not in {"1", "true", "yes", "on"}:
+            raise ValueError("Remote URL inputs are disabled by configuration. Use data URLs or base64.")
+        # Pass through the URL (no fetching here)
         url = file_path_url_or_base64
     elif _is_base64_string(file_path_url_or_base64):
         # It's base64 data - create data URL

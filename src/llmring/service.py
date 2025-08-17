@@ -273,11 +273,13 @@ class LLMRing:
                         prompt_tokens = response.usage.get("prompt_tokens", 0)
                         completion_tokens = response.usage.get("completion_tokens", 0)
 
-                    # Extract system prompt if present
+                    # Extract system prompt if present (redacted/truncated)
                     system_prompt = None
                     for msg in request.messages:
                         if msg.role == "system":
                             system_prompt = str(msg.content)
+                            # Redact common secret patterns and truncate
+                            system_prompt = _redact_and_truncate(system_prompt)
                             break
 
                     # Extract tool names if tools are used
@@ -300,14 +302,16 @@ class LLMRing:
                         temperature=request.temperature,
                         max_tokens=request.max_tokens,
                         system_prompt=system_prompt,
-                        tools_used=tools_used,
+                        tools_used=[_truncate(t, 256) for t in tools_used] if tools_used else None,
                         status=status,
                         error_type=error_type,
-                        error_message=error_message,
+                        error_message=_redact_and_truncate(error_message) if error_message else None,
                     )
                 except Exception as db_error:
                     # Don't let database errors break the main flow
-                    print(f"Warning: Failed to log API call to database: {db_error}")
+                    logger.warning(
+                        "Failed to log API call to database", exc_info=True
+                    )
 
         return response
 
@@ -483,3 +487,20 @@ class LLMRing:
         if self.db and self._db_initialized:
             await self.db.close()
             self._db_initialized = False
+
+
+def _truncate(s: Optional[str], max_len: int) -> Optional[str]:
+    if s is None:
+        return None
+    return s if len(s) <= max_len else s[: max_len - 3] + "..."
+
+
+def _redact_and_truncate(s: Optional[str], max_len: int = 2048) -> Optional[str]:
+    if s is None:
+        return None
+    redacted = s
+    # Basic redactions for common secrets; keep simple to avoid false negatives
+    redacted = redacted.replace("sk-", "sk-***")
+    redacted = redacted.replace("AIza", "AIza***")
+    redacted = redacted.replace("ya29.", "ya29.***")
+    return _truncate(redacted, max_len)

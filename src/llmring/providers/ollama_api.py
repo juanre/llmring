@@ -8,9 +8,12 @@ import re
 from typing import Any, Dict, List, Optional, Union
 
 from llmring.base import BaseLLMProvider
+import asyncio
 from llmring.model_refresh.models import ModelInfo
 from llmring.schemas import LLMResponse, Message
 from ollama import AsyncClient, ResponseError
+from llmring.net.retry import retry_async
+from llmring.net.circuit_breaker import CircuitBreaker
 
 
 class OllamaProvider(BaseLLMProvider):
@@ -57,6 +60,7 @@ class OllamaProvider(BaseLLMProvider):
             "qwen2.5",
             "qwen",
         ]
+        self._breaker = CircuitBreaker()
 
     def validate_model(self, model: str) -> bool:
         """
@@ -280,14 +284,26 @@ class OllamaProvider(BaseLLMProvider):
                         ollama_messages[-1]["content"] += schema_instruction
 
         try:
-            # Use the Ollama SDK's chat method
-            response = await self.client.chat(
-                model=model,
-                messages=ollama_messages,
-                stream=False,  # We want the complete response at once
-                options=options,
-                format=format_param,
-            )
+            # Use the Ollama SDK's chat method with a total deadline and retries
+            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+
+            async def _do_call():
+                return await asyncio.wait_for(
+                    self.client.chat(
+                        model=model,
+                        messages=ollama_messages,
+                        stream=False,
+                        options=options,
+                        format=format_param,
+                    ),
+                    timeout=timeout_s,
+                )
+
+            key = f"ollama:{model}"
+            if not await self._breaker.allow(key):
+                raise Exception("Ollama circuit open for model")
+            response = await retry_async(_do_call)
+            await self._breaker.record_success(key)
 
             # Extract the response content
             content = response["message"]["content"]
@@ -352,6 +368,10 @@ class OllamaProvider(BaseLLMProvider):
             # Handle Ollama-specific errors
             raise Exception(f"Ollama API error: {e.error}")
         except Exception as e:
+            try:
+                await self._breaker.record_failure(f"ollama:{model}")
+            except Exception:
+                pass
             # Handle general errors
             raise Exception(f"Failed to connect to Ollama at {self.base_url}: {str(e)}")
 

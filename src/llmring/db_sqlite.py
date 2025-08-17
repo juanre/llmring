@@ -58,6 +58,12 @@ class SQLiteDatabase:
 
         # Enable foreign keys
         await self.conn.execute("PRAGMA foreign_keys = ON")
+        # Enable WAL for better concurrency in dev
+        try:
+            await self.conn.execute("PRAGMA journal_mode=WAL")
+            await self.conn.execute("PRAGMA synchronous=NORMAL")
+        except Exception:
+            pass
 
         # Create tables
         await self._create_tables()
