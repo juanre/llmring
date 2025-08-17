@@ -176,116 +176,26 @@ class OpenAIProvider(BaseLLMProvider):
                     tmp_file.write(pdf_data)
                     tmp_file.flush()
                     with open(tmp_file.name, "rb") as f:
+                        # PDFs must use 'assistants' purpose for Responses input_file
                         file_obj = await self.client.files.create(file=f, purpose="assistants")
                         uploaded_files.append({"file_id": file_obj.id, "temp_path": tmp_file.name})
 
-            # Use Assistants API to run retrieval against uploaded files via message attachments
-            if hasattr(self.client, "assistants"):
-                assistants_api = self.client.assistants
-            elif hasattr(self.client, "beta") and hasattr(self.client.beta, "assistants"):
-                assistants_api = self.client.beta.assistants
-            else:
-                raise NotImplementedError("OpenAI SDK does not expose assistants API")
+            # Build Responses API input using input_file items (no RAG/vector store)
+            content_items: List[Dict[str, Any]] = []
+            content_items.append({"type": "input_text", "text": combined_text})
+            for info in uploaded_files:
+                content_items.append({"type": "input_file", "file_id": info["file_id"]})
 
-            if hasattr(self.client, "threads"):
-                threads_api = self.client.threads
-            elif hasattr(self.client, "beta") and hasattr(self.client.beta, "threads"):
-                threads_api = self.client.beta.threads
-            else:
-                raise NotImplementedError("OpenAI SDK does not expose threads API")
-
-            assistant = await assistants_api.create(
+            resp = await self.client.responses.create(
                 model=model,
-                tools=[{"type": "file_search"}],
+                input=[{"role": "user", "content": content_items}],
+                **({"temperature": temperature} if temperature is not None else {}),
+                **({"max_output_tokens": max_tokens} if max_tokens is not None else {}),
             )
 
-            # Create a new thread, then add a user message with attachments
-            thread = await threads_api.create()
-            attachments = [
-                {"file_id": info["file_id"], "tools": [{"type": "file_search"}]}
-                for info in uploaded_files
-            ]
-            # Some SDKs expose messages API as threads.messages
-            messages_api = getattr(threads_api, "messages", None)
-            if messages_api is None and hasattr(self.client, "beta") and hasattr(self.client.beta, "threads"):
-                messages_api = self.client.beta.threads.messages
-            if messages_api is None:
-                raise NotImplementedError("OpenAI SDK does not expose threads.messages API")
-
-            await messages_api.create(
-                thread_id=thread.id,
-                role="user",
-                content=combined_text,
-                attachments=attachments,
+            response_content = (
+                resp.output_text if hasattr(resp, "output_text") else str(resp)
             )
-
-            # Create run with vector store resource
-            runs_api = getattr(threads_api, "runs", None)
-            if runs_api is None:
-                # Some SDK versions expose runs under beta.threads.runs
-                if hasattr(self.client, "beta") and hasattr(self.client.beta, "threads"):
-                    runs_api = self.client.beta.threads.runs
-                else:
-                    raise NotImplementedError("OpenAI SDK does not expose threads.runs API")
-
-            run = await runs_api.create(
-                thread_id=thread.id,
-                assistant_id=assistant.id,
-            )
-
-            # Poll until completion
-            try:
-                import asyncio as _asyncio
-                while run.status not in (
-                    "completed",
-                    "failed",
-                    "cancelled",
-                    "expired",
-                ):
-                    await _asyncio.sleep(0.5)
-                    run = await runs_api.retrieve(thread_id=thread.id, run_id=run.id)
-            except Exception:
-                pass
-
-            if getattr(run, "status", None) != "completed":
-                raise Exception(f"Assistant run did not complete successfully: {getattr(run, 'status', 'unknown')}")
-
-            # Retrieve assistant messages
-            msgs = await threads_api.messages.list(thread_id=thread.id)
-            response_text = ""
-            try:
-                # messages.list returns .data with newest first in some SDKs
-                items = getattr(msgs, "data", []) or []
-                for m in items:
-                    if getattr(m, "role", "") == "assistant":
-                        contents = getattr(m, "content", []) or []
-                        for c in contents:
-                            if isinstance(c, dict):
-                                # JSON-like content
-                                if c.get("type") == "text" and isinstance(c.get("text"), dict):
-                                    response_text += c["text"].get("value", "")
-                                elif c.get("type") == "text" and isinstance(c.get("text"), str):
-                                    response_text += c.get("text", "")
-                            else:
-                                # SDK typed objects may have .type/.text.value
-                                t = getattr(c, "type", None)
-                                if t == "text":
-                                    text_obj = getattr(c, "text", None)
-                                    value = getattr(text_obj, "value", None) if text_obj else None
-                                    if isinstance(value, str):
-                                        response_text += value
-                        if response_text:
-                            break
-            except Exception:
-                # Fallback to str
-                try:
-                    response_text = str(msgs)
-                except Exception:
-                    response_text = ""
-
-            resp = type("_TmpResp", (), {"output_text": response_text})()
-
-            response_content = resp.output_text if hasattr(resp, "output_text") else str(resp)
             estimated_usage = {
                 "prompt_tokens": self.get_token_count(combined_text),
                 "completion_tokens": self.get_token_count(response_content or ""),
@@ -299,7 +209,7 @@ class OpenAIProvider(BaseLLMProvider):
                 finish_reason="stop",
             )
         finally:
-            # Cleanup uploaded files and assistant/thread resources
+            # Cleanup uploaded files
             tasks = []
             for info in uploaded_files:
                 tasks.append(self.client.files.delete(info["file_id"]))
@@ -307,16 +217,6 @@ class OpenAIProvider(BaseLLMProvider):
                     os.unlink(info["temp_path"])
                 except OSError:
                     pass
-            try:
-                if 'assistant' in locals():
-                    await assistants_api.delete(assistant.id)
-            except Exception:
-                pass
-            try:
-                if 'thread' in locals():
-                    await threads_api.delete(thread.id)
-            except Exception:
-                pass
             if tasks:
                 try:
                     await asyncio.gather(*tasks, return_exceptions=True)
