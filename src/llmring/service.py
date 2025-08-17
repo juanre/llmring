@@ -274,14 +274,13 @@ class LLMRing:
                         prompt_tokens = response.usage.get("prompt_tokens", 0)
                         completion_tokens = response.usage.get("completion_tokens", 0)
 
-                    # Extract system prompt if present (redacted/truncated)
+                    # System prompt logging is disabled by default
                     system_prompt = None
-                    for msg in request.messages:
-                        if msg.role == "system":
-                            system_prompt = str(msg.content)
-                            # Redact common secret patterns and truncate
-                            system_prompt = _redact_and_truncate(system_prompt)
-                            break
+                    if os.getenv("LLMRING_LOG_SYSTEM_PROMPT", "false").lower() in {"1", "true", "yes", "on"}:
+                        for msg in request.messages:
+                            if msg.role == "system":
+                                system_prompt = _redact_and_truncate(str(msg.content))
+                                break
 
                     # Extract tool names if tools are used
                     tools_used = None
@@ -311,9 +310,7 @@ class LLMRing:
                         else None,
                         "status": status,
                         "error_type": error_type,
-                        "error_message": _redact_and_truncate(error_message)
-                        if error_message
-                        else None,
+                        "error_message": _prepare_error_message(error_message),
                     }
                     try:
                         assert self._log_queue is not None
@@ -577,3 +574,15 @@ def _redact_and_truncate(s: Optional[str], max_len: int = 2048) -> Optional[str]
     redacted = redacted.replace("AIza", "AIza***")
     redacted = redacted.replace("ya29.", "ya29.***")
     return _truncate(redacted, max_len)
+
+
+def _prepare_error_message(s: Optional[str]) -> Optional[str]:
+    if s is None:
+        return None
+    # Only include a minimal, sanitized error summary by default
+    if os.getenv("LLMRING_LOG_ERROR_DETAIL", "false").lower() not in {"1", "true", "yes", "on"}:
+        # Keep a short prefix and redact tokens/keys-like sequences
+        summary = s.split("\n", 1)[0]
+        return _redact_and_truncate(summary, max_len=256)
+    # If detail explicitly enabled, still redact and truncate
+    return _redact_and_truncate(s, max_len=1024)
