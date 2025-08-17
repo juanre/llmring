@@ -113,6 +113,4 @@ markers = [
     "ollama: marks tests as Ollama-specific",
 ]
 
-[tool.uv.sources]
-pgdbm = { path = "../pgdbm" }
 
