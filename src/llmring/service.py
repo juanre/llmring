@@ -5,10 +5,10 @@ LLM service that manages providers and routes requests.
 import logging
 import os
 import time
+import asyncio
 from typing import Any, Dict, List, Optional
 
 from pgdbm import AsyncDatabaseManager
-from dotenv import load_dotenv
 from llmring.api import LLMRingAPI
 from llmring.base import BaseLLMProvider
 from llmring.db import LLMDatabase
@@ -18,8 +18,6 @@ from llmring.providers.ollama_api import OllamaProvider
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.schemas import LLMRequest, LLMResponse
 
-# Load environment variables from .env file
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +65,9 @@ class LLMRing:
 
         self.providers: Dict[str, BaseLLMProvider] = {}
         self._model_cache: Dict[str, Dict[str, Any]] = {}
+        # Background DB logging
+        self._log_queue: Optional[asyncio.Queue] = None
+        self._log_task: Optional[asyncio.Task] = None
         self._initialize_providers()
 
     async def _ensure_db_initialized(self):
@@ -261,7 +262,7 @@ class LLMRing:
             error_message = str(e)
             raise
         finally:
-            # Log to database if enabled
+            # Log to database if enabled (background queue)
             if self.enable_db_logging and self.db and id_at_origin:
                 try:
                     response_time_ms = int((time.time() - start_time) * 1000)
@@ -290,23 +291,35 @@ class LLMRing:
                             for tool in request.tools
                         ]
 
-                    # Record the API call asynchronously
-                    await self.db.record_api_call(
-                        origin=self.origin,
-                        id_at_origin=id_at_origin,
-                        provider=provider_type,
-                        model_name=model_name,
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        response_time_ms=response_time_ms,
-                        temperature=request.temperature,
-                        max_tokens=request.max_tokens,
-                        system_prompt=system_prompt,
-                        tools_used=[_truncate(t, 256) for t in tools_used] if tools_used else None,
-                        status=status,
-                        error_type=error_type,
-                        error_message=_redact_and_truncate(error_message) if error_message else None,
-                    )
+                    # Enqueue record for background logging
+                    await self._ensure_log_worker()
+                    record = {
+                        "origin": self.origin,
+                        "id_at_origin": id_at_origin,
+                        "provider": provider_type,
+                        "model_name": model_name,
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "response_time_ms": response_time_ms,
+                        "temperature": request.temperature,
+                        "max_tokens": request.max_tokens,
+                        "system_prompt": system_prompt,
+                        "tools_used": [
+                            _truncate(t, 256) for t in tools_used
+                        ]
+                        if tools_used
+                        else None,
+                        "status": status,
+                        "error_type": error_type,
+                        "error_message": _redact_and_truncate(error_message)
+                        if error_message
+                        else None,
+                    }
+                    try:
+                        assert self._log_queue is not None
+                        self._log_queue.put_nowait(record)
+                    except asyncio.QueueFull:
+                        logger.warning("DB log queue full; dropping API call record")
                 except Exception as db_error:
                     # Don't let database errors break the main flow
                     logger.warning(
@@ -484,9 +497,69 @@ class LLMRing:
 
     async def close(self):
         """Close database connections."""
+        # Stop log worker gracefully
+        if self._log_queue is not None:
+            try:
+                # Signal shutdown
+                self._log_queue.put_nowait(None)  # type: ignore[arg-type]
+            except Exception:
+                pass
+        if self._log_task is not None:
+            try:
+                await asyncio.wait_for(self._log_task, timeout=5.0)
+            except Exception:
+                self._log_task.cancel()
+            finally:
+                self._log_task = None
         if self.db and self._db_initialized:
             await self.db.close()
             self._db_initialized = False
+
+    async def _ensure_log_worker(self):
+        if self._log_queue is None:
+            maxsize = int(os.getenv("LLMRING_LOG_QUEUE_MAX", "1000"))
+            self._log_queue = asyncio.Queue(maxsize=maxsize)
+        if self._log_task is None or self._log_task.done():
+            self._log_task = asyncio.create_task(self._log_worker())
+
+    async def _log_worker(self):
+        assert self._log_queue is not None
+        while True:
+            item = await self._log_queue.get()
+            if item is None:
+                # Drain remaining quickly
+                while not self._log_queue.empty():
+                    leftover = self._log_queue.get_nowait()
+                    if leftover is None:
+                        continue
+                    await self._write_log_record(leftover)
+                break
+            try:
+                await self._write_log_record(item)
+            except Exception:
+                logger.warning("Failed to write API call record", exc_info=True)
+            finally:
+                self._log_queue.task_done()
+
+    async def _write_log_record(self, rec: Dict[str, Any]):
+        if not self.db:
+            return
+        await self.db.record_api_call(
+            origin=rec["origin"],
+            id_at_origin=rec["id_at_origin"],
+            provider=rec["provider"],
+            model_name=rec["model_name"],
+            prompt_tokens=rec["prompt_tokens"],
+            completion_tokens=rec["completion_tokens"],
+            response_time_ms=rec["response_time_ms"],
+            temperature=rec.get("temperature"),
+            max_tokens=rec.get("max_tokens"),
+            system_prompt=rec.get("system_prompt"),
+            tools_used=rec.get("tools_used"),
+            status=rec.get("status", "success"),
+            error_type=rec.get("error_type"),
+            error_message=rec.get("error_message"),
+        )
 
 
 def _truncate(s: Optional[str], max_len: int) -> Optional[str]:

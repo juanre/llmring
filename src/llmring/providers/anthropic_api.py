@@ -11,13 +11,11 @@ import asyncio
 from llmring.net.retry import retry_async
 from llmring.net.circuit_breaker import CircuitBreaker
 from anthropic.types import Message as AnthropicMessage
-from dotenv import load_dotenv
+# Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.base import BaseLLMProvider
 from llmring.model_refresh.models import ModelInfo
 from llmring.schemas import LLMResponse, Message
 
-# Load environment variables from .env file
-load_dotenv()
 
 
 class AnthropicProvider(BaseLLMProvider):

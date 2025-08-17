@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Union
 import copy
 import warnings
 
-from dotenv import load_dotenv
+# Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.net.safe_fetcher import fetch_bytes as safe_fetch_bytes, SafeFetchError
 from llmring.net.retry import retry_async, RetryError
 from llmring.net.circuit_breaker import CircuitBreaker
@@ -20,8 +20,6 @@ from llmring.schemas import LLMResponse, Message
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 
-# Load environment variables from .env file
-load_dotenv()
 
 
 class OpenAIProvider(BaseLLMProvider):

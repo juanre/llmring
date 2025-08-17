@@ -8,7 +8,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional, Union
 
-from dotenv import load_dotenv
+# Note: do not call load_dotenv() in library code; handle in app entrypoints
 import asyncio
 import os
 from llmring.net.retry import retry_async
@@ -19,8 +19,6 @@ from llmring.base import BaseLLMProvider
 from llmring.model_refresh.models import ModelInfo
 from llmring.schemas import LLMResponse, Message
 
-# Load environment variables from .env file
-load_dotenv()
 
 
 class GoogleProvider(BaseLLMProvider):
