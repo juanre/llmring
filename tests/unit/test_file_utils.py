@@ -122,6 +122,7 @@ class TestImageContentCreation:
     def test_create_image_content_with_url(self):
         """Test creating image content from URL."""
         url = "https://example.com/image.png"
+        os.environ["LLMRING_ALLOW_REMOTE_URLS"] = "true"
         text = "Analyze this image"
 
         result = create_image_content(url, text)
@@ -138,6 +139,7 @@ class TestImageContentCreation:
     def test_create_image_content_without_text(self):
         """Test creating image content without text."""
         url = "https://example.com/image.png"
+        os.environ["LLMRING_ALLOW_REMOTE_URLS"] = "true"
 
         result = create_image_content(url)
 
@@ -171,6 +173,7 @@ class TestImageContentCreation:
         """Test creating content with multiple images."""
         urls = ["https://example.com/image1.png", "https://example.com/image2.png"]
         text = "Compare these images"
+        os.environ["LLMRING_ALLOW_REMOTE_URLS"] = "true"
 
         result = create_multi_image_content(urls, text)
 

@@ -384,7 +384,8 @@ class TestFileProcessing:
         """Test that URLs are handled correctly."""
         # Test with httpbin image endpoint
         test_url = "https://httpbin.org/image/png"
-
+        import os
+        os.environ["LLMRING_ALLOW_REMOTE_URLS"] = "true"
         content = analyze_image(test_url, "Describe this image")
 
         # Verify URL was passed through correctly (no base64 conversion)

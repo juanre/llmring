@@ -3,6 +3,10 @@
 import os
 
 import pytest
+from dotenv import load_dotenv
+
+# Load environment variables from .env for test runs
+load_dotenv()
 
 # Import async-db-utils testing fixtures
 from pgdbm.fixtures.conftest import *  # Import all async-db-utils test fixtures
