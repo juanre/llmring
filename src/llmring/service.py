@@ -29,8 +29,9 @@ class LLMRing:
         self,
         db_connection_string: Optional[str] = None,
         db_manager: Optional[AsyncDatabaseManager] = None,  # NEW
+        models_dir: Optional[str] = None,  # NEW: For JSON-based models
         origin: str = "llmring",
-        enable_db_logging: bool = True,
+        enable_db_logging: Optional[bool] = None,  # Changed: Auto-detect
     ):
         """
         Initialize the LLM service.
@@ -38,14 +39,41 @@ class LLMRing:
         Args:
             db_connection_string: Connection string (for standalone mode)
             db_manager: External database manager (for integrated mode)
+            models_dir: Directory containing JSON model files (for database-free mode)
             origin: Origin identifier for database logging
-            enable_db_logging: Whether to enable database logging
+            enable_db_logging: Whether to enable database logging (auto-detected if None)
         """
         self.origin = origin
+        
+        # Auto-detect if we should enable DB logging
+        if enable_db_logging is None:
+            enable_db_logging = (db_connection_string is not None or 
+                               db_manager is not None)
+        
         self.enable_db_logging = enable_db_logging
         self._db_initialized = False
+        
+        # Model source (JSON or database)
+        self.models_dir = models_dir
+        self.json_models = {}
+        
+        if models_dir:
+            # Load models from JSON files
+            from pathlib import Path
+            from llmring.model_refresh.json_model_loader import JSONModelLoader
+            try:
+                loader = JSONModelLoader(Path(models_dir))
+                all_models = loader.load_all_models()
+                # Flatten into a single dict keyed by provider:model_name
+                for provider, models in all_models.items():
+                    for model in models:
+                        key = f"{provider}:{model.model_name}"
+                        self.json_models[key] = model
+                logger.info(f"Loaded {len(self.json_models)} models from {models_dir}")
+            except Exception as e:
+                logger.warning(f"Failed to load models from {models_dir}: {e}")
 
-        # Initialize database if enabled
+        # Initialize database only if needed
         if enable_db_logging:
             if db_manager:
                 # Use shared connection with our schema
@@ -56,8 +84,11 @@ class LLMRing:
                     connection_string=db_connection_string, schema="llmring"
                 )
             else:
-                # Default connection for development
-                self.db = LLMDatabase(schema="llmring")
+                # No database connection provided, disable logging
+                logger.info("No database connection provided, database logging disabled")
+                self.db = None
+                self.enable_db_logging = False
+                self.api = None
             self.api = None  # Will be initialized after db is initialized
         else:
             self.db = None

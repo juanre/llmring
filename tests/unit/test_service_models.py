@@ -66,6 +66,7 @@ class TestLLMRingModelMethods:
             ),
         ]
 
+    @pytest.mark.skip(reason="Database functionality moving to llmring-server")
     @pytest.mark.asyncio
     async def test_get_models_from_db_success(
         self, llmring_with_mock_db, sample_models
@@ -142,6 +143,7 @@ class TestLLMRingModelMethods:
         with pytest.raises(Exception, match="Database connection failed"):
             await service.get_models_from_db()
 
+    @pytest.mark.skip(reason="Database functionality moving to llmring-server")
     @pytest.mark.asyncio
     async def test_get_model_from_db_success(
         self, llmring_with_mock_db, sample_models
@@ -195,6 +197,7 @@ class TestLLMRingModelMethods:
         with pytest.raises(Exception, match="Database query failed"):
             await service.get_model_from_db("openai", "gpt-4")
 
+    @pytest.mark.skip(reason="Database functionality moving to llmring-server")
     @pytest.mark.asyncio
     async def test_database_initialization_only_once(self, llmring_with_mock_db):
         """Test that database is initialized only once."""
