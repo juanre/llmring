@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "llmring-py"
+name = "llmring"
 version = "0.2.2"
 description = "Unified Python interface for OpenAI, Anthropic, Google, and Ollama LLMs with optional model registry and usage tracking"
 readme = "README.md"
