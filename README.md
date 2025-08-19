@@ -1,27 +1,27 @@
 # LLMRing
 
-Unified Python service to call multiple LLM providers (OpenAI, Anthropic, Google, Ollama) with one API. Optional DB logging and model registry. Built-in response caching.
+Alias-first LLM service for Python. Map tasks to models, not code to model IDs. Supports OpenAI, Anthropic, Google, and Ollama with a unified interface.
 
 ## Highlights
 
-- **One interface** for all providers
-- **Optional DB** (SQLite or PostgreSQL) for logging/models
-- **Built-in caching** (opt‑in, TTL, deterministic requests)
-- **Model registry & costs** (optional)
-- **Files/images** helpers
+- **Alias-first identity**: Map semantic tasks to models via lockfile
+- **Lockfile-based configuration**: Version-controlled, reproducible model bindings
+- **Multi-provider support**: OpenAI, Anthropic, Google, Ollama
+- **Profile support**: Different configurations for prod/staging/dev
+- **Registry integration**: Track model changes and detect drift
+- **Local-first**: Fully functional without backend services
+- **Receipt generation**: Ed25519-signed receipts for usage tracking (when connected to server)
 
 ## Installation
 
 ```bash
-# Basic installation (SQLite support only)
-uv add llmring-py
+# Basic installation
+pip install llmring
 
-# With PostgreSQL support
-uv add "llmring-py[postgres]"
+# Or with uv
+uv add llmring
 
-# Development installation (includes examples dependencies)
-uv add --dev llmring-py
-# Or from source:
+# Development installation (from source)
 uv pip install -e ".[dev]"
 ```
 
@@ -31,248 +31,204 @@ uv pip install -e ".[dev]"
 
 ## Quick Start
 
-### 1) No database (just call a model)
+### 1) Initialize a lockfile
+
+```bash
+# Create a lockfile with auto-detected defaults based on available API keys
+llmring lock init
+
+# This creates llmring.lock with default aliases like:
+# - default → ollama:llama3
+# - summarizer → anthropic:claude-3-haiku
+# - deep → openai:gpt-4
+```
+
+### 2) Bind aliases to models
+
+```bash
+# Bind an alias to a specific model
+llmring bind summarizer ollama:llama3.3
+
+# List all aliases
+llmring aliases
+```
+
+### 3) Use aliases in code
 
 ```python
 import asyncio
-from llmring.service import LLMRing
-from llmring.schemas import LLMRequest, Message
+from llmring import LLMRing, LLMRequest, Message
 
 async def main():
-    # Initialize service without database
-    service = LLMRing(enable_db_logging=False)
-
-    # Make a request
+    # Initialize service
+    service = LLMRing()
+    
+    # Use an alias instead of hardcoding model names
     request = LLMRequest(
-        messages=[Message(role="user", content="Hello!")],
-        model="gpt-4o-mini"
+        messages=[Message(role="user", content="Summarize this text...")],
+        model="summarizer"  # Uses the alias from lockfile
     )
-
+    
     response = await service.chat(request)
     print(response.content)
 
 asyncio.run(main())
 ```
 
-### 2) With SQLite (local logging)
+### 4) Direct model usage (without aliases)
 
 ```python
-import asyncio
-from llmring.service_sqlite import LLMRingSQLite
-from llmring.schemas import LLMRequest, Message
-
-async def main():
-    # Initialize with SQLite (default: llmring.db)
-    service = LLMRingSQLite()
-
-    # Or specify a custom SQLite file
-    service = LLMRingSQLite(db_path="my_app.db")
-
-    # Calls are logged to SQLite
-    request = LLMRequest(
-        messages=[Message(role="user", content="Hello!")],
-        model="claude-3-5-haiku-20241022"
-    )
-
-    response = await service.chat(request)
-    print(f"Response: {response.content}")
-    print(f"Cost: ${response.usage.get('cost', 0):.4f} if tracked")
-
-asyncio.run(main())
-```
-
-### 3) With PostgreSQL (production logging)
-
-```python
-import asyncio
-from llmring.service import LLMRing
-
-async def main():
-    # Initialize with PostgreSQL
-    service = LLMRing(
-        db_connection_string="postgresql://user:pass@localhost/dbname"
-    )
-
-    # Use service.chat(...) as above
-
-asyncio.run(main())
-```
-
-## Database setup (optional)
-
-- SQLite: no setup, tables auto-created on first use.
-- PostgreSQL: point `db_connection_string` to an existing DB; schema/tables are created on first use.
-
-## Caching
-
-Response cache is opt‑in per request and applies only to deterministic calls (temperature ≤ 0.1). You control the TTL.
-
-```python
+# You can still use provider:model format directly
 request = LLMRequest(
-    messages=[Message(role="user", content="What is RAG?")],
-    model="gpt-4o-mini",
-    temperature=0.0,
-    cache={"enabled": True, "ttl_seconds": 600},
+    messages=[Message(role="user", content="Hello!")],
+    model="openai:gpt-4o-mini"  # Direct model reference
 )
-response = await service.chat(request)
 ```
 
-Notes:
-- Cache key is provider‑agnostic (messages, model, format, tools, limits, temperature).
-- If DB logging is on, a small DB‑backed cache is used; otherwise in‑memory.
-- Anthropic additionally uses provider‑side prompt caching for the system prompt when `cache.enabled` is true.
+## Lockfile Configuration
 
-## Model registry (optional)
+The `llmring.lock` file is the authoritative configuration source:
 
-When DB logging is enabled, you can query models and usage via the service:
+```toml
+version = "1.0"
+default_profile = "default"
 
-```python
-# List active models
-models = await service.get_models_from_db()
-for m in models:
-    print(m.provider, m.model_name)
+[profiles.default]
+name = "default"
 
-# Per-user usage (id_at_origin is your user/session ID)
-stats = await service.get_usage_stats(id_at_origin="user-123", days=30)
+[[profiles.default.bindings]]
+alias = "summarizer"
+provider = "ollama"
+model = "llama3.3"
+
+[[profiles.default.bindings]]
+alias = "deep"
+provider = "anthropic"
+model = "claude-3-opus"
+
+[profiles.prod]
+name = "prod"
+# Production-specific bindings...
+
+[profiles.dev]
+name = "dev"
+# Development-specific bindings...
 ```
 
-## CLI (optional)
+## Profiles
 
-`llmring` manages initialization and the model registry.
+Switch between different configurations using profiles:
 
 ```bash
-# Initialize database schema and seed default models
+# Use a specific profile
+llmring chat "Hello" --model summarizer --profile prod
 
-# PostgreSQL (use DATABASE_URL)
-export DATABASE_URL=postgresql://user:pass@localhost/dbname
-llmring init-db
-
-# SQLite
-llmring --sqlite ./llmring.db init-db
-
-# Load curated JSONs (PostgreSQL or SQLite)
-llmring json-refresh
-
-# With SQLite file
-llmring --sqlite ./llmring.db json-refresh
+# Or via environment variable
+export LLMRING_PROFILE=prod
+llmring chat "Hello" --model summarizer
 ```
 
-## Configuration
+## Registry Integration
 
-Set env vars or a `.env` file:
+Track model changes and detect drift:
 
 ```bash
-# API Keys (at least one required)
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=...  # or GEMINI_API_KEY
-OLLAMA_BASE_URL=http://localhost:11434  # Optional
+# Validate lockfile against current registry
+llmring lock validate
 
-# Database (optional)
-DATABASE_URL=postgresql://user:pass@localhost/dbname  # For PostgreSQL
-# Or leave unset to use SQLite
+# Update registry versions to latest
+llmring lock bump-registry
 ```
 
-### Provider selection
+## CLI Usage
 
-```python
-# Explicitly specify provider
-response = await service.chat(
-    LLMRequest(
-        messages=[Message(role="user", content="Hello")],
-        model="anthropic:claude-3-5-sonnet-20241022"  # Provider prefix
-    )
-)
+```bash
+# Chat with a model (using alias or direct reference)
+llmring chat "What is the capital of France?" --model summarizer
 
-# Auto-detection also works
-response = await service.chat(
-    LLMRequest(
-        messages=[Message(role="user", content="Hello")],
-        model="gpt-4o"  # Automatically uses OpenAI
-    )
-)
+# List available providers
+llmring providers
+
+# Show model information
+llmring info openai:gpt-4
+
+# List available models
+llmring list --provider openai
 ```
 
-## Files and images
+## Provider Configuration
+
+Set API keys via environment variables:
+
+```bash
+export OPENAI_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-ant-...
+export GOOGLE_API_KEY=...  # or GEMINI_API_KEY
+# Ollama doesn't require an API key (local)
+```
+
+## Advanced Usage
+
+### Working with Files and Images
 
 ```python
-from llmring.file_utils import analyze_image
+from llmring.file_utils import create_image_content, analyze_image
 
 # Analyze an image
-image_content = analyze_image(
+image_content = create_image_content("path/to/image.png")
+messages = [
+    Message(role="user", content=[
+        {"type": "text", "text": "What's in this image?"},
+        image_content
+    ])
+]
+
+response = await analyze_image(
+    service, 
     "path/to/image.png",
-    "What's in this image?"
+    "Describe this image",
+    model="openai:gpt-4o"  # Or use an alias
 )
-
-request = LLMRequest(
-    messages=[Message(role="user", content=image_content)],
-    model="gpt-4o"  # Use a vision-capable model
-)
-
-response = await service.chat(request)
 ```
 
-Notes:
-- When sending messages that include PDF documents with OpenAI models, the service automatically routes to the Assistants API for analysis. Tools and custom response formats are not supported in this PDF path.
-- OpenAI reasoning models (`o1`, `o1-mini`) are routed via the Responses API. These do not support tools or custom response formats; attempting to use them will raise a validation error.
-
-## Reference (minimal)
-
-- `LLMRing` (service) → `await service.chat(LLMRequest(...))`
-- `LLMRequest` fields: `messages`, `model`, optional `temperature`, `max_tokens`, `tools`, `response_format`, `cache={enabled: bool, ttl_seconds: int}`
-- Provider string: `"provider:model"` or just `"model"` (auto-detected)
-- Optional DB helpers: `await service.get_models_from_db()`, `await service.get_usage_stats(id_at_origin, days)`
-
-## Initialization patterns
-
-There are two production modes for database usage:
-
-- Managed by llmring (recommended default)
-  - PostgreSQL: `service = LLMRing(db_connection_string=os.environ["DATABASE_URL"])`. The service initializes the connection, applies migrations (creates schema/tables/functions), and seeds curated models on first use.
-  - SQLite (local/dev): `service = LLMRingSQLite(db_path="llmring.db")`. Tables are created and default models inserted automatically on initialization.
-
-- Managed by host app (pgdbm)
-  - Create an `AsyncDatabaseManager` in your application and pass it in. llmring will apply migrations and seed models within the provided schema but will not own the pool.
+### Custom System Prompts
 
 ```python
-from pgdbm import AsyncDatabaseManager
-from llmring.service import LLMRing
+messages = [
+    Message(role="system", content="You are a helpful assistant."),
+    Message(role="user", content="Hello!")
+]
 
-# Example: use an externally created manager (pool & config omitted here)
-db_manager = AsyncDatabaseManager(..., schema="llmring")
-service = LLMRing(db_manager=db_manager, origin="myapp")
-# On first use, llmring will initialize and migrate the llmring schema
+request = LLMRequest(
+    messages=messages,
+    model="summarizer",
+    temperature=0.7,
+    max_tokens=1000
+)
 ```
 
-PostgreSQL migrations require the `pgcrypto` extension; the migrations enable it if missing and use `gen_random_uuid()` for primary keys.
+## Architecture
 
-## Development
+LLMRing follows an alias-first, lockfile-based architecture:
 
-```bash
-# Clone and install
-git clone https://github.com/juanreyero/llmring.git
-cd llmring
-uv pip install -e ".[dev]"
+1. **Lockfile (`llmring.lock`)**: The authoritative configuration source containing alias→model bindings, profiles, and registry versions
+2. **Registry**: Public model information hosted on GitHub Pages for drift detection
+3. **Service**: Lightweight routing layer that resolves aliases and forwards to providers
+4. **Receipts**: Optional Ed25519-signed receipts when connected to server/SaaS
 
-# Run tests
-uv run pytest tests/
-
-# Format code
-uv run black src/ tests/
-uv run isort src/ tests/
-```
-
-### Contributing
-
-1. Fork the repo and create a feature branch
-2. Make changes and add tests
-3. Ensure tests pass and code is formatted
-4. Submit a pull request
-
-Note: The repo may contain symlinks (pgdbm, mcp-client) for local development. These are gitignored and not required.
+The system is designed to be:
+- **Local-first**: Fully functional without backend services
+- **Version-controlled**: Lockfile can be committed for reproducible deployments
+- **Drift-aware**: Detects when models change between registry versions
 
 ## License
 
 MIT
 
-Pull requests welcome! Please ensure all tests pass and add new tests for new features.
+## Contributing
+
+Contributions are welcome! Please read our contributing guidelines and submit pull requests to our repository.
+
+## Support
+
+For issues and questions, please use the GitHub issue tracker.

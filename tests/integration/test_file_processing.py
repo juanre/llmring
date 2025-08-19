@@ -106,7 +106,7 @@ class TestFileProcessing:
     @pytest.fixture
     def service(self):
         """Create LLM service for testing."""
-        return LLMRing(enable_db_logging=False)
+        return LLMRing()
 
     @pytest.fixture
     def test_image_path(self):

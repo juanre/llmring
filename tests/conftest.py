@@ -8,9 +8,6 @@ from dotenv import load_dotenv
 # Load environment variables from .env for test runs
 load_dotenv()
 
-# Import async-db-utils testing fixtures
-from pgdbm.fixtures.conftest import *  # Import all async-db-utils test fixtures
-from llmring.db import LLMDatabase
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
 from llmring.providers.ollama_api import OllamaProvider
@@ -141,51 +138,11 @@ def sample_llm_response():
     )
 
 
-# Database fixtures
+# Service fixtures
 @pytest.fixture
-async def llm_test_db(test_db_factory):
-    """Create test database with LLM service schema and migrations."""
-    # Create database for llmring schema
-    db_manager = await test_db_factory.create_db(suffix="llm", schema="llmring")
-
-    # Apply LLM service migrations
-    from pgdbm import AsyncMigrationManager
-
-    migration_manager = AsyncMigrationManager(
-        db_manager, migrations_path="src/llmring/migrations", module_name="llmring"
-    )
-    await migration_manager.apply_pending_migrations()
-
-    yield {"db_manager": db_manager, "db_url": db_manager.config.get_dsn()}
-
-
-@pytest.fixture
-async def llm_database(llm_test_db):
-    """Create LLMDatabase instance connected to test database"""
-    # Use the sync wrapper which will handle async internally
-    return LLMDatabase(connection_string=llm_test_db["db_url"])
-
-
-@pytest.fixture
-async def llmring_with_db(llm_test_db):
-    """Create LLMRing instance with test database"""
-    # Set environment variables for providers if available
-    providers_configured = []
-
-    service = LLMRing(
-        db_connection_string=llm_test_db["db_url"],
-        origin="test-suite",
-        enable_db_logging=True,
-    )
-
-    yield service
-    await service.close()
-
-
-@pytest.fixture
-async def llmring_no_db():
-    """Create LLMRing instance without database logging"""
-    service = LLMRing(enable_db_logging=False)
+async def llmring():
+    """Create LLMRing instance"""
+    service = LLMRing()
     yield service
     await service.close()
 
