@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llmring"
-version = "0.2.2"
-description = "Unified Python interface for OpenAI, Anthropic, Google, and Ollama LLMs with optional model registry and usage tracking"
+version = "0.3.0"
+description = "Unified Python interface for OpenAI, Anthropic, Google, and Ollama LLMs"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -29,7 +29,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 
-# Runtime dependencies
+# Runtime dependencies - simplified without database
 dependencies = [
     "anthropic>=0.18.0",
     "openai>=1.99.0",
@@ -39,10 +39,6 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "aiohttp>=3.8.0",
     "ollama>=0.4.0",
-    "psycopg2-binary>=2.9.0",
-    "beautifulsoup4>=4.12.0",
-    "aiosqlite>=0.19.0",
-    "pgdbm>=0.1.0",
 ]
 
 [project.urls]
@@ -51,15 +47,10 @@ Documentation = "https://github.com/juanre/llmring"
 Repository = "https://github.com/juanre/llmring"
 Issues = "https://github.com/juanre/llmring/issues"
 
-# (removed duplicate [project] header)
-
 [project.scripts]
 llmring = "llmring.cli:main"
 
 [project.optional-dependencies]
-postgres = [
-    "pgdbm>=0.1.0",
-]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
@@ -76,11 +67,9 @@ dev = [
 dev = [
     "black>=25.1.0",
     "claude-code-sdk>=0.0.10",
-    "pdf2image>=1.17.0",
     "pillow>=11.2.1",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
-    "reportlab>=4.4.1",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -92,8 +81,6 @@ packages = ["src/llmring"]
 [tool.hatch.build]
 include = [
     "src/llmring/**/*.py",
-    "src/llmring/**/*.sql",
-    "src/llmring/migrations/*.sql",
 ]
 
 [tool.pytest.ini_options]
@@ -108,9 +95,6 @@ markers = [
     "unit: marks tests as unit tests",
     "integration: marks tests as integration tests",
     "slow: marks tests as slow",
-    "db: marks tests as requiring database",
     "google: marks tests as Google-specific",
     "ollama: marks tests as Ollama-specific",
 ]
-
-

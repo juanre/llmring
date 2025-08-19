@@ -13,7 +13,6 @@ from llmring.net.circuit_breaker import CircuitBreaker
 from anthropic.types import Message as AnthropicMessage
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.base import BaseLLMProvider
-from llmring.model_refresh.models import ModelInfo
 from llmring.schemas import LLMResponse, Message
 
 
@@ -431,60 +430,6 @@ class AnthropicProvider(BaseLLMProvider):
             # Fall back to rough estimation - around 4 characters per token
             return len(text) // 4 + 1
 
-    async def discover_models(self) -> List[ModelInfo]:
-        """
-        Discover available models from Anthropic API.
-
-        Returns:
-            List of discovered models with capabilities
-        """
-        try:
-            # Call Anthropic's models endpoint
-            models_response = await self.client.models.list()
-            discovered = []
-
-            for model in models_response.data:
-                model_info = ModelInfo(
-                    provider="anthropic",
-                    model_name=model.id,
-                    display_name=self._get_display_name(model.id),
-                    description=f"Anthropic {model.id} model",
-                    source="api",
-                    raw_data={"api_response": model.model_dump()},
-                )
-
-                # Add known capabilities for recognized models
-                capabilities = await self.get_model_capabilities(model.id)
-                if capabilities:
-                    model_info.max_context = capabilities.get("max_context")
-                    model_info.max_output_tokens = capabilities.get("max_output_tokens")
-                    model_info.supports_vision = capabilities.get(
-                        "supports_vision", False
-                    )
-                    model_info.supports_function_calling = capabilities.get(
-                        "supports_function_calling", False
-                    )
-                    model_info.supports_json_mode = capabilities.get(
-                        "supports_json_mode", False
-                    )
-                    model_info.supports_parallel_tool_calls = capabilities.get(
-                        "supports_parallel_tool_calls", False
-                    )
-                    model_info.tool_call_format = capabilities.get("tool_call_format")
-
-                discovered.append(model_info)
-
-            return discovered
-
-        except Exception as e:
-            # Fallback to static model list if API fails
-            import logging
-
-            logging.warning(
-                f"Anthropic model discovery failed: {str(e)}, falling back to static list"
-            )
-            return await super().discover_models()
-
     async def get_model_capabilities(self, model_name: str) -> Optional[Dict[str, Any]]:
         """
         Get capabilities for a specific Anthropic model.
@@ -621,27 +566,3 @@ class AnthropicProvider(BaseLLMProvider):
         }
 
         return capabilities_map.get(model_name)
-
-    def _get_display_name(self, model_id: str) -> str:
-        """Get a friendly display name for a model."""
-        display_names = {
-            # Claude 4 models
-            "claude-4-opus": "Claude 4 Opus",
-            "claude-4-sonnet": "Claude 4 Sonnet",
-            # Claude 3.7 models
-            "claude-3-7-sonnet-20250219": "Claude 3.7 Sonnet",
-            "claude-3-7-sonnet": "Claude 3.7 Sonnet",
-            # Claude 3.5 models
-            "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
-            "claude-3-5-sonnet-20241022-v2": "Claude 3.5 Sonnet v2",
-            "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet (June)",
-            "claude-3-5-sonnet": "Claude 3.5 Sonnet",
-            "claude-3-5-haiku-20241022": "Claude 3.5 Haiku",
-            "claude-3-5-haiku": "Claude 3.5 Haiku",
-            # Claude 3 models
-            "claude-3-opus-20240229": "Claude 3 Opus",
-            "claude-3-sonnet-20240229": "Claude 3 Sonnet",
-            "claude-3-haiku-20240307": "Claude 3 Haiku",
-        }
-
-        return display_names.get(model_id, model_id.replace("-", " ").title())

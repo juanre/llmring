@@ -1,5 +1,5 @@
 """
-Example FastAPI application with proper lifecycle management for LLM service.
+Example FastAPI application for LLM service.
 
 Requirements:
     uv add --dev fastapi uvicorn
@@ -18,26 +18,8 @@ from typing import Any, Dict
 
 from fastapi import Depends, FastAPI, HTTPException
 from llmring import LLMRing
-from llmring.schemas import Message
-from pydantic import BaseModel
-
-
-class ChatRequest(BaseModel):
-    """Chat completion request."""
-
-    messages: list[Dict[str, str]]
-    model: str
-    temperature: float = 0.7
-    max_tokens: int = 1000
-    id_at_origin: str = "anonymous"
-
-
-class HealthResponse(BaseModel):
-    """Health check response."""
-
-    status: str
-    database: Dict[str, Any]
-    providers: list[str]
+from llmring.api.types import ChatRequest, ChatResponse, ServiceHealth
+from llmring.schemas import Message, LLMRequest
 
 
 # Global LLM service instance
@@ -52,25 +34,8 @@ async def lifespan(app: FastAPI):
     # Startup
     print("🚀 Starting LLM Service API...")
 
-    # Initialize LLM service with database
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql://postgres:postgres@localhost/postgres"
-    )
-    llmring = LLMRing(
-        db_connection_string=db_url,
-        origin="llm-api",
-        enable_db_logging=True,
-    )
-
-    # Initialize database connection and apply migrations
-    if llmring.db:
-        await llmring.db.initialize()
-        result = await llmring.db.apply_migrations()
-        print(f"✅ Database connected and migrations applied: {result}")
-
-        # Get initial pool stats
-        pool_stats = await llmring.db.get_pool_stats()
-        print(f"📊 Connection pool initialized: {pool_stats}")
+    # Initialize LLM service
+    llmring = LLMRing(origin="llm-api")
 
     print("✅ LLM Service ready")
 
@@ -79,7 +44,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     print("🛑 Shutting down LLM Service API...")
 
-    # Close LLM service (which closes database connections)
+    # Close LLM service
     await llmring.close()
 
     print("✅ Cleanup complete")
@@ -88,7 +53,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app with lifecycle management
 app = FastAPI(
     title="LLM Service API",
-    description="Production-ready LLM service with async database support",
+    description="Lightweight LLM service for routing requests to providers",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -101,58 +66,29 @@ async def get_llmring() -> LLMRing:
     return llmring
 
 
-@app.get("/health", response_model=HealthResponse)
+@app.get("/health", response_model=ServiceHealth)
 async def health_check(service: LLMRing = Depends(get_llmring)):
-    """Health check endpoint with database status."""
+    """Health check endpoint."""
     try:
-        # Get database health
-        db_health = {"status": "disabled"}
-        if service.db:
-            db_health = await service.db.health_check()
-
         # Get available providers
         providers = []
         for provider_name in ["openai", "anthropic", "google", "ollama"]:
-            provider = service._get_provider(provider_name)
-            if provider:
-                providers.append(provider_name)
+            try:
+                provider = service.get_provider(provider_name)
+                if provider:
+                    providers.append(provider_name)
+            except:
+                pass
 
-        return HealthResponse(
-            status="healthy" if db_health.get("status") == "healthy" else "degraded",
-            database=db_health,
+        return ServiceHealth(
+            status="healthy" if providers else "unhealthy",
             providers=providers,
         )
     except Exception as e:
         raise HTTPException(500, f"Health check failed: {str(e)}")
 
 
-@app.get("/metrics")
-async def get_metrics(service: LLMRing = Depends(get_llmring)):
-    """Get service metrics including database performance."""
-    if not service.db:
-        return {"error": "Database not configured"}
-
-    try:
-        # Get pool stats
-        pool_stats = await service.db.get_pool_stats()
-
-        # Get query metrics if monitoring is enabled
-        query_metrics = await service.db.get_query_metrics()
-
-        # Get slow queries
-        slow_queries = await service.db.get_slow_queries()
-
-        return {
-            "pool": pool_stats,
-            "queries": query_metrics,
-            "slow_queries": len(slow_queries) if slow_queries else 0,
-            "slow_query_samples": slow_queries[:5] if slow_queries else [],
-        }
-    except Exception as e:
-        raise HTTPException(500, f"Failed to get metrics: {str(e)}")
-
-
-@app.post("/chat")
+@app.post("/chat", response_model=ChatResponse)
 async def chat_completion(
     request: ChatRequest, service: LLMRing = Depends(get_llmring)
 ):
@@ -164,22 +100,27 @@ async def chat_completion(
             for msg in request.messages
         ]
 
-        # Call LLM
-        response = await service.chat(
+        # Create LLM request
+        llm_request = LLMRequest(
             messages=messages,
             model=request.model,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
-            id_at_origin=request.id_at_origin,
+            response_format=request.response_format,
+            tools=request.tools,
+            tool_choice=request.tool_choice,
         )
 
-        return {
-            "content": response.content,
-            "model": response.model,
-            "usage": response.usage,
-            "finish_reason": response.finish_reason,
-            "tool_calls": response.tool_calls,
-        }
+        # Call LLM
+        response = await service.chat(llm_request)
+
+        return ChatResponse(
+            content=response.content,
+            model=response.model,
+            usage=response.usage,
+            finish_reason=response.finish_reason,
+            tool_calls=response.tool_calls,
+        )
 
     except Exception as e:
         raise HTTPException(500, f"Chat completion failed: {str(e)}")
@@ -191,53 +132,40 @@ async def list_models(
 ):
     """List available models."""
     try:
-        if service.db:
-            models = await service.get_models_from_db(provider=provider)
-            return {
-                "models": [
-                    {
-                        "provider": m.provider,
-                        "model": m.model_name,
-                        "display_name": m.display_name,
-                        "max_context": m.max_context,
-                        "supports_vision": m.supports_vision,
-                        "supports_tools": m.supports_function_calling,
-                    }
-                    for m in models
-                ]
-            }
-        else:
-            return {"error": "Database not configured"}
+        models = service.get_available_models()
+        
+        if provider:
+            # Filter by provider
+            models = {k: v for k, v in models.items() if k == provider}
+        
+        return {"models": models}
     except Exception as e:
         raise HTTPException(500, f"Failed to list models: {str(e)}")
 
 
-@app.get("/usage/{user_id}")
-async def get_usage_stats(
-    user_id: str, days: int = 30, service: LLMRing = Depends(get_llmring)
-):
-    """Get usage statistics for a user."""
+@app.get("/providers")
+async def list_providers(service: LLMRing = Depends(get_llmring)):
+    """List configured providers."""
     try:
-        stats = await service.get_usage_stats(user_id, days=days)
-        if not stats:
-            return {"message": "No usage data found"}
-
-        return {
-            "user_id": user_id,
-            "period_days": days,
-            "stats": {
-                "total_calls": stats.total_calls,
-                "total_tokens": stats.total_tokens,
-                "total_cost": stats.total_cost,
-                "avg_response_time_ms": stats.avg_response_time_ms,
-                "success_rate": stats.success_rate,
-                "most_used_model": stats.most_used_model,
-                "providers_used": stats.providers_used,
-                "models_used": stats.models_used,
-            },
-        }
+        providers_info = []
+        
+        for provider_name in ["openai", "anthropic", "google", "ollama"]:
+            try:
+                provider = service.get_provider(provider_name)
+                configured = provider is not None
+            except:
+                configured = False
+            
+            providers_info.append({
+                "provider": provider_name,
+                "configured": configured,
+                "models": service.get_available_models().get(provider_name, [])
+                if configured else [],
+            })
+        
+        return {"providers": providers_info}
     except Exception as e:
-        raise HTTPException(500, f"Failed to get usage stats: {str(e)}")
+        raise HTTPException(500, f"Failed to list providers: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -9,14 +9,11 @@ import os
 from typing import Any, Dict, List, Optional, Union
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
-import asyncio
-import os
 from llmring.net.retry import retry_async
 from llmring.net.circuit_breaker import CircuitBreaker
 from google import genai
 from google.genai import types
 from llmring.base import BaseLLMProvider
-from llmring.model_refresh.models import ModelInfo
 from llmring.schemas import LLMResponse, Message
 
 
@@ -71,7 +68,7 @@ class GoogleProvider(BaseLLMProvider):
             "gemini-pro-vision",
         ]
 
-        # Map database model names to actual API model names
+        # Map model names to actual API model names
         # Using stable models instead of experimental ones for reliability
         self.model_mapping = {
             "gemini-2.5-pro": "gemini-1.5-pro",  # Use stable model
@@ -494,7 +491,7 @@ class GoogleProvider(BaseLLMProvider):
         # Prepare the response
         llm_response = LLMResponse(
             content=response_text or "",
-            model=model,  # Return the original model name from database
+            model=model,  # Return the original model name
             usage=usage,
             finish_reason="stop",  # google-genai doesn't provide this
         )
@@ -504,69 +501,6 @@ class GoogleProvider(BaseLLMProvider):
             llm_response.tool_calls = tool_calls
 
         return llm_response
-
-    async def discover_models(self) -> List[ModelInfo]:
-        """
-        Discover available models from Google Gemini API.
-
-        Returns:
-            List of discovered models with capabilities
-        """
-        try:
-            # Use the client's list_models method
-            models_response = self.client.models.list()
-            discovered = []
-
-            for model in models_response:
-                # Filter for chat/generative models only
-                if self._is_generative_model(model.name):
-                    # Extract model name (remove 'models/' prefix if present)
-                    model_name = model.name.replace("models/", "")
-
-                    model_info = ModelInfo(
-                        provider="google",
-                        model_name=model_name,
-                        display_name=self._get_display_name(model_name),
-                        description=f"Google {model_name} model",
-                        source="api",
-                        raw_data={"api_response": model.__dict__},
-                    )
-
-                    # Add known capabilities for recognized models
-                    capabilities = await self.get_model_capabilities(model_name)
-                    if capabilities:
-                        model_info.max_context = capabilities.get("max_context")
-                        model_info.max_output_tokens = capabilities.get(
-                            "max_output_tokens"
-                        )
-                        model_info.supports_vision = capabilities.get(
-                            "supports_vision", False
-                        )
-                        model_info.supports_function_calling = capabilities.get(
-                            "supports_function_calling", False
-                        )
-                        model_info.supports_json_mode = capabilities.get(
-                            "supports_json_mode", False
-                        )
-                        model_info.supports_parallel_tool_calls = capabilities.get(
-                            "supports_parallel_tool_calls", False
-                        )
-                        model_info.tool_call_format = capabilities.get(
-                            "tool_call_format"
-                        )
-
-                    discovered.append(model_info)
-
-            return discovered
-
-        except Exception as e:
-            # Fallback to static model list if API fails
-            import logging
-
-            logging.warning(
-                f"Google model discovery failed: {str(e)}, falling back to static list"
-            )
-            return await super().discover_models()
 
     async def get_model_capabilities(self, model_name: str) -> Optional[Dict[str, Any]]:
         """
@@ -659,38 +593,3 @@ class GoogleProvider(BaseLLMProvider):
         }
 
         return capabilities_map.get(model_name)
-
-    def _is_generative_model(self, model_name: str) -> bool:
-        """Check if a model is a generative/chat model."""
-        # Filter for Gemini models and exclude specialized models
-        model_lower = model_name.lower()
-
-        # Include Gemini models
-        if "gemini" in model_lower:
-            # Exclude embedding models or other specialized models
-            exclude_patterns = ["embedding", "aqa", "text-bison"]
-            for pattern in exclude_patterns:
-                if pattern in model_lower:
-                    return False
-            return True
-
-        return False
-
-    def _get_display_name(self, model_id: str) -> str:
-        """Get a friendly display name for a model."""
-        display_names = {
-            # Gemini 2.5 models
-            "gemini-2.5-pro": "Gemini 2.5 Pro",
-            # Gemini 2.0 models
-            "gemini-2.0-flash": "Gemini 2.0 Flash",
-            "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
-            "gemini-2.0-pro": "Gemini 2.0 Pro",
-            # Gemini 1.5 models
-            "gemini-1.5-pro": "Gemini 1.5 Pro",
-            "gemini-1.5-flash": "Gemini 1.5 Flash",
-            # Legacy models
-            "gemini-pro": "Gemini Pro",
-            "gemini-pro-vision": "Gemini Pro Vision",
-        }
-
-        return display_names.get(model_id, model_id.replace("-", " ").title())

@@ -2,18 +2,18 @@
 Ollama API provider implementation using the official SDK.
 """
 
+import asyncio
 import json
 import os
 import re
 from typing import Any, Dict, List, Optional, Union
 
-from llmring.base import BaseLLMProvider
-import asyncio
-from llmring.model_refresh.models import ModelInfo
-from llmring.schemas import LLMResponse, Message
 from ollama import AsyncClient, ResponseError
-from llmring.net.retry import retry_async
+
+from llmring.base import BaseLLMProvider
 from llmring.net.circuit_breaker import CircuitBreaker
+from llmring.net.retry import retry_async
+from llmring.schemas import LLMResponse, Message
 
 
 class OllamaProvider(BaseLLMProvider):
@@ -375,72 +375,6 @@ class OllamaProvider(BaseLLMProvider):
             # Handle general errors
             raise Exception(f"Failed to connect to Ollama at {self.base_url}: {str(e)}")
 
-    async def discover_models(self) -> List[ModelInfo]:
-        """
-        Discover available models from Ollama API.
-
-        Returns:
-            List of discovered models with capabilities
-        """
-        try:
-            # Call Ollama's list endpoint
-            models_response = await self.client.list()
-            discovered = []
-
-            for model in models_response["models"]:
-                model_name = model["name"]
-
-                model_info = ModelInfo(
-                    provider="ollama",
-                    model_name=model_name,
-                    display_name=self._get_display_name(model_name),
-                    description=f"Ollama {model_name} model",
-                    source="api",
-                    raw_data={"api_response": model},
-                    cost_per_token_input=None,  # Ollama is free
-                    cost_per_token_output=None,  # Ollama is free
-                )
-
-                # Add model-specific capabilities if available
-                capabilities = await self.get_model_capabilities(model_name)
-                if capabilities:
-                    model_info.max_context = capabilities.get("max_context")
-                    model_info.max_output_tokens = capabilities.get("max_output_tokens")
-                    model_info.supports_vision = capabilities.get(
-                        "supports_vision", False
-                    )
-                    model_info.supports_function_calling = capabilities.get(
-                        "supports_function_calling", False
-                    )
-                    model_info.supports_json_mode = capabilities.get(
-                        "supports_json_mode", False
-                    )
-                    model_info.supports_parallel_tool_calls = capabilities.get(
-                        "supports_parallel_tool_calls", False
-                    )
-                    model_info.tool_call_format = capabilities.get("tool_call_format")
-
-                # Extract additional metadata from Ollama response
-                if "details" in model:
-                    details = model["details"]
-                    if "parameter_size" in details:
-                        model_info.description += f" ({details['parameter_size']})"
-                    if "quantization_level" in details:
-                        model_info.description += f" - {details['quantization_level']}"
-
-                discovered.append(model_info)
-
-            return discovered
-
-        except Exception as e:
-            # Fallback to static model list if API fails
-            import logging
-
-            logging.warning(
-                f"Ollama model discovery failed: {str(e)}, falling back to static list"
-            )
-            return await super().discover_models()
-
     async def get_model_capabilities(self, model_name: str) -> Optional[Dict[str, Any]]:
         """
         Get capabilities for a specific Ollama model.
@@ -571,33 +505,3 @@ class OllamaProvider(BaseLLMProvider):
         }
 
         return capabilities_map.get(base_model)
-
-    def _get_display_name(self, model_id: str) -> str:
-        """Get a friendly display name for a model."""
-        # Extract base name and version info
-        parts = model_id.split(":")
-        base_name = parts[0]
-        tag = parts[1] if len(parts) > 1 else "latest"
-
-        # Common display name mappings
-        display_names = {
-            "llama3.3": "Llama 3.3",
-            "llama3.2": "Llama 3.2",
-            "llama3.1": "Llama 3.1",
-            "llama3": "Llama 3",
-            "mistral": "Mistral",
-            "mixtral": "Mixtral",
-            "codellama": "Code Llama",
-            "phi3": "Phi-3",
-            "gemma2": "Gemma 2",
-            "gemma": "Gemma",
-            "qwen2.5": "Qwen 2.5",
-            "qwen": "Qwen",
-        }
-
-        display_name = display_names.get(base_name, base_name.title())
-
-        if tag != "latest":
-            display_name += f" ({tag})"
-
-        return display_name

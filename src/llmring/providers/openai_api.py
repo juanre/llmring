@@ -15,7 +15,6 @@ from llmring.net.safe_fetcher import fetch_bytes as safe_fetch_bytes, SafeFetchE
 from llmring.net.retry import retry_async, RetryError
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.base import BaseLLMProvider
-from llmring.model_refresh.models import ModelInfo
 from llmring.schemas import LLMResponse, Message
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
@@ -617,66 +616,6 @@ class OpenAIProvider(BaseLLMProvider):
 
         return llm_response
 
-    async def discover_models(self) -> List[ModelInfo]:
-        """
-        Discover available models from OpenAI API.
-
-        Returns:
-            List of discovered models with capabilities
-        """
-        try:
-            # Call OpenAI's models endpoint
-            models_response = await self.client.models.list()
-            discovered = []
-
-            for model in models_response.data:
-                # Only include chat models (filter out others like embeddings, etc.)
-                if self._is_chat_model(model.id):
-                    model_info = ModelInfo(
-                        provider="openai",
-                        model_name=model.id,
-                        display_name=self._get_display_name(model.id),
-                        description=f"OpenAI {model.id} model",
-                        source="api",
-                        raw_data={"api_response": model.model_dump()},
-                    )
-
-                    # Add known capabilities for recognized models
-                    capabilities = await self.get_model_capabilities(model.id)
-                    if capabilities:
-                        model_info.max_context = capabilities.get("max_context")
-                        model_info.max_output_tokens = capabilities.get(
-                            "max_output_tokens"
-                        )
-                        model_info.supports_vision = capabilities.get(
-                            "supports_vision", False
-                        )
-                        model_info.supports_function_calling = capabilities.get(
-                            "supports_function_calling", False
-                        )
-                        model_info.supports_json_mode = capabilities.get(
-                            "supports_json_mode", False
-                        )
-                        model_info.supports_parallel_tool_calls = capabilities.get(
-                            "supports_parallel_tool_calls", False
-                        )
-                        model_info.tool_call_format = capabilities.get(
-                            "tool_call_format"
-                        )
-
-                    discovered.append(model_info)
-
-            return discovered
-
-        except Exception as e:
-            # Fallback to static model list if API fails
-            import logging
-
-            logging.warning(
-                f"OpenAI model discovery failed: {str(e)}, falling back to static list"
-            )
-            return await super().discover_models()
-
     async def get_model_capabilities(self, model_name: str) -> Optional[Dict[str, Any]]:
         """
         Get capabilities for a specific OpenAI model.
@@ -782,24 +721,3 @@ class OpenAIProvider(BaseLLMProvider):
             "moderation",
         ]
 
-        model_lower = model_id.lower()
-        for pattern in exclude_patterns:
-            if pattern in model_lower:
-                return False
-
-        return True
-
-    def _get_display_name(self, model_id: str) -> str:
-        """Get a friendly display name for a model."""
-        display_names = {
-            "gpt-4o": "GPT-4o",
-            "gpt-4o-mini": "GPT-4o Mini",
-            "gpt-4o-2024-08-06": "GPT-4o (2024-08-06)",
-            "gpt-4-turbo": "GPT-4 Turbo",
-            "gpt-4": "GPT-4",
-            "gpt-3.5-turbo": "GPT-3.5 Turbo",
-            "o1": "OpenAI o1",
-            "o1-mini": "OpenAI o1-mini",
-        }
-
-        return display_names.get(model_id, model_id.replace("-", " ").title())
