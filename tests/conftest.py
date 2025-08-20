@@ -1,8 +1,13 @@
 """Test configuration and fixtures for llmring"""
 
 import os
+from pathlib import Path
 
 import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from pgdbm.migrations import AsyncMigrationManager
+from pgdbm.fixtures.conftest import test_db_factory  # noqa: F401
 from dotenv import load_dotenv
 
 from llmring.providers.anthropic_api import AnthropicProvider
@@ -14,6 +19,90 @@ from llmring.service import LLMRing
 
 # Load environment variables from .env for test runs
 load_dotenv()
+# -----------------------------------------------------------------------------
+# llmring-server test app & database (fresh per test)
+# -----------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def llmring_server_db(test_db_factory):
+    """Create an isolated Postgres DB/schema for llmring-server and apply migrations."""
+    db = await test_db_factory.create_db(suffix="llmring", schema="llmring_test")
+
+    # Apply migrations from llmring-server project
+    migrations_path = (
+        Path("/Users/juanre/prj/llmring-all/llmring-server/src/llmring_server/migrations")
+    )
+    migrations = AsyncMigrationManager(
+        db, migrations_path=str(migrations_path), module_name="llmring_test"
+    )
+    await migrations.apply_pending_migrations()
+    return db
+
+
+@pytest_asyncio.fixture
+async def llmring_server_client(llmring_server_db):
+    """Run the llmring-server FastAPI app in-process and yield an HTTP client."""
+    # Import app lazily to avoid global state bleed
+    from llmring_server.main import app as server_app
+
+    # Inject fresh DB per test
+    server_app.state.db = llmring_server_db
+
+    transport = ASGITransport(app=server_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+@pytest.fixture
+def project_headers():
+    """Default project header for key-scoped server routes."""
+    return {"X-Project-Key": "proj_test"}
+
+
+@pytest_asyncio.fixture
+async def seeded_server(llmring_server_client, project_headers):
+    """Seed the server with a couple of aliases and one usage log.
+
+    - Creates aliases: summarizer → openai:gpt-4o-mini, cheap → openai:gpt-3.5-turbo
+    - Logs one usage entry (with explicit cost to avoid live registry dependency)
+    """
+    c = llmring_server_client
+
+    # Seed aliases
+    for alias, model in [
+        ("summarizer", "openai:gpt-4o-mini"),
+        ("cheap", "openai:gpt-3.5-turbo"),
+    ]:
+        r = await c.post(
+            "/api/v1/aliases/bind",
+            json={"alias": alias, "model": model},
+            headers=project_headers,
+        )
+        assert r.status_code == 200
+
+    # Seed one usage log with explicit cost so test does not hit remote registry
+    r = await c.post(
+        "/api/v1/log",
+        json={
+            "model": "gpt-4o-mini",
+            "provider": "openai",
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 0,
+            "cost": 0.0001,
+            "alias": "summarizer",
+            "profile": "default",
+            "origin": "llmring-tests",
+        },
+        headers=project_headers,
+    )
+    assert r.status_code == 200
+
+    # Yield the prepared client for tests that need it
+    yield llmring_server_client
+
+
 
 
 # Provider fixtures

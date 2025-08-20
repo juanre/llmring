@@ -74,9 +74,11 @@ dev = [
     "pillow>=11.2.1",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
+    "pgdbm @ file:///Users/juanre/prj/llmring/pgdbm",
     "reportlab>=4.4.3",
     "ruff>=0.12.9",
     "types-toml>=0.10.8.20240310",
+    "llmring-server",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -105,3 +107,6 @@ markers = [
     "google: marks tests as Google-specific",
     "ollama: marks tests as Ollama-specific",
 ]
+
+[tool.uv.sources]
+llmring-server = { path = "../llmring-server" }

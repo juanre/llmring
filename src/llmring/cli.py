@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from llmring import LLMRequest, LLMRing, Message
 from llmring.lockfile import Lockfile
 from llmring.registry import RegistryClient
+from llmring.server_client import push_aliases, pull_aliases
 
 # Load environment variables from .env file
 load_dotenv()
@@ -301,25 +302,46 @@ async def cmd_info(args):
 
 
 async def cmd_push(args):
-    """Push lockfile bindings to server (placeholder)."""
-    print("⚠️  The 'push' command requires a server connection.")
-    print("This feature is not yet available in the local-only version.")
-    print("\nTo use server features:")
-    print("  1. Set LLMRING_SERVER_URL environment variable")
-    print("  2. Authenticate with 'llmring register'")
-    print("  3. Use 'llmring push' to sync your bindings")
-    return 0
+    """Push lockfile aliases to the server using X-Project-Key."""
+    lockfile_path = Lockfile.find_lockfile()
+    if not lockfile_path:
+        print("Error: No llmring.lock found.")
+        return 1
+    lockfile = Lockfile.load(lockfile_path)
+    try:
+        updated = await push_aliases(
+            lockfile,
+            profile=args.profile,
+            server_url=os.environ.get("LLMRING_SERVER_URL"),
+            project_key=os.environ.get("LLMRING_PROJECT_KEY"),
+        )
+        print(f"✅ Pushed {updated} aliases to server")
+        return 0
+    except Exception as e:
+        print(f"Error: {e}")
+        return 1
 
 
 async def cmd_pull(args):
-    """Pull lockfile bindings from server (placeholder)."""
-    print("⚠️  The 'pull' command requires a server connection.")
-    print("This feature is not yet available in the local-only version.")
-    print("\nTo use server features:")
-    print("  1. Set LLMRING_SERVER_URL environment variable")
-    print("  2. Authenticate with 'llmring register'")
-    print("  3. Use 'llmring pull' to fetch bindings")
-    return 0
+    """Pull aliases from server into the local lockfile using X-Project-Key."""
+    lockfile_path = Lockfile.find_lockfile()
+    if not lockfile_path:
+        print("Error: No llmring.lock found.")
+        return 1
+    lockfile = Lockfile.load(lockfile_path)
+    try:
+        count = await pull_aliases(
+            lockfile,
+            profile=args.profile,
+            merge=args.merge,
+            server_url=os.environ.get("LLMRING_SERVER_URL"),
+            project_key=os.environ.get("LLMRING_PROJECT_KEY"),
+        )
+        print(f"✅ Pulled {count} aliases from server into profile '{args.profile or lockfile.default_profile}'")
+        return 0
+    except Exception as e:
+        print(f"Error: {e}")
+        return 1
 
 
 async def cmd_stats(args):
@@ -535,15 +557,16 @@ def main():
     
     # Push command
     push_parser = subparsers.add_parser(
-        "push", help="Push lockfile bindings to server (requires server connection)"
+        "push", help="Push lockfile aliases to server (X-Project-Key required)"
     )
-    push_parser.add_argument("--force", action="store_true", help="Force push even if conflicts")
+    push_parser.add_argument("--profile", help="Profile to push (default: lockfile default)")
     
     # Pull command
     pull_parser = subparsers.add_parser(
-        "pull", help="Pull lockfile bindings from server (requires server connection)"
+        "pull", help="Pull aliases from server into lockfile (X-Project-Key required)"
     )
-    pull_parser.add_argument("--merge", action="store_true", help="Merge with local bindings")
+    pull_parser.add_argument("--profile", help="Profile to pull (default: lockfile default)")
+    pull_parser.add_argument("--merge", action="store_true", help="Merge with local bindings instead of replacing")
     
     # Stats command
     stats_parser = subparsers.add_parser(
