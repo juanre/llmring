@@ -281,8 +281,8 @@ class ReceiptGenerator:
 
         if model_info:
             # Get pricing from model info
-            input_price = model_info.get("cost_per_million_input_tokens", 0.0)
-            output_price = model_info.get("cost_per_million_output_tokens", 0.0)
+            input_price = model_info.get("dollars_per_million_tokens_input", 0.0)
+            output_price = model_info.get("dollars_per_million_tokens_output", 0.0)
 
             input_cost = (prompt_tokens / 1_000_000) * input_price
             output_cost = (completion_tokens / 1_000_000) * output_price

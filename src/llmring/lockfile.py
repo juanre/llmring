@@ -132,21 +132,32 @@ class Lockfile(BaseModel):
             defaults["long_context"] = "openai:gpt-4-turbo-preview"
             defaults["low_cost"] = "openai:gpt-3.5-turbo"
             defaults["json_mode"] = "openai:gpt-4-turbo-preview"
+            defaults["fast"] = "openai:gpt-3.5-turbo"
 
         if os.environ.get("ANTHROPIC_API_KEY"):
             defaults["deep"] = "anthropic:claude-3-opus-20240229"
             defaults["balanced"] = "anthropic:claude-3-sonnet-20240229"
+            defaults["pdf_reader"] = "anthropic:claude-3-sonnet-20240229"  # Claude is good at PDFs
             if "low_cost" not in defaults:
                 defaults["low_cost"] = "anthropic:claude-3-haiku-20240307"
+            if "fast" not in defaults:
+                defaults["fast"] = "anthropic:claude-3-haiku-20240307"
 
         if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
             defaults["vision"] = "google:gemini-1.5-pro"
+            defaults["multimodal"] = "google:gemini-1.5-pro"
             if "long_context" not in defaults:
                 defaults["long_context"] = "google:gemini-1.5-pro"
+            if "pdf_reader" not in defaults:
+                defaults["pdf_reader"] = "google:gemini-1.5-pro"  # Gemini also handles PDFs well
 
         # Ollama is always available locally
         if not defaults:
-            defaults["default"] = "ollama:llama3"
+            defaults["default"] = "ollama:llama3.3:latest"
+            defaults["local"] = "ollama:llama3.3:latest"
+        else:
+            # Add a local option if Ollama is available
+            defaults["local"] = "ollama:llama3.3:latest"
 
         return defaults
 
@@ -265,3 +276,25 @@ class Lockfile(BaseModel):
             current = current.parent
 
         return None
+
+    def calculate_digest(self) -> str:
+        """
+        Calculate SHA256 digest of the lockfile for receipts.
+
+        Returns:
+            Hex-encoded SHA256 digest
+        """
+        import hashlib
+
+        # Get canonical representation
+        data = self.model_dump(mode="json")
+
+        # Convert datetimes to ISO format
+        data["created_at"] = self.created_at.isoformat()
+        data["updated_at"] = self.updated_at.isoformat()
+
+        # Sort and serialize deterministically
+        canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
+
+        # Calculate SHA256
+        return hashlib.sha256(canonical.encode()).hexdigest()

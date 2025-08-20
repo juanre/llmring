@@ -300,6 +300,107 @@ async def cmd_info(args):
     return 0
 
 
+async def cmd_push(args):
+    """Push lockfile bindings to server (placeholder)."""
+    print("⚠️  The 'push' command requires a server connection.")
+    print("This feature is not yet available in the local-only version.")
+    print("\nTo use server features:")
+    print("  1. Set LLMRING_SERVER_URL environment variable")
+    print("  2. Authenticate with 'llmring register'")
+    print("  3. Use 'llmring push' to sync your bindings")
+    return 0
+
+
+async def cmd_pull(args):
+    """Pull lockfile bindings from server (placeholder)."""
+    print("⚠️  The 'pull' command requires a server connection.")
+    print("This feature is not yet available in the local-only version.")
+    print("\nTo use server features:")
+    print("  1. Set LLMRING_SERVER_URL environment variable")
+    print("  2. Authenticate with 'llmring register'")
+    print("  3. Use 'llmring pull' to fetch bindings")
+    return 0
+
+
+async def cmd_stats(args):
+    """Show usage statistics (placeholder)."""
+    # For now, show local receipts if available
+    ring = LLMRing()
+    
+    if not ring.receipts:
+        print("No usage statistics available.")
+        print("\nNote: Full statistics require server connection.")
+        return 0
+    
+    print(f"Local usage statistics ({len(ring.receipts)} requests):")
+    print("-" * 40)
+    
+    total_cost = sum(r.total_cost for r in ring.receipts)
+    total_tokens = sum(r.total_tokens for r in ring.receipts)
+    
+    print(f"Total requests: {len(ring.receipts)}")
+    print(f"Total tokens: {total_tokens:,}")
+    print(f"Total cost: ${total_cost:.6f}")
+    
+    if args.verbose:
+        print("\nRecent requests:")
+        for receipt in ring.receipts[-10:]:
+            print(f"  {receipt.timestamp}: {receipt.alias} → {receipt.provider}:{receipt.model} (${receipt.total_cost:.6f})")
+    
+    return 0
+
+
+async def cmd_export(args):
+    """Export receipts (placeholder)."""
+    ring = LLMRing()
+    
+    if not ring.receipts:
+        print("No receipts to export.")
+        return 0
+    
+    # Export local receipts as JSON
+    import json
+    from datetime import datetime
+    
+    export_data = {
+        "exported_at": datetime.utcnow().isoformat(),
+        "receipts": [
+            {
+                "receipt_id": r.receipt_id,
+                "timestamp": r.timestamp.isoformat(),
+                "alias": r.alias,
+                "profile": r.profile,
+                "provider": r.provider,
+                "model": r.model,
+                "prompt_tokens": r.prompt_tokens,
+                "completion_tokens": r.completion_tokens,
+                "total_tokens": r.total_tokens,
+                "total_cost": r.total_cost,
+            }
+            for r in ring.receipts
+        ],
+    }
+    
+    output_file = args.output or "llmring_receipts.json"
+    with open(output_file, "w") as f:
+        json.dump(export_data, f, indent=2)
+    
+    print(f"✅ Exported {len(ring.receipts)} receipts to {output_file}")
+    return 0
+
+
+async def cmd_register(args):
+    """Register with LLMRing server (placeholder)."""
+    print("⚠️  The 'register' command requires a server connection.")
+    print("This feature is not yet available in the local-only version.")
+    print("\nLLMRing SaaS features coming soon:")
+    print("  • Central binding management")
+    print("  • Usage analytics and cost tracking")
+    print("  • Team collaboration")
+    print("  • Signed receipts for compliance")
+    return 0
+
+
 async def cmd_providers(args):
     """List configured providers."""
     ring = LLMRing()
@@ -431,6 +532,39 @@ def main():
         "providers", help="List configured providers"
     )
     providers_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    
+    # Push command
+    push_parser = subparsers.add_parser(
+        "push", help="Push lockfile bindings to server (requires server connection)"
+    )
+    push_parser.add_argument("--force", action="store_true", help="Force push even if conflicts")
+    
+    # Pull command
+    pull_parser = subparsers.add_parser(
+        "pull", help="Pull lockfile bindings from server (requires server connection)"
+    )
+    pull_parser.add_argument("--merge", action="store_true", help="Merge with local bindings")
+    
+    # Stats command
+    stats_parser = subparsers.add_parser(
+        "stats", help="Show usage statistics"
+    )
+    stats_parser.add_argument("--verbose", action="store_true", help="Show detailed statistics")
+    stats_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    
+    # Export command
+    export_parser = subparsers.add_parser(
+        "export", help="Export receipts to file"
+    )
+    export_parser.add_argument("--output", help="Output file (default: llmring_receipts.json)")
+    export_parser.add_argument("--format", choices=["json", "csv"], default="json", help="Export format")
+    
+    # Register command
+    register_parser = subparsers.add_parser(
+        "register", help="Register with LLMRing server (for SaaS features)"
+    )
+    register_parser.add_argument("--email", help="Email address for registration")
+    register_parser.add_argument("--org", help="Organization name")
 
     args = parser.parse_args()
 
@@ -461,6 +595,11 @@ def main():
         "chat": cmd_chat,
         "info": cmd_info,
         "providers": cmd_providers,
+        "push": cmd_push,
+        "pull": cmd_pull,
+        "stats": cmd_stats,
+        "export": cmd_export,
+        "register": cmd_register,
     }
 
     if args.command in command_map:

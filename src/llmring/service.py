@@ -12,6 +12,7 @@ from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.providers.openai_api import OpenAIProvider
+from llmring.receipts import Receipt, ReceiptGenerator, ReceiptSigner
 from llmring.registry import RegistryClient, RegistryModel
 from llmring.schemas import LLMRequest, LLMResponse
 
@@ -40,6 +41,10 @@ class LLMRing:
         self._model_cache: Dict[str, Dict[str, Any]] = {}
         self.registry = RegistryClient(registry_url=registry_url)
         self._registry_models: Dict[str, List[RegistryModel]] = {}
+        
+        # Initialize receipt generator (no signer for local mode)
+        self.receipt_generator: Optional[ReceiptGenerator] = None
+        self.receipts: List[Receipt] = []  # Store receipts locally for now
 
         # Load lockfile if available
         self.lockfile: Optional[Lockfile] = None
@@ -195,18 +200,22 @@ class LLMRing:
         )
         return alias_or_model
 
-    async def chat(self, request: LLMRequest) -> LLMResponse:
+    async def chat(self, request: LLMRequest, profile: Optional[str] = None) -> LLMResponse:
         """
         Send a chat request to the appropriate provider.
 
         Args:
             request: LLM request with messages and parameters
+            profile: Optional profile name for alias resolution
 
         Returns:
             LLM response with cost information if available
         """
+        # Store original alias for receipt
+        original_alias = request.model or ""
+        
         # Resolve alias if needed
-        resolved_model = self.resolve_alias(request.model or "")
+        resolved_model = self.resolve_alias(request.model or "", profile)
 
         # Parse model to get provider
         provider_type, model_name = self._parse_model_string(resolved_model)
@@ -256,6 +265,36 @@ class LLMRing:
                 logger.debug(
                     f"Calculated cost for {provider_type}:{model_name}: ${cost_info['total_cost']:.6f}"
                 )
+        
+        # Generate receipt if we have usage information
+        if response.usage and self.lockfile:
+            try:
+                # Initialize receipt generator if not already done
+                if not self.receipt_generator:
+                    self.receipt_generator = ReceiptGenerator()
+                
+                # Calculate lockfile digest
+                lock_digest = self.lockfile.calculate_digest()
+                
+                # Determine profile used
+                profile_name = profile or os.getenv("LLMRING_PROFILE") or self.lockfile.default_profile
+                
+                # Generate receipt
+                receipt = self.receipt_generator.generate_receipt(
+                    alias=original_alias if ":" not in original_alias else "direct_model",
+                    profile=profile_name,
+                    lock_digest=lock_digest,
+                    provider=provider_type,
+                    model=model_name,
+                    usage=response.usage,
+                    costs=cost_info if cost_info else {"input_cost": 0.0, "output_cost": 0.0, "total_cost": 0.0}
+                )
+                
+                # Store receipt locally
+                self.receipts.append(receipt)
+                logger.debug(f"Generated receipt {receipt.receipt_id} for {provider_type}:{model_name}")
+            except Exception as e:
+                logger.warning(f"Failed to generate receipt: {e}")
 
         return response
 
@@ -296,7 +335,7 @@ class LLMRing:
             **kwargs,
         )
 
-        return await self.chat(request)
+        return await self.chat(request, profile=profile)
 
     # Lockfile management methods
 

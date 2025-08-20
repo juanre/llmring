@@ -280,18 +280,18 @@ class RegistryClient:
                     m for m in pinned.models if m.model_name == current_model.model_name
                 )
                 if (
-                    current_model.cost_per_million_input_tokens
-                    != pinned_model.cost_per_million_input_tokens
-                    or current_model.cost_per_million_output_tokens
-                    != pinned_model.cost_per_million_output_tokens
+                    current_model.dollars_per_million_tokens_input
+                    != pinned_model.dollars_per_million_tokens_input
+                    or current_model.dollars_per_million_tokens_output
+                    != pinned_model.dollars_per_million_tokens_output
                 ):
                     price_changes.append(
                         {
                             "model": current_model.model_name,
-                            "old_input_cost": pinned_model.cost_per_million_input_tokens,
-                            "new_input_cost": current_model.cost_per_million_input_tokens,
-                            "old_output_cost": pinned_model.cost_per_million_output_tokens,
-                            "new_output_cost": current_model.cost_per_million_output_tokens,
+                            "old_input_cost": pinned_model.dollars_per_million_tokens_input,
+                            "new_input_cost": current_model.dollars_per_million_tokens_input,
+                            "old_output_cost": pinned_model.dollars_per_million_tokens_output,
+                            "new_output_cost": current_model.dollars_per_million_tokens_output,
                         }
                     )
 
@@ -307,23 +307,42 @@ class RegistryClient:
 
     def _parse_models_dict(self, models_dict: Dict[str, Any]) -> List[RegistryModel]:
         """Parse models from dictionary format to list of RegistryModel objects."""
+        # Validate that we received a dictionary, not an array
+        if not isinstance(models_dict, dict):
+            raise ValueError(
+                f"Registry models must be a dictionary with 'provider:model' keys, got {type(models_dict)}"
+            )
+        
         models = []
         for model_key, model_data in models_dict.items():
             try:
-                # Ensure we have the required fields
-                if ":" in model_key:
-                    provider, model_name = model_key.split(":", 1)
+                # Validate key format for O(1) lookup compliance
+                if ":" not in model_key:
+                    print(f"Warning: Model key '{model_key}' doesn't follow 'provider:model' format")
+                    continue
+                
+                provider, model_name = model_key.split(":", 1)
 
-                    # Add provider if not present
-                    if "provider" not in model_data:
-                        model_data["provider"] = provider
+                # Validate model_data is a dictionary
+                if not isinstance(model_data, dict):
+                    print(f"Warning: Model data for '{model_key}' is not a dictionary")
+                    continue
 
-                    # Add model_name if not present (handle model_id field)
-                    if "model_name" not in model_data:
-                        if "model_id" in model_data:
-                            model_data["model_name"] = model_data["model_id"]
-                        else:
-                            model_data["model_name"] = model_name
+                # Add provider if not present
+                if "provider" not in model_data:
+                    model_data["provider"] = provider
+
+                # Add model_name if not present (handle model_id field)
+                if "model_name" not in model_data:
+                    if "model_id" in model_data:
+                        model_data["model_name"] = model_data["model_id"]
+                    else:
+                        model_data["model_name"] = model_name
+
+                # Validate required fields
+                if not model_data.get("display_name"):
+                    print(f"Warning: Model '{model_key}' missing display_name")
+                    model_data["display_name"] = model_name
 
                 model = RegistryModel(**model_data)
                 models.append(model)
@@ -331,6 +350,10 @@ class RegistryClient:
                 # Log but don't fail on individual model parsing errors
                 print(f"Warning: Failed to parse model {model_key}: {e}")
                 continue
+        
+        if not models and models_dict:
+            print(f"Warning: No valid models parsed from {len(models_dict)} entries")
+        
         return models
 
     def _is_cache_valid(self, cache_file: Path) -> bool:
