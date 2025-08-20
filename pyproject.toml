@@ -44,7 +44,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://juanreyero.com/open/llmring/"
+Homepage = "https://llmring.ai"
 Documentation = "https://github.com/juanre/llmring"
 Repository = "https://github.com/juanre/llmring"
 Issues = "https://github.com/juanre/llmring/issues"
