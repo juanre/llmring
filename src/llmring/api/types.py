@@ -4,34 +4,37 @@ This module defines data types used by the LLM Service API.
 """
 
 from typing import Dict, List, Literal, Optional
+
 from pydantic import BaseModel, Field
 
 
 class ModelInfo(BaseModel):
     """Information about an LLM model.
-    
+
     Attributes:
         provider: The model provider (e.g., 'openai', 'anthropic', 'google', 'ollama')
         model_name: The canonical model name as used by the provider
         supported: Whether the model is supported by the provider
         is_default: Whether this is the default model for the provider
     """
-    
+
     provider: str = Field(..., description="Model provider")
     model_name: str = Field(..., description="Canonical model name")
     supported: bool = Field(..., description="Whether model is supported")
-    is_default: Optional[bool] = Field(None, description="Whether this is the default model")
+    is_default: Optional[bool] = Field(
+        None, description="Whether this is the default model"
+    )
 
 
 class ProviderInfo(BaseModel):
     """Information about a model provider.
-    
+
     Attributes:
         provider: Provider identifier (e.g., 'openai', 'anthropic')
         has_api_key: Whether an API key is configured for this provider
         models: List of supported model names
     """
-    
+
     provider: str = Field(..., description="Provider identifier")
     has_api_key: bool = Field(..., description="Whether API key is configured")
     models: List[str] = Field(default_factory=list, description="Supported models")
@@ -39,7 +42,7 @@ class ProviderInfo(BaseModel):
 
 class ChatRequest(BaseModel):
     """Chat completion request.
-    
+
     Attributes:
         messages: List of message dictionaries with 'role' and 'content'
         model: Model identifier (e.g., 'openai:gpt-4')
@@ -49,7 +52,7 @@ class ChatRequest(BaseModel):
         tools: Optional list of tools/functions
         tool_choice: Optional tool selection strategy
     """
-    
+
     messages: List[Dict[str, str]] = Field(..., description="Conversation messages")
     model: str = Field(..., description="Model identifier")
     temperature: Optional[float] = Field(0.7, description="Sampling temperature")
@@ -61,7 +64,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     """Chat completion response.
-    
+
     Attributes:
         content: Generated text content
         model: Model that generated the response
@@ -69,7 +72,7 @@ class ChatResponse(BaseModel):
         finish_reason: Reason for completion
         tool_calls: Any tool calls made by the model
     """
-    
+
     content: str = Field(..., description="Generated content")
     model: str = Field(..., description="Model used")
     usage: Optional[Dict] = Field(None, description="Token usage")
@@ -79,12 +82,12 @@ class ChatResponse(BaseModel):
 
 class ServiceHealth(BaseModel):
     """Health status of the LLM service.
-    
+
     Attributes:
         status: Overall health status
         providers: List of available providers
     """
-    
+
     status: Literal["healthy", "degraded", "unhealthy"] = Field(
         ..., description="Overall status"
     )

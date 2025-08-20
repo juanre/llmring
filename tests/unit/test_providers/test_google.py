@@ -9,12 +9,14 @@ import os
 from functools import wraps
 
 import pytest
+
 from llmring.providers.google_api import GoogleProvider
 from llmring.schemas import LLMResponse, Message
 
 
 def skip_on_quota_exceeded(func):
     """Decorator to skip tests when Google API quota is exceeded."""
+
     @wraps(func)
     async def wrapper(*args, **kwargs):
         try:
@@ -22,12 +24,20 @@ def skip_on_quota_exceeded(func):
         except Exception as e:
             error_msg = str(e).lower()
             # Check for quota/rate limit errors
-            if any(term in error_msg for term in [
-                "quota", "rate limit", "resource_exhausted",
-                "429", "billing", "exceeded"
-            ]):
+            if any(
+                term in error_msg
+                for term in [
+                    "quota",
+                    "rate limit",
+                    "resource_exhausted",
+                    "429",
+                    "billing",
+                    "exceeded",
+                ]
+            ):
                 pytest.skip(f"Google API quota exceeded: {str(e)[:100]}")
             raise
+
     return wrapper
 
 

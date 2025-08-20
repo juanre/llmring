@@ -2,19 +2,19 @@
 Anthropic Claude API provider implementation using the official SDK.
 """
 
+import asyncio
 import json
 import os
 from typing import Any, Dict, List, Optional, Union
 
 from anthropic import AsyncAnthropic
-import asyncio
-from llmring.net.retry import retry_async
-from llmring.net.circuit_breaker import CircuitBreaker
 from anthropic.types import Message as AnthropicMessage
+
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.base import BaseLLMProvider
+from llmring.net.circuit_breaker import CircuitBreaker
+from llmring.net.retry import retry_async
 from llmring.schemas import LLMResponse, Message
-
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -429,4 +429,3 @@ class AnthropicProvider(BaseLLMProvider):
         except ImportError:
             # Fall back to rough estimation - around 4 characters per token
             return len(text) // 4 + 1
-

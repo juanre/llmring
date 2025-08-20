@@ -8,6 +8,7 @@ import os
 
 import aiohttp
 import pytest
+
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.schemas import LLMResponse, Message
 

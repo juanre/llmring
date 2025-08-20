@@ -5,15 +5,15 @@ import os
 import pytest
 from dotenv import load_dotenv
 
-# Load environment variables from .env for test runs
-load_dotenv()
-
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.schemas import LLMResponse, Message
 from llmring.service import LLMRing
+
+# Load environment variables from .env for test runs
+load_dotenv()
 
 
 # Provider fixtures

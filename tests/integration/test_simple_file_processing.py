@@ -9,6 +9,7 @@ import os
 import tempfile
 
 import pytest
+
 from llmring.file_utils import analyze_image, create_image_content
 from llmring.schemas import LLMRequest, Message
 from llmring.service import LLMRing
@@ -33,7 +34,7 @@ def create_simple_test_image() -> str:
         # Use default font
         try:
             font = ImageFont.truetype("Arial.ttf", 32)
-        except:
+        except Exception:
             font = ImageFont.load_default()
 
         # Draw test text that should be easily extractable
@@ -225,10 +226,17 @@ class TestSimpleFileProcessing:
         except Exception as e:
             error_msg = str(e).lower()
             # Check for quota/rate limit errors
-            if any(term in error_msg for term in [
-                "quota", "rate limit", "resource_exhausted",
-                "429", "billing", "exceeded"
-            ]):
+            if any(
+                term in error_msg
+                for term in [
+                    "quota",
+                    "rate limit",
+                    "resource_exhausted",
+                    "429",
+                    "billing",
+                    "exceeded",
+                ]
+            ):
                 pytest.skip(f"Google API quota exceeded: {str(e)[:100]}")
             raise
 

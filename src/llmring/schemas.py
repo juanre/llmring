@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class Message(BaseModel):
@@ -38,13 +38,12 @@ class LLMResponse(BaseModel):
     usage: Optional[Dict[str, Any]] = None
     finish_reason: Optional[str] = None
     tool_calls: Optional[List[Dict[str, Any]]] = None
-    
+
     @property
     def total_tokens(self) -> Optional[int]:
         """Get total tokens used."""
         if not self.usage:
             return None
         return self.usage.get("total_tokens") or (
-            self.usage.get("prompt_tokens", 0) + 
-            self.usage.get("completion_tokens", 0)
+            self.usage.get("prompt_tokens", 0) + self.usage.get("completion_tokens", 0)
         )

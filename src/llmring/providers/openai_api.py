@@ -4,21 +4,22 @@ OpenAI API provider implementation using the official SDK.
 
 import asyncio
 import base64
+import copy
 import os
 import tempfile
 from typing import Any, Dict, List, Optional, Union
-import copy
-import warnings
 
-# Note: do not call load_dotenv() in library code; handle in app entrypoints
-from llmring.net.safe_fetcher import fetch_bytes as safe_fetch_bytes, SafeFetchError
-from llmring.net.retry import retry_async, RetryError
-from llmring.net.circuit_breaker import CircuitBreaker
-from llmring.base import BaseLLMProvider
-from llmring.schemas import LLMResponse, Message
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 
+from llmring.base import BaseLLMProvider
+from llmring.net.circuit_breaker import CircuitBreaker
+from llmring.net.retry import retry_async
+
+# Note: do not call load_dotenv() in library code; handle in app entrypoints
+from llmring.net.safe_fetcher import SafeFetchError
+from llmring.net.safe_fetcher import fetch_bytes as safe_fetch_bytes
+from llmring.schemas import LLMResponse, Message
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -174,13 +175,19 @@ class OpenAIProvider(BaseLLMProvider):
         try:
             # Upload PDFs
             for i, pdf_data in enumerate(pdf_data_list):
-                with tempfile.NamedTemporaryFile(suffix=f"_document_{i}.pdf", delete=False) as tmp_file:
+                with tempfile.NamedTemporaryFile(
+                    suffix=f"_document_{i}.pdf", delete=False
+                ) as tmp_file:
                     tmp_file.write(pdf_data)
                     tmp_file.flush()
                     with open(tmp_file.name, "rb") as f:
                         # PDFs must use 'assistants' purpose for Responses input_file
-                        file_obj = await self.client.files.create(file=f, purpose="assistants")
-                        uploaded_files.append({"file_id": file_obj.id, "temp_path": tmp_file.name})
+                        file_obj = await self.client.files.create(
+                            file=f, purpose="assistants"
+                        )
+                        uploaded_files.append(
+                            {"file_id": file_obj.id, "temp_path": tmp_file.name}
+                        )
 
             # Build Responses API input using input_file items (no RAG/vector store)
             content_items: List[Dict[str, Any]] = []
@@ -194,7 +201,11 @@ class OpenAIProvider(BaseLLMProvider):
                     model=model,
                     input=[{"role": "user", "content": content_items}],
                     **({"temperature": temperature} if temperature is not None else {}),
-                    **({"max_output_tokens": max_tokens} if max_tokens is not None else {}),
+                    **(
+                        {"max_output_tokens": max_tokens}
+                        if max_tokens is not None
+                        else {}
+                    ),
                 ),
                 timeout=timeout_s,
             )
@@ -298,7 +309,8 @@ class OpenAIProvider(BaseLLMProvider):
             elif "rate limit" in error_msg.lower() or "quota" in error_msg.lower():
                 raise ValueError(f"OpenAI API rate limit exceeded: {error_msg}") from e
             elif "model" in error_msg.lower() and (
-                "not found" in error_msg.lower() or "does not exist" in error_msg.lower()
+                "not found" in error_msg.lower()
+                or "does not exist" in error_msg.lower()
             ):
                 raise ValueError(f"OpenAI model not available: {error_msg}") from e
             else:
@@ -317,7 +329,8 @@ class OpenAIProvider(BaseLLMProvider):
         estimated_usage = {
             "prompt_tokens": self.get_token_count(input_text),
             "completion_tokens": self.get_token_count(content_text),
-            "total_tokens": self.get_token_count(input_text) + self.get_token_count(content_text),
+            "total_tokens": self.get_token_count(input_text)
+            + self.get_token_count(content_text),
         }
 
         return LLMResponse(
@@ -365,7 +378,9 @@ class OpenAIProvider(BaseLLMProvider):
         # Route o1* models via Responses API
         if model.startswith("o1"):
             if tools or response_format or tool_choice is not None:
-                raise ValueError("OpenAI o1 models do not support tools or custom response formats")
+                raise ValueError(
+                    "OpenAI o1 models do not support tools or custom response formats"
+                )
             return await self._chat_via_responses(
                 messages=messages,
                 model=model,
@@ -464,9 +479,16 @@ class OpenAIProvider(BaseLLMProvider):
                     )
 
         # Optional: inline remote images using safe fetcher if enabled
-        if os.getenv("LLMRING_INLINE_REMOTE_IMAGES", "false").lower() in {"1", "true", "yes", "on"}:
+        if os.getenv("LLMRING_INLINE_REMOTE_IMAGES", "false").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
             for message in openai_messages:
-                if isinstance(message, dict) and isinstance(message.get("content"), list):
+                if isinstance(message, dict) and isinstance(
+                    message.get("content"), list
+                ):
                     for part in message["content"]:
                         if (
                             isinstance(part, dict)
@@ -474,11 +496,15 @@ class OpenAIProvider(BaseLLMProvider):
                             and isinstance(part.get("image_url"), dict)
                         ):
                             url = part["image_url"].get("url")
-                            if isinstance(url, str) and url.startswith(("http://", "https://")):
+                            if isinstance(url, str) and url.startswith(
+                                ("http://", "https://")
+                            ):
                                 try:
                                     data, mime = await safe_fetch_bytes(url)
                                     b64 = base64.b64encode(data).decode("utf-8")
-                                    part["image_url"]["url"] = f"data:{mime};base64,{b64}"
+                                    part["image_url"][
+                                        "url"
+                                    ] = f"data:{mime};base64,{b64}"
                                 except (SafeFetchError, Exception):
                                     # Leave URL as-is if fetch fails or not allowed
                                     pass
@@ -546,7 +572,8 @@ class OpenAIProvider(BaseLLMProvider):
 
             async def _do_call():
                 return await asyncio.wait_for(
-                    self.client.chat.completions.create(**request_params), timeout=timeout_s
+                    self.client.chat.completions.create(**request_params),
+                    timeout=timeout_s,
                 )
 
             # Circuit breaker key per model
@@ -619,17 +646,5 @@ class OpenAIProvider(BaseLLMProvider):
     def _is_chat_model(self, model_id: str) -> bool:
         """Check if a model is a chat/completion model."""
         # Filter out non-chat models
-        exclude_patterns = [
-            "whisper",
-            "tts",
-            "dall-e",
-            "embedding",
-            "text-embedding",
-            "text-davinci",
-            "text-curie",
-            "text-babbage",
-            "text-ada",
-            "code-davinci",
-            "moderation",
-        ]
-
+        # Patterns to exclude: whisper, tts, dall-e, embedding, text-embedding,
+        # text-davinci, text-curie, text-babbage, text-ada, code-davinci, moderation

@@ -48,5 +48,3 @@ class CircuitBreaker:
             if st.failures >= self.failure_threshold:
                 st.state = "open"
                 st.opened_at = time.monotonic()
-
-

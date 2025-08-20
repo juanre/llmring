@@ -6,6 +6,7 @@ Chat tests are skipped for large models to prevent long test times.
 """
 
 import pytest
+
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.schemas import LLMResponse, Message
 
@@ -78,7 +79,7 @@ class TestOllamaProviderUnit:
                 pytest.skip("No models available in Ollama")
 
             model_to_use = available_models[0]
-        except:
+        except Exception:
             pytest.skip("Cannot determine available Ollama models")
 
         # Skip large models as they're too slow for unit testing
@@ -114,7 +115,7 @@ class TestOllamaProviderUnit:
             if not available_models:
                 pytest.skip("No models available in Ollama")
             model_to_use = available_models[0]
-        except:
+        except Exception:
             pytest.skip("Cannot determine available Ollama models")
 
         # Skip large models as they're too slow for unit testing
@@ -143,7 +144,7 @@ class TestOllamaProviderUnit:
             if not available_models:
                 pytest.skip("No models available in Ollama")
             base_model = available_models[0]
-        except:
+        except Exception:
             pytest.skip("Cannot determine available Ollama models")
 
         # Skip large models as they're too slow for unit testing
@@ -168,7 +169,7 @@ class TestOllamaProviderUnit:
             if not available_models:
                 pytest.skip("No models available in Ollama")
             model_to_use = available_models[0]
-        except:
+        except Exception:
             pytest.skip("Cannot determine available Ollama models")
 
         # Skip large models as they're too slow for unit testing
@@ -248,7 +249,7 @@ class TestOllamaProviderUnit:
             if not available_models:
                 pytest.skip("No models available in Ollama")
             model_to_use = available_models[0]
-        except:
+        except Exception:
             pytest.skip("Cannot determine available Ollama models")
 
         # Skip large models as they're too slow for unit testing
@@ -281,7 +282,7 @@ class TestOllamaProviderUnit:
             if not available_models:
                 pytest.skip("No models available in Ollama")
             model_to_use = available_models[0]
-        except:
+        except Exception:
             pytest.skip("Cannot determine available Ollama models")
 
         # Skip large models as they're too slow for unit testing
@@ -311,7 +312,7 @@ class TestOllamaProviderUnit:
             if not available_models:
                 pytest.skip("No models available in Ollama")
             model_to_use = available_models[0]
-        except:
+        except Exception:
             pytest.skip("Cannot determine available Ollama models")
 
         # Skip large models as they're too slow for unit testing

@@ -7,6 +7,7 @@ import tempfile
 from unittest.mock import patch
 
 import pytest
+
 from llmring.file_utils import (
     _is_base64_string,
     analyze_image,

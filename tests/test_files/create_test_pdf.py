@@ -89,10 +89,10 @@ def create_simple_test_image(output_path: str) -> str:
     # Try to use a system font, fallback to default
     try:
         font = ImageFont.truetype("Arial.ttf", 24)
-    except:
+    except Exception:
         try:
             font = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 24)
-        except:
+        except Exception:
             font = ImageFont.load_default()
 
     test_text = """LLM Service Vision Test

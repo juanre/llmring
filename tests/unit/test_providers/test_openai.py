@@ -8,6 +8,7 @@ import json
 import os
 
 import pytest
+
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.schemas import LLMResponse, Message
 

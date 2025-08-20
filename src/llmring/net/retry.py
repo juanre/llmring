@@ -58,8 +58,16 @@ async def retry_async(
     op_factory should return a fresh awaitable each attempt.
     """
     attempts = max_attempts or _get_int_env("LLMRING_RETRY_ATTEMPTS", 2)
-    base = base_delay_s if base_delay_s is not None else _get_float_env("LLMRING_RETRY_BASE_S", 0.25)
-    max_delay = max_delay_s if max_delay_s is not None else _get_float_env("LLMRING_RETRY_MAX_S", 2.0)
+    base = (
+        base_delay_s
+        if base_delay_s is not None
+        else _get_float_env("LLMRING_RETRY_BASE_S", 0.25)
+    )
+    max_delay = (
+        max_delay_s
+        if max_delay_s is not None
+        else _get_float_env("LLMRING_RETRY_MAX_S", 2.0)
+    )
 
     last_exc: Optional[BaseException] = None
     for attempt in range(1, attempts + 1):
@@ -76,5 +84,3 @@ async def retry_async(
             await asyncio.sleep(delay)
 
     raise RetryError(str(last_exc) if last_exc else "unknown error") from last_exc
-
-

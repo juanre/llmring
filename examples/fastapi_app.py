@@ -12,9 +12,7 @@ Test endpoints:
     http://localhost:8000/docs
 """
 
-import os
 from contextlib import asynccontextmanager
-from typing import Any, Dict
 
 from fastapi import Depends, FastAPI, HTTPException
 from llmring import LLMRing
@@ -77,7 +75,7 @@ async def health_check(service: LLMRing = Depends(get_llmring)):
                 provider = service.get_provider(provider_name)
                 if provider:
                     providers.append(provider_name)
-            except:
+            except Exception:
                 pass
 
         return ServiceHealth(
@@ -153,7 +151,7 @@ async def list_providers(service: LLMRing = Depends(get_llmring)):
             try:
                 provider = service.get_provider(provider_name)
                 configured = provider is not None
-            except:
+            except Exception:
                 configured = False
             
             providers_info.append({

@@ -1,5 +1,5 @@
-import asyncio
 import os
+
 import pytest
 
 from llmring.net.safe_fetcher import SafeFetchError, fetch_bytes, get_default_config
@@ -41,4 +41,3 @@ async def test_fetch_size_and_type_limits(monkeypatch):
     # We can't actually fetch, but we can at least assert cfg picks up values
     assert cfg["max_size_bytes"] == 1024
     assert cfg["content_types_allowed"] == ["image/png"]
-

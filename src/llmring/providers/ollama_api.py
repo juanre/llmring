@@ -374,4 +374,3 @@ class OllamaProvider(BaseLLMProvider):
                 pass
             # Handle general errors
             raise Exception(f"Failed to connect to Ollama at {self.base_url}: {str(e)}")
-

@@ -170,7 +170,7 @@ async def demo_llm_integration():
 
         # Show example usage (commented to avoid API calls)
         base64_data, mime_type = create_sample_image_base64()
-        content = analyze_image(base64_data, "Describe this image", mime_type)
+        # Would normally call: analyze_image(base64_data, "Describe this image", mime_type)
 
         print("\nExample usage:")
         print(

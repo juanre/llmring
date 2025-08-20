@@ -41,11 +41,15 @@ def get_default_config() -> Dict[str, object]:
     return {
         "allow_remote_urls": _get_bool_env("LLMRING_ALLOW_REMOTE_URLS", False),
         "allowed_hosts": allowed_hosts_list,
-        "max_size_bytes": int(os.getenv("LLMRING_MAX_DOWNLOAD_SIZE_BYTES", str(8 * 1024 * 1024))),
+        "max_size_bytes": int(
+            os.getenv("LLMRING_MAX_DOWNLOAD_SIZE_BYTES", str(8 * 1024 * 1024))
+        ),
         "connect_timeout_s": float(os.getenv("LLMRING_CONNECT_TIMEOUT_S", "2.0")),
         "read_timeout_s": float(os.getenv("LLMRING_READ_TIMEOUT_S", "5.0")),
         "total_timeout_s": float(os.getenv("LLMRING_TOTAL_TIMEOUT_S", "10.0")),
-        "content_types_allowed": [ct.strip().lower() for ct in allowed_content_types.split(",") if ct.strip()],
+        "content_types_allowed": [
+            ct.strip().lower() for ct in allowed_content_types.split(",") if ct.strip()
+        ],
         "follow_redirects": False,
         "max_redirects": 0,
     }
@@ -71,7 +75,9 @@ def _is_private_or_local_host(host: str) -> bool:
     return False
 
 
-async def fetch_bytes(url: str, config: Optional[Dict[str, object]] = None) -> Tuple[bytes, str]:
+async def fetch_bytes(
+    url: str, config: Optional[Dict[str, object]] = None
+) -> Tuple[bytes, str]:
     """Fetch a remote URL safely and return (data, content_type).
 
     Raises SafeFetchError on violations or failures.
@@ -101,7 +107,12 @@ async def fetch_bytes(url: str, config: Optional[Dict[str, object]] = None) -> T
     total_timeout: float = float(cfg.get("total_timeout_s", 10.0))  # type: ignore[arg-type]
     allowed_types: List[str] = cfg.get("content_types_allowed", [])  # type: ignore[assignment]
 
-    timeout = httpx.Timeout(connect=connect_timeout, read=read_timeout, write=read_timeout, pool=connect_timeout)
+    timeout = httpx.Timeout(
+        connect=connect_timeout,
+        read=read_timeout,
+        write=read_timeout,
+        pool=connect_timeout,
+    )
 
     async with httpx.AsyncClient(follow_redirects=False, timeout=timeout) as client:
         # HEAD preflight where possible
@@ -111,7 +122,9 @@ async def fetch_bytes(url: str, config: Optional[Dict[str, object]] = None) -> T
             if cl is not None:
                 try:
                     if int(cl) > max_size:
-                        raise SafeFetchError("Content length exceeds maximum allowed size")
+                        raise SafeFetchError(
+                            "Content length exceeds maximum allowed size"
+                        )
                 except ValueError:
                     pass
             ct = (head.headers.get("content-type") or "").split(";")[0].lower()
@@ -147,5 +160,3 @@ async def fetch_bytes(url: str, config: Optional[Dict[str, object]] = None) -> T
             chunks.append(chunk)
 
         return (b"".join(chunks), ct or "application/octet-stream")
-
-

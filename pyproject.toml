@@ -76,6 +76,7 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "reportlab>=4.4.3",
     "ruff>=0.12.9",
+    "types-toml>=0.10.8.20240310",
 ]
 
 [tool.hatch.build.targets.wheel]

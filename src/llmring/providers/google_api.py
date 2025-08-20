@@ -8,14 +8,15 @@ import json
 import os
 from typing import Any, Dict, List, Optional, Union
 
-# Note: do not call load_dotenv() in library code; handle in app entrypoints
-from llmring.net.retry import retry_async
-from llmring.net.circuit_breaker import CircuitBreaker
 from google import genai
 from google.genai import types
-from llmring.base import BaseLLMProvider
-from llmring.schemas import LLMResponse, Message
 
+from llmring.base import BaseLLMProvider
+from llmring.net.circuit_breaker import CircuitBreaker
+
+# Note: do not call load_dotenv() in library code; handle in app entrypoints
+from llmring.net.retry import retry_async
+from llmring.schemas import LLMResponse, Message
 
 
 class GoogleProvider(BaseLLMProvider):
@@ -348,16 +349,20 @@ class GoogleProvider(BaseLLMProvider):
 
                 # Run synchronous operation in thread pool
                 total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+
                 async def _do_call():
                     return await asyncio.wait_for(
                         loop.run_in_executor(
                             None,
                             lambda: self.client.models.generate_content(
-                                model=api_model, contents=converted_content, config=config
+                                model=api_model,
+                                contents=converted_content,
+                                config=config,
                             ),
                         ),
                         timeout=total_timeout,
                     )
+
                 key = f"google:{api_model}"
                 if not await self._breaker.allow(key):
                     raise Exception("Google circuit open for model")
@@ -416,10 +421,12 @@ class GoogleProvider(BaseLLMProvider):
 
                     # Run the chat in thread pool
                     total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+
                     async def _do_chat():
                         return await asyncio.wait_for(
                             loop.run_in_executor(None, _run_chat), timeout=total_timeout
                         )
+
                     key = f"google:{api_model}"
                     if not await self._breaker.allow(key):
                         raise Exception("Google circuit open for model")
@@ -501,4 +508,3 @@ class GoogleProvider(BaseLLMProvider):
             llm_response.tool_calls = tool_calls
 
         return llm_response
-

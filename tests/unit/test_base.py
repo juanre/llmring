@@ -3,6 +3,7 @@ Unit tests for the base LLM provider class.
 """
 
 import pytest
+
 from llmring.base import BaseLLMProvider
 from llmring.schemas import LLMResponse
 

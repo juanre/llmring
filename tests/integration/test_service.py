@@ -6,6 +6,7 @@ import asyncio
 import os
 
 import pytest
+
 from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
 
@@ -106,15 +107,24 @@ class TestLLMRingIntegration:
         except Exception as e:
             error_msg = str(e).lower()
             # Check for quota/rate limit errors
-            if any(term in error_msg for term in [
-                "quota", "rate limit", "resource_exhausted",
-                "429", "billing", "exceeded"
-            ]):
+            if any(
+                term in error_msg
+                for term in [
+                    "quota",
+                    "rate limit",
+                    "resource_exhausted",
+                    "429",
+                    "billing",
+                    "exceeded",
+                ]
+            ):
                 pytest.skip(f"Google API quota exceeded: {str(e)[:100]}")
             raise
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Ollama tests take too long - skipping for faster test runs")
+    @pytest.mark.skip(
+        reason="Ollama tests take too long - skipping for faster test runs"
+    )
     @pytest.mark.ollama
     async def test_ollama_provider_integration(self, llmring):
         """Test Ollama provider through LLM service."""
@@ -196,9 +206,7 @@ class TestLLMRingIntegration:
         else:
             provider = "anthropic"
             model = "anthropic:claude-3-7-sonnet-20250219"
-            llmring.register_provider(
-                provider, api_key=os.getenv("ANTHROPIC_API_KEY")
-            )
+            llmring.register_provider(provider, api_key=os.getenv("ANTHROPIC_API_KEY"))
 
         # Create multiple requests
         requests = []

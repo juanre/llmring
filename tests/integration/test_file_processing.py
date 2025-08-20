@@ -8,12 +8,13 @@ import os
 import tempfile
 
 import pytest
-from llmring.file_utils import analyze_image, create_image_content
-from llmring.schemas import LLMRequest, Message
-from llmring.service import LLMRing
 from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+
+from llmring.file_utils import analyze_image, create_image_content
+from llmring.schemas import LLMRequest, Message
+from llmring.service import LLMRing
 
 
 def create_test_image_with_text() -> str:
@@ -39,7 +40,7 @@ def create_test_image_with_text() -> str:
             if os.path.exists(font_path):
                 font = ImageFont.truetype(font_path, font_size)
                 break
-        except:
+        except Exception:
             continue
 
     # Fallback to default if no system font found
@@ -47,11 +48,7 @@ def create_test_image_with_text() -> str:
         font = ImageFont.load_default()
 
     # Use non-PII test data to avoid content filters
-    text_lines = [
-        "DOCUMENT: TEST-001",
-        "Category: DEMO",
-        "Status: ACTIVE"
-    ]
+    text_lines = ["DOCUMENT: TEST-001", "Category: DEMO", "Status: ACTIVE"]
 
     # Draw with better spacing for clearer OCR
     y_position = 60
@@ -227,10 +224,17 @@ class TestFileProcessing:
         except Exception as e:
             error_msg = str(e).lower()
             # Check for quota/rate limit errors
-            if any(term in error_msg for term in [
-                "quota", "rate limit", "resource_exhausted",
-                "429", "billing", "exceeded"
-            ]):
+            if any(
+                term in error_msg
+                for term in [
+                    "quota",
+                    "rate limit",
+                    "resource_exhausted",
+                    "429",
+                    "billing",
+                    "exceeded",
+                ]
+            ):
                 pytest.skip(f"Google API quota exceeded: {str(e)[:100]}")
             raise
 
@@ -259,7 +263,11 @@ class TestFileProcessing:
 
         # Verify response contains key information
         content_lower = response.content.lower()
-        assert "doc-test-001" in content_lower or "test-001" in content_lower or "test 001" in content_lower
+        assert (
+            "doc-test-001" in content_lower
+            or "test-001" in content_lower
+            or "test 001" in content_lower
+        )
         assert "demo" in content_lower or "technical" in content_lower
 
         print(f"PDF processing with Anthropic: {response.content}")
@@ -290,7 +298,11 @@ class TestFileProcessing:
 
             # Verify response contains key information
             content_lower = response.content.lower()
-            assert "doc-test-001" in content_lower or "test-001" in content_lower or "test 001" in content_lower
+            assert (
+                "doc-test-001" in content_lower
+                or "test-001" in content_lower
+                or "test 001" in content_lower
+            )
             assert "demo" in content_lower or "technical" in content_lower
 
             print(f"PDF processing with Google: {response.content}")
@@ -298,10 +310,17 @@ class TestFileProcessing:
         except Exception as e:
             error_msg = str(e).lower()
             # Check for quota/rate limit errors
-            if any(term in error_msg for term in [
-                "quota", "rate limit", "resource_exhausted",
-                "429", "billing", "exceeded"
-            ]):
+            if any(
+                term in error_msg
+                for term in [
+                    "quota",
+                    "rate limit",
+                    "resource_exhausted",
+                    "429",
+                    "billing",
+                    "exceeded",
+                ]
+            ):
                 pytest.skip(f"Google API quota exceeded: {str(e)[:100]}")
             raise
 
@@ -331,7 +350,11 @@ class TestFileProcessing:
 
             # Verify response contains key information
             content_lower = response.content.lower()
-            assert "doc-test-001" in content_lower or "test-001" in content_lower or "test 001" in content_lower
+            assert (
+                "doc-test-001" in content_lower
+                or "test-001" in content_lower
+                or "test 001" in content_lower
+            )
             assert "demo" in content_lower or "technical" in content_lower
 
             print(f"PDF processing with OpenAI: {response.content}")
@@ -385,6 +408,7 @@ class TestFileProcessing:
         # Test with httpbin image endpoint
         test_url = "https://httpbin.org/image/png"
         import os
+
         os.environ["LLMRING_ALLOW_REMOTE_URLS"] = "true"
         content = analyze_image(test_url, "Describe this image")
 
