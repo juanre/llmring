@@ -7,9 +7,14 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
+from dotenv import load_dotenv
+
 from llmring import LLMRequest, LLMRing, Message
 from llmring.lockfile import Lockfile
 from llmring.registry import RegistryClient
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 async def cmd_lock_init(args):
@@ -223,7 +228,9 @@ async def cmd_chat(args):
             
             if args.verbose and response.usage:
                 print(f"\n[Model: {response.model}]")
-                print(f"[Tokens: {response.usage}]")
+                print(f"[Tokens: {response.usage.get('prompt_tokens', 0)} in, {response.usage.get('completion_tokens', 0)} out]")
+                if 'cost' in response.usage:
+                    print(f"[Cost: ${response.usage['cost']:.6f}]")
     
     except Exception as e:
         print(f"Error: {e}")
@@ -237,14 +244,35 @@ async def cmd_info(args):
     ring = LLMRing()
     
     try:
-        info = ring.get_model_info(args.model)
+        # Get enhanced info including registry data
+        info = await ring.get_enhanced_model_info(args.model)
         
         if args.json:
-            print(json.dumps(info, indent=2))
+            print(json.dumps(info, indent=2, default=str))
         else:
             print(f"Model: {info['model']}")
             print(f"Provider: {info['provider']}")
             print(f"Supported: {info['supported']}")
+            
+            # Show additional info if available
+            if 'display_name' in info:
+                print(f"Display Name: {info['display_name']}")
+            if 'description' in info:
+                print(f"Description: {info['description']}")
+            if 'max_input_tokens' in info:
+                print(f"Max Input: {info['max_input_tokens']:,} tokens")
+            if 'max_output_tokens' in info:
+                print(f"Max Output: {info['max_output_tokens']:,} tokens")
+            if 'dollars_per_million_tokens_input' in info:
+                print(f"Input Cost: ${info['dollars_per_million_tokens_input']:.2f}/M tokens")
+            if 'dollars_per_million_tokens_output' in info:
+                print(f"Output Cost: ${info['dollars_per_million_tokens_output']:.2f}/M tokens")
+            if 'supports_vision' in info and info['supports_vision']:
+                print("Supports: Vision")
+            if 'supports_function_calling' in info and info['supports_function_calling']:
+                print("Supports: Function Calling")
+            if 'supports_json_mode' in info and info['supports_json_mode']:
+                print("Supports: JSON Mode")
             if 'is_default' in info:
                 print(f"Default: {info['is_default']}")
     

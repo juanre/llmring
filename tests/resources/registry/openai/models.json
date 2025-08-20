@@ -1,0 +1,58 @@
+{
+  "provider": "openai",
+  "version": 1,
+  "updated_at": "2025-08-20T12:00:00Z",
+  "models": {
+    "openai:gpt-4o-mini": {
+      "provider": "openai",
+      "model_name": "gpt-4o-mini",
+      "display_name": "GPT-4o Mini",
+      "description": "OpenAI's efficient GPT-4 model",
+      "max_input_tokens": 128000,
+      "max_output_tokens": 16384,
+      "dollars_per_million_tokens_input": 0.15,
+      "dollars_per_million_tokens_output": 0.60,
+      "supports_vision": true,
+      "supports_function_calling": true,
+      "supports_json_mode": true,
+      "supports_parallel_tool_calls": true,
+      "is_active": true,
+      "added_date": "2024-07-18T00:00:00Z",
+      "deprecated_date": null
+    },
+    "openai:gpt-4": {
+      "provider": "openai",
+      "model_name": "gpt-4",
+      "display_name": "GPT-4",
+      "description": "OpenAI's most capable GPT-4 model",
+      "max_input_tokens": 8192,
+      "max_output_tokens": 4096,
+      "dollars_per_million_tokens_input": 30.00,
+      "dollars_per_million_tokens_output": 60.00,
+      "supports_vision": false,
+      "supports_function_calling": true,
+      "supports_json_mode": true,
+      "supports_parallel_tool_calls": true,
+      "is_active": true,
+      "added_date": "2023-03-14T00:00:00Z",
+      "deprecated_date": null
+    },
+    "openai:gpt-3.5-turbo": {
+      "provider": "openai",
+      "model_name": "gpt-3.5-turbo",
+      "display_name": "GPT-3.5 Turbo",
+      "description": "Fast and inexpensive model for simple tasks",
+      "max_input_tokens": 16385,
+      "max_output_tokens": 4096,
+      "dollars_per_million_tokens_input": 0.50,
+      "dollars_per_million_tokens_output": 1.50,
+      "supports_vision": false,
+      "supports_function_calling": true,
+      "supports_json_mode": true,
+      "supports_parallel_tool_calls": true,
+      "is_active": true,
+      "added_date": "2023-06-13T00:00:00Z",
+      "deprecated_date": null
+    }
+  }
+}

@@ -69,10 +69,13 @@ dev = [
 dev = [
     "black>=25.1.0",
     "claude-code-sdk>=0.0.10",
+    "isort>=6.0.1",
+    "mypy>=1.17.1",
     "pillow>=11.2.1",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
     "reportlab>=4.4.3",
+    "ruff>=0.12.9",
 ]
 
 [tool.hatch.build.targets.wheel]

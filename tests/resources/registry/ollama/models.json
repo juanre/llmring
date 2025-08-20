@@ -1,0 +1,58 @@
+{
+  "provider": "ollama",
+  "version": 1,
+  "updated_at": "2025-08-20T12:00:00Z",
+  "models": {
+    "ollama:llama3": {
+      "provider": "ollama",
+      "model_name": "llama3",
+      "display_name": "Llama 3 8B",
+      "description": "Meta's Llama 3 8B model",
+      "max_input_tokens": 8192,
+      "max_output_tokens": 8192,
+      "dollars_per_million_tokens_input": 0.0,
+      "dollars_per_million_tokens_output": 0.0,
+      "supports_vision": false,
+      "supports_function_calling": true,
+      "supports_json_mode": false,
+      "supports_parallel_tool_calls": false,
+      "is_active": true,
+      "added_date": "2024-04-18T00:00:00Z",
+      "deprecated_date": null
+    },
+    "ollama:llama3.3": {
+      "provider": "ollama",
+      "model_name": "llama3.3",
+      "display_name": "Llama 3.3 70B",
+      "description": "Meta's Llama 3.3 70B model",
+      "max_input_tokens": 131072,
+      "max_output_tokens": 131072,
+      "dollars_per_million_tokens_input": 0.0,
+      "dollars_per_million_tokens_output": 0.0,
+      "supports_vision": false,
+      "supports_function_calling": true,
+      "supports_json_mode": false,
+      "supports_parallel_tool_calls": false,
+      "is_active": true,
+      "added_date": "2024-12-06T00:00:00Z",
+      "deprecated_date": null
+    },
+    "ollama:mistral": {
+      "provider": "ollama",
+      "model_name": "mistral",
+      "display_name": "Mistral 7B",
+      "description": "Mistral AI's 7B model",
+      "max_input_tokens": 32768,
+      "max_output_tokens": 32768,
+      "dollars_per_million_tokens_input": 0.0,
+      "dollars_per_million_tokens_output": 0.0,
+      "supports_vision": false,
+      "supports_function_calling": false,
+      "supports_json_mode": false,
+      "supports_parallel_tool_calls": false,
+      "is_active": true,
+      "added_date": "2023-09-27T00:00:00Z",
+      "deprecated_date": null
+    }
+  }
+}

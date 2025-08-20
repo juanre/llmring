@@ -1,19 +1,39 @@
 version = "1.0"
-created_at = "2025-08-19T20:02:47.840135"
-updated_at = "2025-08-19T20:03:05.364611"
+created_at = "2025-08-20T08:59:51.625965+00:00"
+updated_at = "2025-08-20T08:59:51.635841+00:00"
 default_profile = "default"
 
 [profiles.default]
 name = "default"
 [[profiles.default.bindings]]
-alias = "default"
-provider = "ollama"
-model = "llama3"
+alias = "long_context"
+provider = "openai"
+model = "gpt-4-turbo-preview"
 
 [[profiles.default.bindings]]
-alias = "summarizer"
-provider = "ollama"
-model = "llama3.3"
+alias = "low_cost"
+provider = "openai"
+model = "gpt-3.5-turbo"
+
+[[profiles.default.bindings]]
+alias = "json_mode"
+provider = "openai"
+model = "gpt-4-turbo-preview"
+
+[[profiles.default.bindings]]
+alias = "deep"
+provider = "anthropic"
+model = "claude-3-opus-20240229"
+
+[[profiles.default.bindings]]
+alias = "balanced"
+provider = "anthropic"
+model = "claude-3-sonnet-20240229"
+
+[[profiles.default.bindings]]
+alias = "test"
+provider = "openai"
+model = "gpt-4"
 
 [profiles.prod]
 name = "prod"

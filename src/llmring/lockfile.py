@@ -10,7 +10,7 @@ The lockfile (llmring.lock) is the authoritative configuration source for:
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -76,8 +76,8 @@ class Lockfile(BaseModel):
     """Represents the complete lockfile configuration."""
     
     version: str = Field(default="1.0", description="Lockfile format version")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
-    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp")
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Last update timestamp")
     
     profiles: Dict[str, ProfileConfig] = Field(
         default_factory=dict,
@@ -156,7 +156,7 @@ class Lockfile(BaseModel):
         """Set a binding in the specified profile."""
         profile_config = self.get_profile(profile)
         profile_config.set_binding(alias, model_ref, constraints)
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
     
     def get_binding(self, alias: str, profile: Optional[str] = None) -> Optional[AliasBinding]:
         """Get a binding from the specified profile."""

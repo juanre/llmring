@@ -6,7 +6,7 @@ with per-provider model lists and versioned archives.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -22,17 +22,19 @@ class RegistryModel(BaseModel):
     display_name: str = Field(..., description="Human-friendly name")
     description: Optional[str] = Field(None, description="Model description")
     
+    # Token limits
+    max_input_tokens: Optional[int] = Field(None, description="Max input tokens")
+    max_output_tokens: Optional[int] = Field(None, description="Max output tokens")
+    
+    # Pricing (dollars per million tokens)
+    dollars_per_million_tokens_input: Optional[float] = Field(None, description="USD per million input tokens")
+    dollars_per_million_tokens_output: Optional[float] = Field(None, description="USD per million output tokens")
+    
     # Capabilities
-    max_context_tokens: Optional[int] = Field(None, description="Max context size")
-    max_output_tokens: Optional[int] = Field(None, description="Max output size")
     supports_vision: bool = Field(False, description="Supports image input")
     supports_function_calling: bool = Field(False, description="Supports functions")
     supports_json_mode: bool = Field(False, description="Supports JSON output")
     supports_parallel_tool_calls: bool = Field(False, description="Supports parallel tools")
-    
-    # Pricing (per million tokens)
-    cost_per_million_input_tokens: Optional[float] = Field(None, description="Input cost")
-    cost_per_million_output_tokens: Optional[float] = Field(None, description="Output cost")
     
     # Status
     is_active: bool = Field(True, description="Model is currently available")
@@ -93,33 +95,42 @@ class RegistryClient:
         if self._is_cache_valid(cache_file):
             with open(cache_file, "r") as f:
                 data = json.load(f)
-                models = [RegistryModel(**m) for m in data.get("models", [])]
+                models = self._parse_models_dict(data.get("models", {}))
                 self._cache[cache_key] = models
                 return models
         
         # Fetch from registry
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                data = response.json()
-                
-                # Parse models
-                models = [RegistryModel(**m) for m in data.get("models", [])]
-                
-                # Save to cache
-                with open(cache_file, "w") as f:
-                    json.dump(data, f, indent=2)
-                
-                self._cache[cache_key] = models
-                return models
+            # Handle file:// URLs
+            if url.startswith("file://"):
+                file_path = Path(url[7:])  # Remove file:// prefix
+                if not file_path.exists():
+                    raise FileNotFoundError(f"Registry file not found: {file_path}")
+                with open(file_path, "r") as f:
+                    data = json.load(f)
+            else:
+                # Handle HTTP/HTTPS URLs
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                    data = response.json()
+            
+            # Parse models from dictionary
+            models = self._parse_models_dict(data.get("models", {}))
+            
+            # Save to cache
+            with open(cache_file, "w") as f:
+                json.dump(data, f, indent=2)
+            
+            self._cache[cache_key] = models
+            return models
                 
         except Exception as e:
             # If fetch fails, try to use stale cache
             if cache_file.exists():
                 with open(cache_file, "r") as f:
                     data = json.load(f)
-                    return [RegistryModel(**m) for m in data.get("models", [])]
+                    return self._parse_models_dict(data.get("models", {}))
             raise Exception(f"Failed to fetch registry for {provider}: {e}")
     
     async def fetch_version(self, provider: str, version: int) -> RegistryVersion:
@@ -148,7 +159,7 @@ class RegistryClient:
                 version_info = RegistryVersion(
                     provider=provider,
                     version=version,
-                    updated_at=datetime.fromisoformat(data.get("updated_at", datetime.utcnow().isoformat())),
+                    updated_at=datetime.fromisoformat(data.get("updated_at", datetime.now(timezone.utc).isoformat())),
                     models=[RegistryModel(**m) for m in data.get("models", [])]
                 )
                 self._cache[cache_key] = version_info
@@ -156,16 +167,25 @@ class RegistryClient:
         
         # Fetch from registry
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                data = response.json()
+            # Handle file:// URLs
+            if url.startswith("file://"):
+                file_path = Path(url[7:])  # Remove file:// prefix
+                if not file_path.exists():
+                    raise FileNotFoundError(f"Registry file not found: {file_path}")
+                with open(file_path, "r") as f:
+                    data = json.load(f)
+            else:
+                # Handle HTTP/HTTPS URLs
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                    data = response.json()
                 
                 # Create version info
                 version_info = RegistryVersion(
                     provider=provider,
                     version=version,
-                    updated_at=datetime.fromisoformat(data.get("updated_at", datetime.utcnow().isoformat())),
+                    updated_at=datetime.fromisoformat(data.get("updated_at", datetime.now(timezone.utc).isoformat())),
                     models=[RegistryModel(**m) for m in data.get("models", [])]
                 )
                 
@@ -259,13 +279,41 @@ class RegistryClient:
             "price_changes": price_changes
         }
     
+    def _parse_models_dict(self, models_dict: Dict[str, Any]) -> List[RegistryModel]:
+        """Parse models from dictionary format to list of RegistryModel objects."""
+        models = []
+        for model_key, model_data in models_dict.items():
+            try:
+                # Ensure we have the required fields
+                if ":" in model_key:
+                    provider, model_name = model_key.split(":", 1)
+                    
+                    # Add provider if not present
+                    if "provider" not in model_data:
+                        model_data["provider"] = provider
+                    
+                    # Add model_name if not present (handle model_id field)
+                    if "model_name" not in model_data:
+                        if "model_id" in model_data:
+                            model_data["model_name"] = model_data["model_id"]
+                        else:
+                            model_data["model_name"] = model_name
+                
+                model = RegistryModel(**model_data)
+                models.append(model)
+            except Exception as e:
+                # Log but don't fail on individual model parsing errors
+                print(f"Warning: Failed to parse model {model_key}: {e}")
+                continue
+        return models
+    
     def _is_cache_valid(self, cache_file: Path) -> bool:
         """Check if a cache file is still valid."""
         if not cache_file.exists():
             return False
         
         # Check age
-        age_hours = (datetime.now() - datetime.fromtimestamp(cache_file.stat().st_mtime)).total_seconds() / 3600
+        age_hours = (datetime.now(timezone.utc) - datetime.fromtimestamp(cache_file.stat().st_mtime, tz=timezone.utc)).total_seconds() / 3600
         return age_hours < self.CACHE_DURATION_HOURS
     
     def clear_cache(self):
