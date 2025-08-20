@@ -502,9 +502,9 @@ class OpenAIProvider(BaseLLMProvider):
                                 try:
                                     data, mime = await safe_fetch_bytes(url)
                                     b64 = base64.b64encode(data).decode("utf-8")
-                                    part["image_url"][
-                                        "url"
-                                    ] = f"data:{mime};base64,{b64}"
+                                    part["image_url"]["url"] = (
+                                        f"data:{mime};base64,{b64}"
+                                    )
                                 except (SafeFetchError, Exception):
                                     # Leave URL as-is if fetch fails or not allowed
                                     pass

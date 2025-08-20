@@ -99,7 +99,9 @@ class TestOpenAIProviderIntegration:
         ]
 
         response = await provider.chat(
-            messages=messages, model="gpt-3.5-turbo", max_tokens=20  # Very small limit
+            messages=messages,
+            model="gpt-3.5-turbo",
+            max_tokens=20,  # Very small limit
         )
 
         assert isinstance(response, LLMResponse)

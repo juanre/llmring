@@ -28,7 +28,7 @@ async def example_no_database():
     request = LLMRequest(
         messages=[Message(role="user", content="What is 2+2?")],
         model="gpt-4o-mini",  # or "claude-3-haiku-20240307"
-        temperature=0
+        temperature=0,
     )
 
     try:
@@ -52,7 +52,7 @@ async def example_with_sqlite():
         messages=[Message(role="user", content="Tell me a short joke")],
         model="gpt-4o-mini",
         temperature=0.7,
-        max_tokens=100
+        max_tokens=100,
     )
 
     try:
@@ -79,7 +79,7 @@ async def example_with_caching():
         messages=[Message(role="user", content="What is the capital of France?")],
         model="gpt-4o-mini",
         temperature=0,  # Must be <= 0.1 for caching
-        cache={"enabled": True, "ttl_seconds": 300}  # Cache for 5 minutes
+        cache={"enabled": True, "ttl_seconds": 300},  # Cache for 5 minutes
     )
 
     print("First request (will hit API)...")
@@ -115,7 +115,7 @@ async def example_different_providers():
                 messages=[Message(role="user", content="Say 'hello' in one word")],
                 model=model,
                 temperature=0,
-                max_tokens=10
+                max_tokens=10,
             )
             response = await service.chat(request)
             print(f"{model}: {response.content}")

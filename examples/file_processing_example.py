@@ -150,7 +150,7 @@ async def demo_advanced_usage():
 
         print("Custom content structure:")
         for i, part in enumerate(content_parts):
-            print(f"  Part {i+1}: {part['type']}")
+            print(f"  Part {i + 1}: {part['type']}")
 
         # File size checking pattern
         file_size_mb = os.path.getsize(sample_file) / (1024 * 1024)
@@ -167,7 +167,7 @@ async def demo_advanced_usage():
 
         for i, file_path in enumerate(files):
             mime_type = get_file_mime_type(file_path)
-            print(f"  File {i+1}: {mime_type}")
+            print(f"  File {i + 1}: {mime_type}")
             # Here you'd process each file based on its type
 
     finally:

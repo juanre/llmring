@@ -471,7 +471,7 @@ class GoogleProvider(BaseLLMProvider):
                         if isinstance(tool_data, dict) and "name" in tool_data:
                             tool_calls = [
                                 {
-                                    "id": f"call_{hash(json_text) & 0xffffffff:x}",  # Generate a deterministic ID
+                                    "id": f"call_{hash(json_text) & 0xFFFFFFFF:x}",  # Generate a deterministic ID
                                     "type": "function",
                                     "function": {
                                         "name": tool_data["name"],

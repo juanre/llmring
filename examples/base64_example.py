@@ -71,10 +71,10 @@ async def demo_base64_auto_detection():
     print(f"- {len(content)} parts")
     for i, part in enumerate(content):
         if part["type"] == "text":
-            print(f"  Part {i+1}: Text - '{part['text']}'")
+            print(f"  Part {i + 1}: Text - '{part['text']}'")
         else:
             url = part["image_url"]["url"]
-            print(f"  Part {i+1}: Image - {url[:50]}...")
+            print(f"  Part {i + 1}: Image - {url[:50]}...")
 
     print()
 

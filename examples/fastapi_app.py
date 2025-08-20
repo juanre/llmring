@@ -125,17 +125,15 @@ async def chat_completion(
 
 
 @app.get("/models")
-async def list_models(
-    provider: str = None, service: LLMRing = Depends(get_llmring)
-):
+async def list_models(provider: str = None, service: LLMRing = Depends(get_llmring)):
     """List available models."""
     try:
         models = service.get_available_models()
-        
+
         if provider:
             # Filter by provider
             models = {k: v for k, v in models.items() if k == provider}
-        
+
         return {"models": models}
     except Exception as e:
         raise HTTPException(500, f"Failed to list models: {str(e)}")
@@ -146,21 +144,24 @@ async def list_providers(service: LLMRing = Depends(get_llmring)):
     """List configured providers."""
     try:
         providers_info = []
-        
+
         for provider_name in ["openai", "anthropic", "google", "ollama"]:
             try:
                 provider = service.get_provider(provider_name)
                 configured = provider is not None
             except Exception:
                 configured = False
-            
-            providers_info.append({
-                "provider": provider_name,
-                "configured": configured,
-                "models": service.get_available_models().get(provider_name, [])
-                if configured else [],
-            })
-        
+
+            providers_info.append(
+                {
+                    "provider": provider_name,
+                    "configured": configured,
+                    "models": service.get_available_models().get(provider_name, [])
+                    if configured
+                    else [],
+                }
+            )
+
         return {"providers": providers_info}
     except Exception as e:
         raise HTTPException(500, f"Failed to list providers: {str(e)}")

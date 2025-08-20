@@ -381,14 +381,10 @@ def main():
     )
 
     # lock validate
-    lock_subparsers.add_parser(
-        "validate", help="Validate lockfile against registry"
-    )
+    lock_subparsers.add_parser("validate", help="Validate lockfile against registry")
 
     # lock bump-registry
-    lock_subparsers.add_parser(
-        "bump-registry", help="Update registry versions"
-    )
+    lock_subparsers.add_parser("bump-registry", help="Update registry versions")
 
     # Bind command
     bind_parser = subparsers.add_parser("bind", help="Bind an alias to a model")

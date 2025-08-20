@@ -428,9 +428,9 @@ class TestLiveRegistry:
             if any(model_name.startswith(m) for model_name in model_names)
         ]
 
-        assert (
-            len(found_models) > 0
-        ), f"Expected to find at least one common model, got: {model_names}"
+        assert len(found_models) > 0, (
+            f"Expected to find at least one common model, got: {model_names}"
+        )
 
         # Verify model structure
         for model in models:
