@@ -137,7 +137,9 @@ class Lockfile(BaseModel):
         if os.environ.get("ANTHROPIC_API_KEY"):
             defaults["deep"] = "anthropic:claude-3-opus-20240229"
             defaults["balanced"] = "anthropic:claude-3-sonnet-20240229"
-            defaults["pdf_reader"] = "anthropic:claude-3-sonnet-20240229"  # Claude is good at PDFs
+            defaults["pdf_reader"] = (
+                "anthropic:claude-3-sonnet-20240229"  # Claude is good at PDFs
+            )
             if "low_cost" not in defaults:
                 defaults["low_cost"] = "anthropic:claude-3-haiku-20240307"
             if "fast" not in defaults:
@@ -149,7 +151,9 @@ class Lockfile(BaseModel):
             if "long_context" not in defaults:
                 defaults["long_context"] = "google:gemini-1.5-pro"
             if "pdf_reader" not in defaults:
-                defaults["pdf_reader"] = "google:gemini-1.5-pro"  # Gemini also handles PDFs well
+                defaults["pdf_reader"] = (
+                    "google:gemini-1.5-pro"  # Gemini also handles PDFs well
+                )
 
         # Ollama is always available locally
         if not defaults:

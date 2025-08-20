@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from pgdbm.migrations import AsyncMigrationManager
-from pgdbm.fixtures.conftest import test_db_factory  # noqa: F401
 from dotenv import load_dotenv
+from httpx import ASGITransport, AsyncClient
+from pgdbm.fixtures.conftest import test_db_factory  # noqa: F401
+from pgdbm.migrations import AsyncMigrationManager
 
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
@@ -30,8 +30,8 @@ async def llmring_server_db(test_db_factory):
     db = await test_db_factory.create_db(suffix="llmring", schema="llmring_test")
 
     # Apply migrations from llmring-server project
-    migrations_path = (
-        Path("/Users/juanre/prj/llmring-all/llmring-server/src/llmring_server/migrations")
+    migrations_path = Path(
+        "/Users/juanre/prj/llmring-all/llmring-server/src/llmring_server/migrations"
     )
     migrations = AsyncMigrationManager(
         db, migrations_path=str(migrations_path), module_name="llmring_test"
@@ -101,8 +101,6 @@ async def seeded_server(llmring_server_client, project_headers):
 
     # Yield the prepared client for tests that need it
     yield llmring_server_client
-
-
 
 
 # Provider fixtures

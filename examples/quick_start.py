@@ -13,7 +13,8 @@ Run with: python examples/quick_start.py
 
 import asyncio
 import os
-from llmring import LLMRing, LLMRequest, Message
+
+from llmring import LLMRequest, LLMRing, Message
 from llmring.service_sqlite import LLMRingSQLite
 
 

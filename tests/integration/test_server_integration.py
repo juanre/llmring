@@ -1,7 +1,9 @@
 from pathlib import Path
-from llmring.lockfile import Lockfile
-from llmring.server_client import push_aliases, pull_aliases
+
 import pytest
+
+from llmring.lockfile import Lockfile
+from llmring.server_client import pull_aliases, push_aliases
 
 
 @pytest.mark.asyncio
@@ -38,7 +40,9 @@ async def test_requires_project_key_header(seeded_server):
 
 
 @pytest.mark.asyncio
-async def test_push_and_pull_aliases_with_client(seeded_server, project_headers, tmp_path):
+async def test_push_and_pull_aliases_with_client(
+    seeded_server, project_headers, tmp_path
+):
     client = seeded_server
 
     # Create local lockfile with a different alias to push
@@ -48,7 +52,12 @@ async def test_push_and_pull_aliases_with_client(seeded_server, project_headers,
     lf.save(lf_path)
 
     # Push via helper (use provided ASGI client)
-    updated = await push_aliases(lf, profile="default", project_key=project_headers["X-Project-Key"], client=client)
+    updated = await push_aliases(
+        lf,
+        profile="default",
+        project_key=project_headers["X-Project-Key"],
+        client=client,
+    )
     assert updated >= 1
 
     # Pull into a fresh lockfile and ensure aliases are present
@@ -56,9 +65,13 @@ async def test_push_and_pull_aliases_with_client(seeded_server, project_headers,
     lf2_path = tmp_path / "llmring2.lock"
     lf2.save(lf2_path)
 
-    pulled = await pull_aliases(lf2, profile="default", merge=False, project_key=project_headers["X-Project-Key"], client=client)
+    pulled = await pull_aliases(
+        lf2,
+        profile="default",
+        merge=False,
+        project_key=project_headers["X-Project-Key"],
+        client=client,
+    )
     assert pulled >= 2  # seeded + new_alias
     aliases = {b.alias: b.model_ref for b in lf2.get_profile("default").bindings}
     assert "summarizer" in aliases and "cheap" in aliases and "new_alias" in aliases
-
-

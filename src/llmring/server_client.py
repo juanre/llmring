@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Optional, Iterable, Dict, Any
 import os
+from typing import Any, Dict, Iterable, Optional
+
 import httpx
 
 from llmring.lockfile import Lockfile
@@ -123,5 +124,3 @@ async def pull_aliases(
     # Save back to disk if it was loaded from path; caller can also handle saving
     lockfile.save()
     return len(data)
-
-

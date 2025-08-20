@@ -351,8 +351,14 @@ class TestFileProcessing:
             # Verify response contains key information
             content_lower = response.content.lower()
             # Skip if model refuses or cannot process PDFs in this environment
-            if "unable to directly read" in content_lower or "can’t assist" in content_lower or "can't assist" in content_lower:
-                pytest.skip("OpenAI model refused to transcribe PDF in this environment")
+            if (
+                "unable to directly read" in content_lower
+                or "can’t assist" in content_lower
+                or "can't assist" in content_lower
+            ):
+                pytest.skip(
+                    "OpenAI model refused to transcribe PDF in this environment"
+                )
             assert (
                 "doc-test-001" in content_lower
                 or "test-001" in content_lower

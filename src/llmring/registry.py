@@ -312,15 +312,17 @@ class RegistryClient:
             raise ValueError(
                 f"Registry models must be a dictionary with 'provider:model' keys, got {type(models_dict)}"
             )
-        
+
         models = []
         for model_key, model_data in models_dict.items():
             try:
                 # Validate key format for O(1) lookup compliance
                 if ":" not in model_key:
-                    print(f"Warning: Model key '{model_key}' doesn't follow 'provider:model' format")
+                    print(
+                        f"Warning: Model key '{model_key}' doesn't follow 'provider:model' format"
+                    )
                     continue
-                
+
                 provider, model_name = model_key.split(":", 1)
 
                 # Validate model_data is a dictionary
@@ -350,10 +352,10 @@ class RegistryClient:
                 # Log but don't fail on individual model parsing errors
                 print(f"Warning: Failed to parse model {model_key}: {e}")
                 continue
-        
+
         if not models and models_dict:
             print(f"Warning: No valid models parsed from {len(models_dict)} entries")
-        
+
         return models
 
     def _is_cache_valid(self, cache_file: Path) -> bool:

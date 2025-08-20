@@ -15,10 +15,10 @@ Test endpoints:
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
+
 from llmring import LLMRing
 from llmring.api.types import ChatRequest, ChatResponse, ServiceHealth
-from llmring.schemas import Message, LLMRequest
-
+from llmring.schemas import LLMRequest, Message
 
 # Global LLM service instance
 llmring: LLMRing = None
@@ -156,9 +156,11 @@ async def list_providers(service: LLMRing = Depends(get_llmring)):
                 {
                     "provider": provider_name,
                     "configured": configured,
-                    "models": service.get_available_models().get(provider_name, [])
-                    if configured
-                    else [],
+                    "models": (
+                        service.get_available_models().get(provider_name, [])
+                        if configured
+                        else []
+                    ),
                 }
             )
 

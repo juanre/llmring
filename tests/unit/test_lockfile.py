@@ -30,9 +30,13 @@ class TestLockfile:
 
             # Should have minimal bindings without API keys (default and local)
             default_profile = lockfile.get_profile("default")
-            assert len(default_profile.bindings) == 2  # default and local ollama aliases
+            assert (
+                len(default_profile.bindings) == 2
+            )  # default and local ollama aliases
             # Verify the local alias uses the correct model
-            local_binding = next((b for b in default_profile.bindings if b.alias == "local"), None)
+            local_binding = next(
+                (b for b in default_profile.bindings if b.alias == "local"), None
+            )
             assert local_binding is not None
             assert local_binding.model == "llama3.3:latest"
 

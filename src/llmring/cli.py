@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from llmring import LLMRequest, LLMRing, Message
 from llmring.lockfile import Lockfile
 from llmring.registry import RegistryClient
-from llmring.server_client import push_aliases, pull_aliases
+from llmring.server_client import pull_aliases, push_aliases
 
 # Load environment variables from .env file
 load_dotenv()
@@ -337,7 +337,9 @@ async def cmd_pull(args):
             server_url=os.environ.get("LLMRING_SERVER_URL"),
             project_key=os.environ.get("LLMRING_PROJECT_KEY"),
         )
-        print(f"✅ Pulled {count} aliases from server into profile '{args.profile or lockfile.default_profile}'")
+        print(
+            f"✅ Pulled {count} aliases from server into profile '{args.profile or lockfile.default_profile}'"
+        )
         return 0
     except Exception as e:
         print(f"Error: {e}")
@@ -348,42 +350,44 @@ async def cmd_stats(args):
     """Show usage statistics (placeholder)."""
     # For now, show local receipts if available
     ring = LLMRing()
-    
+
     if not ring.receipts:
         print("No usage statistics available.")
         print("\nNote: Full statistics require server connection.")
         return 0
-    
+
     print(f"Local usage statistics ({len(ring.receipts)} requests):")
     print("-" * 40)
-    
+
     total_cost = sum(r.total_cost for r in ring.receipts)
     total_tokens = sum(r.total_tokens for r in ring.receipts)
-    
+
     print(f"Total requests: {len(ring.receipts)}")
     print(f"Total tokens: {total_tokens:,}")
     print(f"Total cost: ${total_cost:.6f}")
-    
+
     if args.verbose:
         print("\nRecent requests:")
         for receipt in ring.receipts[-10:]:
-            print(f"  {receipt.timestamp}: {receipt.alias} → {receipt.provider}:{receipt.model} (${receipt.total_cost:.6f})")
-    
+            print(
+                f"  {receipt.timestamp}: {receipt.alias} → {receipt.provider}:{receipt.model} (${receipt.total_cost:.6f})"
+            )
+
     return 0
 
 
 async def cmd_export(args):
     """Export receipts (placeholder)."""
     ring = LLMRing()
-    
+
     if not ring.receipts:
         print("No receipts to export.")
         return 0
-    
+
     # Export local receipts as JSON
     import json
     from datetime import datetime
-    
+
     export_data = {
         "exported_at": datetime.utcnow().isoformat(),
         "receipts": [
@@ -402,11 +406,11 @@ async def cmd_export(args):
             for r in ring.receipts
         ],
     }
-    
+
     output_file = args.output or "llmring_receipts.json"
     with open(output_file, "w") as f:
         json.dump(export_data, f, indent=2)
-    
+
     print(f"✅ Exported {len(ring.receipts)} receipts to {output_file}")
     return 0
 
@@ -554,34 +558,44 @@ def main():
         "providers", help="List configured providers"
     )
     providers_parser.add_argument("--json", action="store_true", help="Output as JSON")
-    
+
     # Push command
     push_parser = subparsers.add_parser(
         "push", help="Push lockfile aliases to server (X-Project-Key required)"
     )
-    push_parser.add_argument("--profile", help="Profile to push (default: lockfile default)")
-    
+    push_parser.add_argument(
+        "--profile", help="Profile to push (default: lockfile default)"
+    )
+
     # Pull command
     pull_parser = subparsers.add_parser(
         "pull", help="Pull aliases from server into lockfile (X-Project-Key required)"
     )
-    pull_parser.add_argument("--profile", help="Profile to pull (default: lockfile default)")
-    pull_parser.add_argument("--merge", action="store_true", help="Merge with local bindings instead of replacing")
-    
+    pull_parser.add_argument(
+        "--profile", help="Profile to pull (default: lockfile default)"
+    )
+    pull_parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="Merge with local bindings instead of replacing",
+    )
+
     # Stats command
-    stats_parser = subparsers.add_parser(
-        "stats", help="Show usage statistics"
+    stats_parser = subparsers.add_parser("stats", help="Show usage statistics")
+    stats_parser.add_argument(
+        "--verbose", action="store_true", help="Show detailed statistics"
     )
-    stats_parser.add_argument("--verbose", action="store_true", help="Show detailed statistics")
     stats_parser.add_argument("--json", action="store_true", help="Output as JSON")
-    
+
     # Export command
-    export_parser = subparsers.add_parser(
-        "export", help="Export receipts to file"
+    export_parser = subparsers.add_parser("export", help="Export receipts to file")
+    export_parser.add_argument(
+        "--output", help="Output file (default: llmring_receipts.json)"
     )
-    export_parser.add_argument("--output", help="Output file (default: llmring_receipts.json)")
-    export_parser.add_argument("--format", choices=["json", "csv"], default="json", help="Export format")
-    
+    export_parser.add_argument(
+        "--format", choices=["json", "csv"], default="json", help="Export format"
+    )
+
     # Register command
     register_parser = subparsers.add_parser(
         "register", help="Register with LLMRing server (for SaaS features)"

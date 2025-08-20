@@ -41,7 +41,7 @@ class LLMRing:
         self._model_cache: Dict[str, Dict[str, Any]] = {}
         self.registry = RegistryClient(registry_url=registry_url)
         self._registry_models: Dict[str, List[RegistryModel]] = {}
-        
+
         # Initialize receipt generator (no signer for local mode)
         self.receipt_generator: Optional[ReceiptGenerator] = None
         self.receipts: List[Receipt] = []  # Store receipts locally for now
@@ -200,7 +200,9 @@ class LLMRing:
         )
         return alias_or_model
 
-    async def chat(self, request: LLMRequest, profile: Optional[str] = None) -> LLMResponse:
+    async def chat(
+        self, request: LLMRequest, profile: Optional[str] = None
+    ) -> LLMResponse:
         """
         Send a chat request to the appropriate provider.
 
@@ -213,7 +215,7 @@ class LLMRing:
         """
         # Store original alias for receipt
         original_alias = request.model or ""
-        
+
         # Resolve alias if needed
         resolved_model = self.resolve_alias(request.model or "", profile)
 
@@ -265,34 +267,46 @@ class LLMRing:
                 logger.debug(
                     f"Calculated cost for {provider_type}:{model_name}: ${cost_info['total_cost']:.6f}"
                 )
-        
+
         # Generate receipt if we have usage information
         if response.usage and self.lockfile:
             try:
                 # Initialize receipt generator if not already done
                 if not self.receipt_generator:
                     self.receipt_generator = ReceiptGenerator()
-                
+
                 # Calculate lockfile digest
                 lock_digest = self.lockfile.calculate_digest()
-                
+
                 # Determine profile used
-                profile_name = profile or os.getenv("LLMRING_PROFILE") or self.lockfile.default_profile
-                
+                profile_name = (
+                    profile
+                    or os.getenv("LLMRING_PROFILE")
+                    or self.lockfile.default_profile
+                )
+
                 # Generate receipt
                 receipt = self.receipt_generator.generate_receipt(
-                    alias=original_alias if ":" not in original_alias else "direct_model",
+                    alias=(
+                        original_alias if ":" not in original_alias else "direct_model"
+                    ),
                     profile=profile_name,
                     lock_digest=lock_digest,
                     provider=provider_type,
                     model=model_name,
                     usage=response.usage,
-                    costs=cost_info if cost_info else {"input_cost": 0.0, "output_cost": 0.0, "total_cost": 0.0}
+                    costs=(
+                        cost_info
+                        if cost_info
+                        else {"input_cost": 0.0, "output_cost": 0.0, "total_cost": 0.0}
+                    ),
                 )
-                
+
                 # Store receipt locally
                 self.receipts.append(receipt)
-                logger.debug(f"Generated receipt {receipt.receipt_id} for {provider_type}:{model_name}")
+                logger.debug(
+                    f"Generated receipt {receipt.receipt_id} for {provider_type}:{model_name}"
+                )
             except Exception as e:
                 logger.warning(f"Failed to generate receipt: {e}")
 
