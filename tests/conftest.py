@@ -1,14 +1,12 @@
 """Test configuration and fixtures for llmring"""
 
 import os
-from pathlib import Path
+from typing import AsyncGenerator
 
 import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
-from pgdbm.fixtures.conftest import test_db_factory  # noqa: F401
-from pgdbm.migrations import AsyncMigrationManager
 
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
@@ -19,36 +17,60 @@ from llmring.service import LLMRing
 
 # Load environment variables from .env for test runs
 load_dotenv()
+
 # -----------------------------------------------------------------------------
-# llmring-server test app & database (fresh per test)
+# llmring-server test fixtures
 # -----------------------------------------------------------------------------
+
+# Check if llmring-server is available for integration tests
+try:
+    import llmring_server
+    from llmring_server.main import app as _server_app
+    from pgdbm.fixtures.conftest import test_db_factory  # noqa: F401
+    from pgdbm.migrations import AsyncMigrationManager
+    
+    LLMRING_SERVER_AVAILABLE = True
+except ImportError:
+    LLMRING_SERVER_AVAILABLE = False
 
 
 @pytest_asyncio.fixture
-async def llmring_server_db(test_db_factory):
-    """Create an isolated Postgres DB/schema for llmring-server and apply migrations."""
+async def llmring_server_client(test_db_factory) -> AsyncGenerator[AsyncClient, None]:
+    """Run the llmring-server FastAPI app in-process with isolated test database.
+    
+    This fixture creates a fresh database for each test, applies migrations,
+    and provides an HTTP client to interact with the server.
+    """
+    if not LLMRING_SERVER_AVAILABLE:
+        pytest.skip("llmring-server not installed, skipping integration tests")
+    
+    # Import inside fixture to avoid import errors when server not available
+    from llmring_server.main import app as server_app
+    from pathlib import Path
+    
+    # Create isolated test database with schema
     db = await test_db_factory.create_db(suffix="llmring", schema="llmring_test")
-
-    # Apply migrations from llmring-server project
-    migrations_path = Path(
-        "/Users/juanre/prj/llmring-all/llmring-server/src/llmring_server/migrations"
-    )
+    
+    # Apply llmring-server migrations
+    # We locate the migrations relative to the llmring_server module
+    import llmring_server
+    server_path = Path(llmring_server.__file__).parent
+    migrations_path = server_path / "migrations"
+    
+    if not migrations_path.exists():
+        pytest.fail(f"Migrations not found at {migrations_path}")
+    
     migrations = AsyncMigrationManager(
-        db, migrations_path=str(migrations_path), module_name="llmring_test"
+        db, 
+        migrations_path=str(migrations_path), 
+        module_name="llmring_test"
     )
     await migrations.apply_pending_migrations()
-    return db
-
-
-@pytest_asyncio.fixture
-async def llmring_server_client(llmring_server_db):
-    """Run the llmring-server FastAPI app in-process and yield an HTTP client."""
-    # Import app lazily to avoid global state bleed
-    from llmring_server.main import app as server_app
-
-    # Inject fresh DB per test
-    server_app.state.db = llmring_server_db
-
+    
+    # Inject the test database into the app
+    server_app.state.db = db
+    
+    # Create ASGI transport and client
     transport = ASGITransport(app=server_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
