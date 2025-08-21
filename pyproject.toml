@@ -70,7 +70,7 @@ dev = [
     "black>=25.1.0",
     "claude-code-sdk>=0.0.10",
     "isort>=6.0.1",
-    "llmring-server>=0.1.0",
+    "llmring-server",
     "mypy>=1.17.1",
     "pillow>=11.2.1",
     "pytest>=8.3.5",
@@ -106,4 +106,7 @@ markers = [
     "google: marks tests as Google-specific",
     "ollama: marks tests as Ollama-specific",
 ]
+
+[tool.uv.sources]
+llmring-server = { path = "../llmring-server" }
 
