@@ -2,8 +2,6 @@
 
 Alias-first LLM service for Python. Map tasks to models, not code to model IDs. Supports OpenAI, Anthropic, Google, and Ollama with a unified interface.
 
-*Complies with source-of-truth v3.5*
-
 ## Highlights
 
 - **Alias-first identity**: Map semantic tasks to models via lockfile
