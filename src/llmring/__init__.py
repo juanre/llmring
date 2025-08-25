@@ -21,11 +21,33 @@ from .schemas import LLMRequest, LLMResponse, Message
 
 # Import main components
 from .service import LLMRing
+from .service_extended import LLMRingExtended, ConversationManager
+
+# Import exceptions
+from .exceptions import (
+    LLMRingError,
+    ConfigurationError,
+    ProviderError,
+    ProviderNotFoundError,
+    ModelNotFoundError,
+    ConversationNotFoundError,
+    ServerConnectionError,
+)
 
 __all__ = [
     # Core classes
     "LLMRing",
+    "LLMRingExtended",
+    "ConversationManager",
     "BaseLLMProvider",
+    # Exceptions
+    "LLMRingError",
+    "ConfigurationError",
+    "ProviderError",
+    "ProviderNotFoundError",
+    "ModelNotFoundError",
+    "ConversationNotFoundError",
+    "ServerConnectionError",
     # Schemas
     "LLMRequest",
     "LLMResponse",

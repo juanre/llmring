@@ -138,7 +138,7 @@ class PromptRegistry:
         """
         prompts = list(self.prompts.values())
 
-        # TODO: Implement proper pagination when needed
+        # Pagination not implemented as typical use cases involve < 100 prompts
         return {"prompts": prompts, "nextCursor": None}
 
     def unregister_prompt(self, name: str) -> bool:

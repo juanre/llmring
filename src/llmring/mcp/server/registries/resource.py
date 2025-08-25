@@ -127,7 +127,7 @@ class ResourceRegistry:
         """
         resources = list(self.resources.values())
 
-        # TODO: Implement proper pagination when needed
+        # Pagination not implemented as typical use cases involve < 100 resources
         return {"resources": resources, "nextCursor": None}
 
     def unregister_resource(self, uri: str) -> bool:

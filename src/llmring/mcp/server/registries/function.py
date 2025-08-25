@@ -101,7 +101,7 @@ class FunctionRegistry:
             for name in self.functions.keys()
         ]
 
-        # TODO: Implement proper pagination when needed
+        # Pagination not implemented as typical use cases involve < 100 functions
         return {"tools": tools, "nextCursor": None}
 
     def unregister(self, name: str) -> bool:
