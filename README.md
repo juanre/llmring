@@ -317,6 +317,89 @@ request = LLMRequest(
 )
 ```
 
+## MCP Integration (Experimental)
+
+LLMRing includes experimental support for the Model Context Protocol (MCP), enabling integration with MCP servers for tools, resources, and prompts.
+
+### MCP Client Usage
+
+```python
+from llmring.mcp.client import AsyncMCPClient
+
+# Initialize MCP client
+async def use_mcp():
+    client = AsyncMCPClient("http://localhost:8080")
+    
+    # Initialize connection
+    await client.initialize()
+    
+    # List available tools
+    tools = await client.list_tools()
+    
+    # Execute a tool
+    result = await client.call_tool(
+        "weather_tool",
+        {"location": "San Francisco"}
+    )
+    
+    # List resources
+    resources = await client.list_resources()
+    
+    # Read a resource
+    content = await client.read_resource("file://docs/guide.md")
+```
+
+### Enhanced LLM with MCP
+
+```python
+from llmring.mcp.client.enhanced_llm import EnhancedLLM
+
+# Create enhanced LLM with MCP tool support
+llm = EnhancedLLM(
+    llmring_server_url="http://localhost:8000",  # Optional: for persistence
+    default_model="openai:gpt-4o"
+)
+
+# Register MCP tools
+llm.register_tool(
+    name="calculate",
+    description="Perform calculations",
+    parameters={"expression": "string"},
+    handler=calculate_function
+)
+
+# Chat with automatic tool usage
+response = await llm.chat([
+    {"role": "user", "content": "What's 15 * 23?"}
+])
+# The LLM will automatically use the calculate tool if needed
+```
+
+### MCP Server Implementation
+
+```python
+from llmring.mcp.server import Server
+from llmring.mcp.server.tool import Tool
+
+# Create an MCP server
+server = Server(name="my-mcp-server")
+
+# Define tools
+@server.tool()
+class WeatherTool(Tool):
+    name = "weather"
+    description = "Get weather information"
+    
+    async def execute(self, location: str) -> dict:
+        # Implementation here
+        return {"temp": 72, "conditions": "sunny"}
+
+# Run server
+await server.run()
+```
+
+**Note**: MCP support is experimental and the API may change. For production use, stick to the core LLMRing functionality.
+
 ## Security
 
 ### API Key Management

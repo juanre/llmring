@@ -8,12 +8,16 @@
 [Lockfile] → [Service] → [Provider APIs]
      ↓           ↓            ↓
   [Config]   [Registry]   [LLM Response]
+     ↓           ↓            ↓
+[MCP Client] [HTTP API] [llmring-server]
 ```
 
 1. **Lockfile**: Configuration file mapping aliases to models with profiles
 2. **Registry**: Model metadata served from GitHub Pages (capabilities, pricing, limits)
 3. **Service**: Stateless routing layer that resolves aliases and forwards requests
 4. **Providers**: Direct API integration with OpenAI, Anthropic, Google, Ollama
+5. **MCP Integration**: Optional Model Context Protocol support for tools, resources, and prompts
+6. **llmring-server**: Optional backend for persistence (conversations, MCP data, usage stats)
 
 ### Data Flow
 
@@ -214,6 +218,78 @@ HTTPS_PROXY=https://proxy:8080
 5. Implement retry logic for failures
 6. Cache registry data for resilience
 
+## MCP Integration (Experimental)
+
+### Architecture
+
+LLMRing's MCP implementation follows a clean separation of concerns:
+
+- **llmring**: Core library remains database-agnostic, uses HTTP client for persistence
+- **llmring-server**: Handles ALL database operations via REST API endpoints
+- **MCP Client**: Connects to MCP servers for tools, resources, and prompts
+- **MCP Server**: Provides tools and resources to MCP clients
+
+### MCP Client Components
+
+```python
+# Core MCP client
+from llmring.mcp.client import AsyncMCPClient, MCPClient
+
+# Enhanced LLM with tool support
+from llmring.mcp.client.enhanced_llm import EnhancedLLM
+
+# LLM-enabled MCP client
+from llmring.mcp.client.llm_client import MCPClientWithLLM
+```
+
+### MCP Server Components
+
+```python
+# Server implementation
+from llmring.mcp.server import Server
+
+# Transport layers
+from llmring.mcp.server.stdio import StdioServerTransport
+from llmring.mcp.server.http import HTTPServerTransport
+```
+
+### HTTP-Based Persistence
+
+All MCP persistence operations go through llmring-server:
+
+```python
+# MCPHttpClient handles all database operations
+client = MCPHttpClient(
+    base_url="http://localhost:8000",
+    api_key="optional-api-key"
+)
+
+# Operations available:
+await client.register_server(...)
+await client.list_tools(...)
+await client.execute_tool(...)
+await client.create_conversation(...)
+await client.add_message(...)
+```
+
+### Database Schema
+
+MCP data is stored in a separate schema `mcp_client`:
+
+```sql
+-- MCP servers
+CREATE TABLE mcp_client.servers (...)
+
+-- MCP tools
+CREATE TABLE mcp_client.tools (...)  
+
+-- MCP resources
+CREATE TABLE mcp_client.resources (...)
+
+-- Tool executions
+CREATE TABLE mcp_client.tool_executions (...)
+```
+
 ## Testing
 
 ### Mock Registry
@@ -240,4 +316,7 @@ TEST_LIVE_REGISTRY=1 pytest tests/integration/
 
 # Test with mock data
 pytest tests/unit/
+
+# Test MCP functionality
+pytest tests/mcp/
 ```
