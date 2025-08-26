@@ -27,9 +27,9 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
 
-from llmring.mcp.server.client.transports import Transport
-from llmring.mcp.server.client.transports.http import HTTPTransport
-from llmring.mcp.server.client.transports.stdio import STDIOTransport
+from llmring.mcp.client.transports import Transport
+from llmring.mcp.client.transports.http import HTTPTransport
+from llmring.mcp.client.transports.stdio import STDIOTransport
 
 logger = logging.getLogger(__name__)
 

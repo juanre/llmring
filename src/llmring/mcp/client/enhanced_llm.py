@@ -19,13 +19,13 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-from llmbridge.file_utils import create_file_content, get_file_mime_type
-from llmbridge.schemas import LLMRequest, LLMResponse, Message
-from llmbridge.service import LLMBridge
+from llmring.file_utils import create_file_content, get_file_mime_type
+from llmring.schemas import LLMRequest, LLMResponse, Message
+from llmring.service import LLMRing
 
-from llmring.mcp.server.client.client import AsyncMCPClient
-from llmring.mcp.server.client.db import create_mcp_db_manager
-from llmring.mcp.server.client.info_service import create_info_service
+from llmring.mcp.client.mcp_client import AsyncMCPClient
+from llmring.mcp.client.info_service import create_info_service
+from llmring.mcp.http_client import MCPHttpClient
 
 
 @dataclass
@@ -53,31 +53,29 @@ class EnhancedLLM:
     def __init__(
         self,
         llm_model: str = "anthropic:claude-3-haiku-20240307",
-        db_connection_string: str | None = None,
+        llmring_server_url: str | None = None,
         mcp_server_url: str | None = None,
         origin: str = "enhanced-llm",
         user_id: str | None = None,
+        api_key: str | None = None,
     ):
         """
         Initialize the Enhanced LLM.
 
         Args:
             llm_model: The underlying LLM model to use
-            db_connection_string: Database connection for conversation storage
+            llmring_server_url: LLMRing server URL for persistence
             mcp_server_url: Optional MCP server URL for additional tools
             origin: Origin identifier for usage tracking
             user_id: Default user ID for requests
+            api_key: Optional API key for LLMRing server
         """
         self.llm_model = llm_model
         self.origin = origin
         self.default_user_id = user_id or "enhanced-llm-user"
 
         # Initialize LLM service
-        self.llmbridge = LLMBridge(
-            db_connection_string=db_connection_string,
-            origin=origin,
-            enable_db_logging=bool(db_connection_string),
-        )
+        self.llmring = LLMRing(origin=origin)
 
         # Initialize MCP client if server URL provided
         self.mcp_client = None
@@ -87,15 +85,19 @@ class EnhancedLLM:
         # Registry for module-registered tools
         self.registered_tools: dict[str, ToolDefinition] = {}
 
-        # Database for conversation storage (optional)
-        self.db_manager = None
-        if db_connection_string:
-            self.db_manager = create_mcp_db_manager(db_connection_string)
+        # HTTP client for persistence (optional)
+        self.http_client = None
+        if llmring_server_url:
+            self.http_client = MCPHttpClient(
+                base_url=llmring_server_url,
+                api_key=api_key,
+            )
 
         # Initialize info service for transparency
         self.info_service = create_info_service(
-            llmbridge=self.llmbridge,
-            db_connection_string=db_connection_string,
+            llmring=self.llmring,
+            llmring_server_url=llmring_server_url,
+            api_key=api_key,
             origin=origin,
         )
 
@@ -453,7 +455,7 @@ class EnhancedLLM:
         )
 
         # Get initial LLM response
-        response = await self.llmbridge.chat(request, id_at_origin=user_id)
+        response = await self.llmring.chat(request)
 
         # Handle tool calls if present
         if response.tool_calls:
@@ -585,7 +587,7 @@ class EnhancedLLM:
             **kwargs,
         )
 
-        final_response = await self.llmbridge.chat(final_request, id_at_origin=user_id)
+        final_response = await self.llmring.chat(final_request)
 
         # Combine usage statistics
         if hasattr(initial_response, "usage") and hasattr(final_response, "usage"):
@@ -640,24 +642,26 @@ class EnhancedLLM:
         """
         user_id = user_id or self.default_user_id
 
-        if self.llmbridge:
-            stats = await self.llmbridge.get_usage_stats(user_id, days=days)
-            if stats:
-                return {
-                    "total_calls": stats.total_calls,
-                    "total_tokens": stats.total_tokens,
-                    "total_cost": float(stats.total_cost),
-                    "avg_cost_per_call": float(stats.avg_cost_per_call),
-                    "most_used_model": stats.most_used_model,
-                    "success_rate": float(stats.success_rate),
-                    "avg_response_time_ms": stats.avg_response_time_ms,
-                }
-        return None
+        # LLMRing doesn't have get_usage_stats method
+        # This would need to be implemented via llmring-server HTTP endpoints
+        # For now, return a placeholder response
+        return {
+            "total_calls": 0,
+            "total_tokens": 0, 
+            "total_cost": 0.0,
+            "avg_cost_per_call": 0.0,
+            "most_used_model": None,
+            "success_rate": 100.0,
+            "avg_response_time_ms": 0,
+            "period_days": days,
+            "user_id": user_id,
+            "note": "Usage stats not yet implemented via HTTP endpoints"
+        }
 
     async def close(self) -> None:
         """Clean up resources."""
-        if self.llmbridge:
-            await self.llmbridge.close()
+        if self.llmring:
+            await self.llmring.close()
         if self.mcp_client:
             await self.mcp_client.disconnect()
 
@@ -789,28 +793,31 @@ class EnhancedLLM:
 # Convenience function for quick setup
 def create_enhanced_llm(
     llm_model: str = "anthropic:claude-3-haiku-20240307",
-    db_connection_string: str | None = None,
+    llmring_server_url: str | None = None,
     mcp_server_url: str | None = None,
     origin: str = "enhanced-llm",
     user_id: str | None = None,
+    api_key: str | None = None,
 ) -> EnhancedLLM:
     """
     Create an Enhanced LLM instance with sensible defaults.
 
     Args:
         llm_model: The LLM model to use
-        db_connection_string: Optional database for conversation storage
+        llmring_server_url: Optional LLMRing server URL for persistence
         mcp_server_url: Optional MCP server for additional tools
         origin: Origin identifier for usage tracking
         user_id: Default user ID
+        api_key: Optional API key for LLMRing server
 
     Returns:
         Configured EnhancedLLM instance
     """
     return EnhancedLLM(
         llm_model=llm_model,
-        db_connection_string=db_connection_string,
+        llmring_server_url=llmring_server_url,
         mcp_server_url=mcp_server_url,
         origin=origin,
         user_id=user_id,
+        api_key=api_key,
     )

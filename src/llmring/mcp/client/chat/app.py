@@ -23,12 +23,13 @@ from rich.table import Table
 load_dotenv()
 
 from llmring.schemas import LLMRequest, LLMResponse, Message
-from llmring.service import LLMBridge
-from pgdbm import AsyncDatabaseManager, DatabaseConfig, MonitoredAsyncDatabaseManager
+from llmring.service import LLMRing
+# Database imports removed - now using HTTP-based architecture
+# from pgdbm import AsyncDatabaseManager, DatabaseConfig, MonitoredAsyncDatabaseManager
 
 from llmring.mcp.client import MCPClient
 from llmring.mcp.client.chat.styles import PROMPT_STYLE, RICH_THEME
-from llmring.mcp.client.models.db import MCPClientDB
+# Database model removed - now using HTTP-based architecture
 from llmring.mcp.client.pool_config import CHAT_APP_POOL
 
 
@@ -119,8 +120,8 @@ class MCPChatApp:
         self._external_db = db_manager is not None
         self.shared_pool = None  # Will be set in initialize_async if standalone
 
-        # LLMBridge will be initialized in async context
-        self.llmbridge = None
+        # LLMRing will be initialized in async context
+        self.llmring = None
         self.model = llm_model
 
         # MCP client
@@ -204,8 +205,8 @@ class MCPChatApp:
         Returns:
             List of model information dictionaries
         """
-        # Get models from llmbridge - returns dict of provider -> list of models
-        models_by_provider = self.llmbridge.get_available_models()
+        # Get models from llmring - returns dict of provider -> list of models
+        models_by_provider = self.llmring.get_available_models()
 
         # Flatten into list of model info dicts
         models = []
@@ -268,7 +269,7 @@ class MCPChatApp:
         self.console.print("\nType [command]/help[/command] for available commands")
 
     async def initialize_async(self) -> None:
-        """Initialize async resources like database pool and LLMBridge."""
+        """Initialize async resources like database pool and LLMRing."""
         if not self._external_db:
             # Create our own shared pool in standalone mode
             connection_string = self.db_connection_string or os.getenv(
@@ -293,10 +294,10 @@ class MCPChatApp:
             # In integrated mode, use provided db_manager; do not create a shared_pool here
             self.shared_pool = None  # Will be managed externally
 
-        # Create schema-isolated manager for llmbridge
+        # Create schema-isolated manager for llmring
         if self.shared_pool:
             # We created our own pool
-            llm_db_manager = AsyncDatabaseManager(pool=self.shared_pool, schema="llmbridge")
+            llm_db_manager = AsyncDatabaseManager(pool=self.shared_pool, schema="llmring")
         elif self._external_db and self.db_manager is not None:
             # We're using an external db_manager - need to share its pool
             # This assumes the external db_manager was created with a pool
@@ -304,9 +305,9 @@ class MCPChatApp:
             llm_db_manager = self.db_manager  # Use what was provided
         else:
             # Fallback - shouldn't happen
-            raise RuntimeError("Unable to create database manager for LLMBridge")
+            raise RuntimeError("Unable to create database manager for LLMRing")
 
-        self.llmbridge = LLMBridge(
+        self.llmring = LLMRing(
             db_manager=llm_db_manager, origin="mcp-client-chat", enable_db_logging=True
         )
 
@@ -355,7 +356,7 @@ class MCPChatApp:
 
                     # Get response from LLM
                     with self.console.status("[info]Thinking...[/info]"):
-                        response = await self.llmbridge.chat(request)
+                        response = await self.llmring.chat(request)
 
                     # Process response for potential tool calls
                     await self.process_response(response)
@@ -543,7 +544,7 @@ Otherwise, respond directly to help the user.
         )
 
         with self.console.status("[info]Getting final response...[/info]"):
-            follow_up_response = await self.llmbridge.chat(request)
+            follow_up_response = await self.llmring.chat(request)
 
         # Display final response
         self.console.print("[assistant]Assistant:[/assistant]")
@@ -616,7 +617,7 @@ Otherwise, respond directly to help the user.
         new_model = args.strip()
         try:
             # Validate model exists
-            self.llmbridge.get_model_info(new_model)
+            self.llmring.get_model_info(new_model)
             self.model = new_model
             self.console.print(f"[success]Model changed to {new_model}[/success]")
         except Exception as e:
@@ -730,14 +731,14 @@ async def run_with_shared_pool(args):
     ) as pool:
         # Create schema-specific managers
         mcp_db_manager = AsyncDatabaseManager(pool=pool, schema="mcp_client")
-        llm_db_manager = AsyncDatabaseManager(pool=pool, schema="llmbridge")
+        llm_db_manager = AsyncDatabaseManager(pool=pool, schema="llmring")
 
         # Create MCP client database with schema-specific manager
         mcp_db = MCPClientDB.from_manager(mcp_db_manager)
         await mcp_db.initialize()
 
         # Create LLM service with schema-specific manager
-        llmbridge = LLMBridge(
+        llmring = LLMRing(
             db_manager=llm_db_manager, origin="mcp-client", enable_db_logging=True
         )
 
@@ -749,7 +750,7 @@ async def run_with_shared_pool(args):
         )
 
         # Replace the LLM service with our shared pool version
-        app.llmbridge = llmbridge
+        app.llmring = llmring
 
         # Run the app
         await app.run()

@@ -17,7 +17,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from llmring.mcp.client import MCPClient
-from llmring.mcp.client.models.db import MCPClientDB
+# Database model removed - now using HTTP-based architecture
+# from llmring.mcp.client.models.db import MCPClientDB
 
 
 def create_env_file(path: Path) -> None:
@@ -77,15 +78,15 @@ async def setup_database(db_path: str | None = None) -> bool:
         await db.close()
 
 
-async def check_llmbridge_setup() -> None:
-    """Check if llmbridge is properly configured."""
+async def check_llmring_setup() -> None:
+    """Check if llmring is properly configured."""
     print("Checking LLM service configuration...")
 
-    # Check if llmbridge is available
+    # Check if llmring is available
     try:
-        from llmbridge.service import LLMBridge
+        from llmring.service import LLMRing
 
-        service = LLMBridge(enable_db_logging=False)
+        service = LLMRing(origin="mcp-setup-check")
         models = service.get_available_models()
 
         print("✅ LLM service is available")
@@ -95,8 +96,8 @@ async def check_llmbridge_setup() -> None:
         print(f"   Total models available: {total_models}")
 
     except ImportError:
-        print("❌ LLM service not found. Please install llmbridge:")
-        print("   uv add llmbridge")
+        print("❌ LLM service not found. Please install llmring:")
+        print("   uv add llmring")
     except Exception as e:
         print(f"⚠️ Error checking LLM service: {e}")
 
@@ -207,7 +208,7 @@ async def main():
         await setup_database(args.db_path)
 
     # Check LLM service instead of adding models
-    await check_llmbridge_setup()
+    await check_llmring_setup()
 
     if not args.skip_mcp_test:
         test_mcp_connection()

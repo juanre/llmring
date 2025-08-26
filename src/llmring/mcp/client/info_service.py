@@ -2,7 +2,7 @@
 Information Service for MCP Client
 
 This module provides comprehensive information about providers, models, costs,
-usage, and data storage. It mirrors and extends llmbridge functionality
+usage, and data storage. It mirrors and extends llmring functionality
 to give modules full transparency into what's happening behind the scenes.
 """
 
@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from llmbridge.db import LLMDatabase
-from llmring.service import LLMBridge
+# LLMDatabase is not in llmring, will need to adapt
+from llmring.service import LLMRing
 
 
 @dataclass
@@ -79,7 +79,7 @@ class DataStorageInfo:
     """Information about what data is stored where."""
 
     mcp_client_tables: list[dict[str, Any]]
-    llmbridge_tables: list[dict[str, Any]]
+    llm_service_tables: list[dict[str, Any]]  # Keep backward compatibility name
     user_data_locations: dict[str, list[str]]
     retention_policies: dict[str, str]
     privacy_measures: list[str]
@@ -95,28 +95,37 @@ class MCPClientInfoService:
 
     def __init__(
         self,
-        llmbridge: LLMBridge | None = None,
-        db_connection_string: str | None = None,
+        llmring: LLMRing | None = None,
+        llmring_server_url: str | None = None,
+        api_key: str | None = None,
         origin: str = "mcp-client-info",
     ):
         """
         Initialize the info service.
 
         Args:
-            llmbridge: Optional LLM service instance
-            db_connection_string: Database connection for direct queries
+            llmring: Optional LLM service instance
+            llmring_server_url: LLMRing server URL for queries
+            api_key: Optional API key for LLMRing server
             origin: Origin identifier for filtering data
         """
-        self.llmbridge = llmbridge
+        self.llmring = llmring
         self.origin = origin
+        self.llmring_server_url = llmring_server_url
+        self.api_key = api_key
+        
+        # Backward compatibility attributes for tests
+        self.llm_service = llmring
+        self.llm_db = None  # No direct database access in HTTP architecture
 
-        # Initialize LLM database if connection provided
-        self.llm_db = None
-        if db_connection_string:
-            try:
-                self.llm_db = LLMDatabase(connection_string=db_connection_string)
-            except Exception as e:
-                print(f"Warning: Could not initialize LLM database: {e}")
+        # Initialize HTTP client if server URL provided
+        self.http_client = None
+        if llmring_server_url:
+            from llmring.mcp.http_client import MCPHttpClient
+            self.http_client = MCPHttpClient(
+                base_url=llmring_server_url,
+                api_key=api_key,
+            )
 
     def get_available_providers(self) -> list[ProviderInfo]:
         """
@@ -127,13 +136,13 @@ class MCPClientInfoService:
         """
         providers = []
 
-        if self.llmbridge:
+        if self.llmring:
             # Get provider information from LLM service
-            available_models = self.llmbridge.get_available_models()
+            available_models = self.llmring.get_available_models()
 
             for provider_name, models in available_models.items():
                 # Check if provider is actually available (has API key)
-                api_key_configured = provider_name in self.llmbridge.providers
+                api_key_configured = provider_name in self.llmring.providers
 
                 # Get usage stats if database available
                 total_cost = None
@@ -234,8 +243,8 @@ class MCPClientInfoService:
                 print(f"Warning: Could not fetch models from database: {e}")
 
         # Fall back to LLM service if database not available
-        if not models and self.llmbridge:
-            available_models = self.llmbridge.get_available_models()
+        if not models and self.llmring:
+            available_models = self.llmring.get_available_models()
             if provider in available_models:
                 for model_name in available_models[provider]:
                     models.append(
@@ -327,13 +336,13 @@ class MCPClientInfoService:
             UsageStats object or None if no data available
         """
         # We need either a database or LLM service to get stats
-        if not self.llm_db and not self.llmbridge:
+        if not self.llm_db and not self.llmring:
             return None
 
         try:
             # Get overall stats from LLM service
-            if self.llmbridge:
-                service_stats = self.llmbridge.get_usage_stats(user_id, days=days)
+            if self.llmring:
+                service_stats = self.llmring.get_usage_stats(user_id, days=days)
                 if not service_stats:
                     return None
             else:
@@ -382,77 +391,77 @@ class MCPClientInfoService:
         """
         mcp_client_tables = [
             {
-                "table": "chat_sessions",
-                "schema": "mcp_client",
-                "purpose": "Conversation metadata and configuration",
-                "user_identifiable_fields": ["user_id"],
+                "table": "conversations",
+                "endpoint": "/conversations",
+                "purpose": "Conversation metadata and configuration via HTTP API",
+                "user_identifiable_fields": ["project_id"],
                 "retention": "Indefinite (until manually deleted)",
                 "privacy_notes": "Contains conversation titles and settings, no message content",
             },
             {
-                "table": "chat_messages",
-                "schema": "mcp_client",
-                "purpose": "Individual conversation messages",
-                "user_identifiable_fields": ["user_id"],
+                "table": "messages",
+                "endpoint": "/conversations/{id}/messages",
+                "purpose": "Individual conversation messages via HTTP API",
+                "user_identifiable_fields": ["project_id"],
                 "retention": "Indefinite (until conversation deleted)",
                 "privacy_notes": "Contains full message content including system prompts",
             },
             {
-                "table": "llm_models",
-                "schema": "mcp_client",
-                "purpose": "Available LLM models and capabilities",
-                "user_identifiable_fields": [],
-                "retention": "Indefinite (reference data)",
-                "privacy_notes": "No user data - only model specifications",
-            },
-            {
                 "table": "mcp_servers",
-                "schema": "mcp_client",
-                "purpose": "MCP server connection information",
-                "user_identifiable_fields": ["user_id"],
+                "endpoint": "/api/v1/mcp/servers",
+                "purpose": "MCP server connection information via HTTP API",
+                "user_identifiable_fields": ["project_id"],
                 "retention": "Indefinite (until manually deleted)",
                 "privacy_notes": "Contains server URLs and connection metadata",
             },
+            {
+                "table": "conversation_templates",
+                "endpoint": "/api/v1/templates",
+                "purpose": "Reusable conversation templates via HTTP API",
+                "user_identifiable_fields": ["project_id", "created_by"],
+                "retention": "Indefinite (until manually deleted)",
+                "privacy_notes": "Contains template configurations and system prompts",
+            },
         ]
 
-        llmbridge_tables = [
+        llmring_tables = [
             {
-                "table": "llm_models",
-                "schema": "llmbridge",
-                "purpose": "LLM model registry with cost and capability information",
-                "user_identifiable_fields": [],
-                "retention": "Indefinite (reference data)",
-                "privacy_notes": "No user data - only model specifications and pricing",
-            },
-            {
-                "table": "llm_api_calls",
-                "schema": "llmbridge",
-                "purpose": "Detailed log of every LLM API call",
-                "user_identifiable_fields": ["origin", "id_at_origin"],
+                "table": "usage_logs",
+                "endpoint": "/api/v1/log",
+                "purpose": "Detailed log of every LLM API call via HTTP API",
+                "user_identifiable_fields": ["project_id"],
                 "retention": "Configurable (default: indefinite)",
                 "privacy_notes": "System prompts are SHA-256 hashed for privacy, includes token counts and costs",
             },
             {
-                "table": "usage_analytics_daily",
-                "schema": "llmbridge",
-                "purpose": "Daily aggregated usage statistics",
-                "user_identifiable_fields": ["origin", "id_at_origin"],
+                "table": "receipts",
+                "endpoint": "/receipts",
+                "purpose": "Cryptographic receipts for usage verification",
+                "user_identifiable_fields": ["project_id"],
                 "retention": "Configurable (default: indefinite)",
-                "privacy_notes": "Aggregated data only - no individual message content",
+                "privacy_notes": "Contains signed usage receipts for audit purposes",
+            },
+            {
+                "table": "registry",
+                "endpoint": "/registry",
+                "purpose": "LLM model registry with cost and capability information",
+                "user_identifiable_fields": [],
+                "retention": "Indefinite (reference data)",
+                "privacy_notes": "No user data - only model specifications and pricing",
             },
         ]
 
         user_data_locations = {
             "conversation_content": ["mcp_client.chat_messages"],
             "conversation_metadata": ["mcp_client.chat_sessions"],
-            "llm_usage_tracking": ["llmbridge.llm_api_calls", "llmbridge.usage_analytics_daily"],
+            "llm_usage_tracking": ["llmring.llm_api_calls", "llmring.usage_analytics_daily"],
             "mcp_server_connections": ["mcp_client.mcp_servers"],
-            "cost_tracking": ["llmbridge.llm_api_calls", "llmbridge.usage_analytics_daily"],
+            "cost_tracking": ["llmring.llm_api_calls", "llmring.usage_analytics_daily"],
         }
 
         retention_policies = {
             "conversation_data": "Retained indefinitely until manually deleted by user",
-            "llm_usage_logs": "Configurable cleanup via llmbridge.cleanup_old_data()",
+            "llm_usage_logs": "Configurable cleanup via llmring.cleanup_old_data()",
             "analytics_data": "Configurable retention (default: indefinite)",
             "model_registry": "Permanent reference data (no user content)",
         }
@@ -469,7 +478,7 @@ class MCPClientInfoService:
 
         return DataStorageInfo(
             mcp_client_tables=mcp_client_tables,
-            llmbridge_tables=llmbridge_tables,
+            llm_service_tables=llmring_tables,  # Use backward compatibility name
             user_data_locations=user_data_locations,
             retention_policies=retention_policies,
             privacy_measures=privacy_measures,
@@ -537,7 +546,7 @@ class MCPClientInfoService:
             model_names = [f"{provider}:{model.model_name}" for model in models]
 
             # Get usage stats from llmbridge if available
-            if self.llmbridge:
+            if self.llmring:
                 total_cost = 0.0
                 total_calls = 0
 
@@ -545,7 +554,7 @@ class MCPClientInfoService:
                     try:
                         # This would require direct database query or enhanced llmbridge API
                         # For now, we'll use basic aggregation
-                        stats = self.llmbridge.get_usage_stats(self.origin, days=days)
+                        stats = self.llmring.get_usage_stats(self.origin, days=days)
                         if stats:
                             # Filter by provider if possible (this is a simplified approach)
                             total_cost += float(stats.total_cost or 0)
@@ -568,7 +577,7 @@ class MCPClientInfoService:
         self, provider: str, model_name: str, days: int = 30
     ) -> dict[str, Any] | None:
         """Get usage statistics for a specific model."""
-        if not self.llm_db and not self.llmbridge:
+        if not self.llm_db and not self.llmring:
             return None
 
         try:
@@ -576,10 +585,10 @@ class MCPClientInfoService:
             datetime.now() - timedelta(days=days)
 
             # Try to get usage stats for this specific model
-            if self.llmbridge:
+            if self.llmring:
                 try:
                     # Get overall stats and filter for this model if possible
-                    stats = self.llmbridge.get_usage_stats(self.origin, days=days)
+                    stats = self.llmring.get_usage_stats(self.origin, days=days)
                     if (
                         stats
                         and hasattr(stats, "most_used_model")
@@ -634,12 +643,12 @@ class MCPClientInfoService:
 
     def _get_models_used_by_user(self, user_id: str, days: int = 30) -> list[str]:
         """Get list of models used by user."""
-        if not self.llmbridge:
+        if not self.llmring:
             return []
 
         try:
             # Get usage stats and extract model information
-            stats = self.llmbridge.get_usage_stats(user_id, days=days)
+            stats = self.llmring.get_usage_stats(user_id, days=days)
             if stats and hasattr(stats, "most_used_model") and stats.most_used_model:
                 return [stats.most_used_model]
 
@@ -651,12 +660,12 @@ class MCPClientInfoService:
 
     def _get_cost_by_model(self, user_id: str, days: int = 30) -> dict[str, float]:
         """Get cost breakdown by model."""
-        if not self.llmbridge:
+        if not self.llmring:
             return {}
 
         try:
             # Get usage stats and extract cost information
-            stats = self.llmbridge.get_usage_stats(user_id, days=days)
+            stats = self.llmring.get_usage_stats(user_id, days=days)
             if stats and hasattr(stats, "most_used_model") and stats.most_used_model:
                 return {stats.most_used_model: float(stats.total_cost or 0)}
 
@@ -667,12 +676,12 @@ class MCPClientInfoService:
 
     def _get_calls_by_model(self, user_id: str, days: int = 30) -> dict[str, int]:
         """Get call count breakdown by model."""
-        if not self.llmbridge:
+        if not self.llmring:
             return {}
 
         try:
             # Get usage stats and extract call information
-            stats = self.llmbridge.get_usage_stats(user_id, days=days)
+            stats = self.llmring.get_usage_stats(user_id, days=days)
             if stats and hasattr(stats, "most_used_model") and stats.most_used_model:
                 return {stats.most_used_model: stats.total_calls or 0}
 
@@ -683,12 +692,12 @@ class MCPClientInfoService:
 
     def _get_daily_usage_breakdown(self, user_id: str, days: int = 30) -> list[dict[str, Any]]:
         """Get daily usage breakdown."""
-        if not self.llmbridge:
+        if not self.llmring:
             return []
 
         try:
             # Get usage stats and create a simple daily breakdown
-            stats = self.llmbridge.get_usage_stats(user_id, days=days)
+            stats = self.llmring.get_usage_stats(user_id, days=days)
             if not stats:
                 return []
 
@@ -731,21 +740,28 @@ class MCPClientInfoService:
 
 # Convenience function for easy access
 def create_info_service(
-    llmbridge: LLMBridge | None = None,
-    db_connection_string: str | None = None,
+    llmring: LLMRing | None = None,
+    llmring_server_url: str | None = None,
+    api_key: str | None = None,
     origin: str = "mcp-client-info",
+    llm_service: LLMRing | None = None,  # Backward compatibility
 ) -> MCPClientInfoService:
     """
     Create an MCP Client info service instance.
 
     Args:
-        llmbridge: Optional LLM service instance
-        db_connection_string: Database connection for queries
+        llmring: Optional LLM service instance
+        llmring_server_url: LLMRing server URL for queries
+        api_key: Optional API key for LLMRing server
         origin: Origin identifier
+        llm_service: Optional LLM service (backward compatibility alias)
 
     Returns:
         MCPClientInfoService instance
     """
+    # Use llm_service if provided for backward compatibility
+    service = llm_service or llmring
+    
     return MCPClientInfoService(
-        llmbridge=llmbridge, db_connection_string=db_connection_string, origin=origin
+        llmring=service, llmring_server_url=llmring_server_url, api_key=api_key, origin=origin
     )

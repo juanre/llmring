@@ -8,10 +8,10 @@ from datetime import datetime
 from typing import Any
 
 from llmring.schemas import LLMRequest, Message
-from llmring.service import LLMBridge
-from llmring.mcp.server.client.mcp_client import MCPClient
-from llmring.mcp.server.client.conversation_manager_async import AsyncConversationManager
-from llmring.mcp.server.client.models.schemas import ToolCall, ToolResult
+from llmring.service import LLMRing
+from llmring.mcp.client.mcp_client import MCPClient
+from llmring.mcp.client.conversation_manager_async import AsyncConversationManager
+from llmring.mcp.client.models.schemas import ToolCall, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -110,14 +110,23 @@ class StatelessChatEngine:
 
     def __init__(
         self,
-        db_manager,
-        llmbridge: LLMBridge | None = None,
+        llmring: LLMRing | None = None,
         default_model: str = "claude-3-sonnet-20240229",
+        llmring_server_url: str | None = None,
+        api_key: str | None = None,
+        mcp_server_url: str | None = None,
+        debug: bool = False,
     ):
-        self.db_manager = db_manager
-        self.llmbridge = llmbridge or LLMBridge(db_manager)
-        self.conversation_manager = AsyncConversationManager(db_manager)
+        self.llmring = llmring or LLMRing(origin="mcp-stateless")
+        self.conversation_manager = AsyncConversationManager(
+            llmring_server_url=llmring_server_url,
+            api_key=api_key,
+        )
         self.default_model = default_model
+        self.llmring_server_url = llmring_server_url
+        self.api_key = api_key
+        self.mcp_server_url = mcp_server_url
+        self.debug = debug
         self._mcp_clients: dict[str, MCPClient] = {}
 
     async def process_request(
@@ -341,7 +350,7 @@ class StatelessChatEngine:
         )
 
         # Call LLM
-        response = await self.llmbridge.chat(
+        response = await self.llmring.chat(
             llm_request,
             id_at_origin=context.auth_context.get("user_id") if context.auth_context else None,
         )
@@ -410,7 +419,7 @@ class StatelessChatEngine:
 
         # For now, simulate streaming by calling regular completion
         # In production, this would use actual streaming API
-        response = await self.llmbridge.chat(
+        response = await self.llmring.chat(
             llm_request,
             id_at_origin=context.auth_context.get("user_id") if context.auth_context else None,
         )

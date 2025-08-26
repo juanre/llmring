@@ -15,7 +15,8 @@ from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.providers.openai_api import OpenAIProvider
-from llmring.mcp.client.models.db import MCPClientDB
+# Database model removed - now using HTTP-based architecture
+# from llmring.mcp.client.models.db import MCPClientDB
 
 
 async def list_models(

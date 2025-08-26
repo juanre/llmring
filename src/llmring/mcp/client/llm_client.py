@@ -9,9 +9,9 @@ import logging
 from typing import Any
 
 from llmring.schemas import LLMRequest, Message
-from llmring.service import LLMBridge
+from llmring.service import LLMRing
 
-from llmring.mcp.server.client.mcp_client import AsyncMCPClient, MCPClient
+from llmring.mcp.client.mcp_client import AsyncMCPClient, MCPClient
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class MCPClientWithLLM(MCPClient):
     def __init__(
         self,
         base_url: str,
-        llmbridge: LLMBridge | None = None,
+        llmring: LLMRing | None = None,
         default_model: str | None = None,
         sampling_config: dict[str, Any] | None = None,
         **kwargs,
@@ -37,7 +37,7 @@ class MCPClientWithLLM(MCPClient):
 
         Args:
             base_url: The base URL of the MCP server
-            llmbridge: Optional LLM service instance (will create default if not provided)
+            llmring: Optional LLM service instance (will create default if not provided)
             default_model: Default model to use for sampling requests
             sampling_config: Configuration for sampling behavior
             **kwargs: Additional arguments passed to base MCPClient
@@ -45,7 +45,7 @@ class MCPClientWithLLM(MCPClient):
         super().__init__(base_url, **kwargs)
 
         # Initialize LLM service
-        self.llmbridge = llmbridge or LLMBridge()
+        self.llmring = llmring or LLMRing(origin="mcp-llm-client")
         self.default_model = default_model
         self.sampling_config = sampling_config or {}
 
@@ -179,7 +179,7 @@ class MCPClientWithLLM(MCPClient):
             )
 
             # Execute LLM request synchronously
-            response = self._run_async(self.llmbridge.chat(llm_request))
+            response = self._run_async(self.llmring.chat(llm_request))
 
             # Format response according to MCP sampling specification
             result = {
@@ -221,7 +221,7 @@ class AsyncMCPClientWithLLM(AsyncMCPClient):
     def __init__(
         self,
         base_url: str,
-        llmbridge: LLMBridge | None = None,
+        llmring: LLMRing | None = None,
         default_model: str | None = None,
         sampling_config: dict[str, Any] | None = None,
         **kwargs,
@@ -231,7 +231,7 @@ class AsyncMCPClientWithLLM(AsyncMCPClient):
 
         Args:
             base_url: The base URL of the MCP server
-            llmbridge: Optional LLM service instance (will create default if not provided)
+            llmring: Optional LLM service instance (will create default if not provided)
             default_model: Default model to use for sampling requests
             sampling_config: Configuration for sampling behavior
             **kwargs: Additional arguments passed to base AsyncMCPClient
@@ -239,7 +239,7 @@ class AsyncMCPClientWithLLM(AsyncMCPClient):
         super().__init__(base_url, **kwargs)
 
         # Initialize LLM service
-        self.llmbridge = llmbridge or LLMBridge()
+        self.llmring = llmring or LLMRing(origin="mcp-llm-client")
         self.default_model = default_model
         self.sampling_config = sampling_config or {}
 
@@ -363,7 +363,7 @@ class AsyncMCPClientWithLLM(AsyncMCPClient):
             )
 
             # Execute LLM request
-            response = await self.llmbridge.chat(llm_request)
+            response = await self.llmring.chat(llm_request)
 
             # Format response according to MCP sampling specification
             result = {
