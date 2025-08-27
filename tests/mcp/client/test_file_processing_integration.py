@@ -430,7 +430,7 @@ class TestFileProcessingIntegration:
     async def test_error_handling(self, enhanced_llm):
         """Test error handling for invalid file processing."""
         # Test invalid base64
-        with pytest.raises(ValueError, match="Invalid base64 data"):
+        with pytest.raises(ValueError, match="Invalid base64 string"):
             await enhanced_llm.process_file_from_source(
                 source_type="base64", source_data="invalid-base64-data", filename="test.png"
             )

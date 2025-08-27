@@ -8,7 +8,6 @@ This version is fully database-agnostic and uses HTTP endpoints exclusively.
 """
 
 import asyncio
-import base64
 import inspect
 import json
 from collections.abc import Callable
@@ -24,6 +23,13 @@ from llmring.mcp.client.mcp_client import AsyncMCPClient
 from llmring.mcp.client.info_service import create_info_service
 from llmring.mcp.http_client import MCPHttpClient
 from llmring.mcp.client.conversation_manager_async import AsyncConversationManager
+from llmring.mcp.client.file_utils import (
+    process_file_from_source as process_file_util,
+    guess_content_type_from_bytes,
+    fetch_file_from_url,
+    decode_base64_file,
+    create_file_content,
+)
 
 
 def create_enhanced_llm(
@@ -367,7 +373,13 @@ class EnhancedLLM:
                             # Convert file data to base64 for the API
                             file_data = attachment["data"]
                             if isinstance(file_data, bytes):
-                                base64_data = base64.b64encode(file_data).decode("utf-8")
+                                content_type = attachment.get("content_type", "application/octet-stream")
+                                base64_url = create_file_content(file_data, content_type, as_base64=True)
+                                # Extract just the base64 part for compatibility
+                                if base64_url.startswith("data:"):
+                                    base64_data = base64_url.split(",")[1] if "," in base64_url else base64_url
+                                else:
+                                    base64_data = base64_url
                             else:
                                 base64_data = file_data
                             
@@ -586,79 +598,25 @@ class EnhancedLLM:
     # File Processing Methods
     
     def _guess_content_type_from_bytes(self, file_bytes: bytes) -> str:
-        """
-        Guess content type from file magic numbers.
-        
-        Args:
-            file_bytes: Raw file bytes
-            
-        Returns:
-            Guessed content type
-        """
-        if len(file_bytes) < 4:
-            return "application/octet-stream"
-        
-        # Check common file signatures
-        if file_bytes.startswith(b"\x89PNG"):
-            return "image/png"
-        elif file_bytes.startswith(b"\xff\xd8\xff"):
-            return "image/jpeg"
-        elif file_bytes.startswith(b"GIF8"):
-            return "image/gif"
-        elif file_bytes.startswith(b"RIFF") and b"WEBP" in file_bytes[:12]:
-            return "image/webp"
-        elif file_bytes.startswith(b"%PDF"):
-            return "application/pdf"
-        elif file_bytes.startswith(b"PK\x03\x04"):
-            # ZIP-based formats (could be DOCX, etc.)
-            return "application/zip"
-        else:
-            return "application/octet-stream"
+        """Guess content type from file bytes using consolidated utility."""
+        return guess_content_type_from_bytes(file_bytes)
     
     async def _fetch_file_from_url(self, url: str) -> tuple[bytes, str]:
-        """
-        Fetch a file from a URL.
-        
-        Args:
-            url: URL to fetch file from
-            
-        Returns:
-            Tuple of (file_bytes, content_type)
-        """
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, follow_redirects=True)
-            response.raise_for_status()
-            
-            content_type = response.headers.get("content-type", "application/octet-stream")
-            # Clean up content type (remove charset etc.)
-            if ";" in content_type:
-                content_type = content_type.split(";")[0].strip()
-            
-            return response.content, content_type
+        """Fetch a file from a URL using consolidated utility."""
+        try:
+            file_bytes = fetch_file_from_url(url)
+            content_type = guess_content_type_from_bytes(file_bytes)
+            return file_bytes, content_type
+        except Exception as e:
+            raise ValueError(f"Failed to fetch file from URL: {e}")
     
     async def _decode_base64_file(
         self,
         base64_data: str,
         content_type: str | None = None
     ) -> tuple[bytes, str]:
-        """
-        Decode base64 file data.
-        
-        Args:
-            base64_data: Base64 encoded file data
-            content_type: Optional content type, will try to guess if not provided
-            
-        Returns:
-            Tuple of (file_bytes, content_type)
-        """
-        try:
-            file_bytes = base64.b64decode(base64_data)
-            if not content_type:
-                # Try to guess content type from first few bytes (magic numbers)
-                content_type = self._guess_content_type_from_bytes(file_bytes)
-            return file_bytes, content_type
-        except Exception as e:
-            raise ValueError(f"Invalid base64 data: {e}")
+        """Decode base64 file data using consolidated utility."""
+        return decode_base64_file(base64_data)
     
     async def process_file_from_source(
         self,
@@ -684,12 +642,10 @@ class EnhancedLLM:
         """
         try:
             if source_type == "upload":
-                # Read file from local storage
-                with open(source_data, "rb") as f:
-                    file_bytes = f.read()
-                if not content_type:
-                    import mimetypes
-                    content_type = mimetypes.guess_type(source_data)[0] or "application/octet-stream"
+                # Use consolidated file utility for local files
+                result = process_file_util(source_data, source_type="path")
+                file_bytes = result["content"]
+                content_type = content_type or result["content_type"]
             
             elif source_type == "url":
                 # Fetch file from URL
