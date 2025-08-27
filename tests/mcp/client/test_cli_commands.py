@@ -19,7 +19,6 @@ def run_command(cmd):
     return result.returncode, result.stdout, result.stderr
 
 
-@pytest.mark.skip(reason="mcp-client CLI command not yet implemented")
 def test_help_commands():
     """Test help output for all commands."""
     print("=== Testing help commands ===")
@@ -41,7 +40,6 @@ def test_help_commands():
         assert "usage:" in stdout or "usage:" in stderr, f"No usage info in: {cmd}"
 
 
-@pytest.mark.skip(reason="mcp-client CLI command not yet implemented")
 def test_query_command():
     """Test query command."""
     print("\n=== Testing query command ===")
@@ -77,7 +75,6 @@ def test_conversations_commands():
     code, stdout, stderr = run_command(cmd)
 
 
-@pytest.mark.skip(reason="mcp-client CLI command not yet implemented")
 def test_chat_resume():
     """Test chat --resume functionality."""
     print("\n=== Testing chat --resume ===")

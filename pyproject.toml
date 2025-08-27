@@ -57,6 +57,7 @@ Issues = "https://github.com/juanre/llmring/issues"
 
 [project.scripts]
 llmring = "llmring.cli:main"
+mcp-client = "llmring.mcp.client.cli:main"
 
 [project.optional-dependencies]
 http = [

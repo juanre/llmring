@@ -7,10 +7,15 @@ with the MCP client as if it were a smart LLM with tool capabilities.
 This version is fully database-agnostic and uses HTTP endpoints exclusively.
 """
 
+import asyncio
+import base64
+import inspect
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+
+import httpx
 
 from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
@@ -263,9 +268,6 @@ class EnhancedLLM:
         if tool_name in self.registered_tools:
             tool_def = self.registered_tools[tool_name]
             # Check if handler is async
-            import asyncio
-            import inspect
-            
             if inspect.iscoroutinefunction(tool_def.handler):
                 return await tool_def.handler(**arguments)
             else:
@@ -301,9 +303,6 @@ class EnhancedLLM:
             
             tool_def = self.registered_tools[tool_name]
             # Check if handler is async
-            import asyncio
-            import inspect
-            
             if inspect.iscoroutinefunction(tool_def.handler):
                 result = await tool_def.handler(**arguments)
             else:
@@ -345,6 +344,53 @@ class EnhancedLLM:
         formatted_messages = []
         for msg in messages:
             if isinstance(msg, dict):
+                # Make a copy to avoid mutating the original
+                msg = msg.copy()
+                # Check for attachments in the message
+                attachments = msg.pop("attachments", None)
+                
+                # If we have attachments, process them into the message content
+                if attachments:
+                    # Convert attachments to content parts
+                    content_parts = []
+                    
+                    # Add text content first if present
+                    if msg.get("content"):
+                        content_parts.append({
+                            "type": "text",
+                            "text": msg["content"]
+                        })
+                    
+                    # Process each attachment
+                    for attachment in attachments:
+                        if attachment.get("type") == "file" and attachment.get("data"):
+                            # Convert file data to base64 for the API
+                            file_data = attachment["data"]
+                            if isinstance(file_data, bytes):
+                                base64_data = base64.b64encode(file_data).decode("utf-8")
+                            else:
+                                base64_data = file_data
+                            
+                            # Add as image content (for vision-capable models)
+                            content_type = attachment.get("content_type", "")
+                            if content_type.startswith("image/"):
+                                # Use OpenAI format which providers will convert
+                                content_parts.append({
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{content_type};base64,{base64_data}"
+                                    }
+                                })
+                            else:
+                                # For non-image files, add as text description
+                                content_parts.append({
+                                    "type": "text",
+                                    "text": f"[File: {attachment.get('filename', 'unknown')} ({content_type})]"
+                                })
+                    
+                    # Update message content with structured parts
+                    msg["content"] = content_parts
+                
                 formatted_messages.append(Message(**msg))
             else:
                 formatted_messages.append(msg)
@@ -535,4 +581,271 @@ class EnhancedLLM:
             "total_tokens": 0,
             "total_cost": 0.0,
             "note": "Usage statistics not yet implemented - requires server endpoint",
+        }
+    
+    # File Processing Methods
+    
+    def _guess_content_type_from_bytes(self, file_bytes: bytes) -> str:
+        """
+        Guess content type from file magic numbers.
+        
+        Args:
+            file_bytes: Raw file bytes
+            
+        Returns:
+            Guessed content type
+        """
+        if len(file_bytes) < 4:
+            return "application/octet-stream"
+        
+        # Check common file signatures
+        if file_bytes.startswith(b"\x89PNG"):
+            return "image/png"
+        elif file_bytes.startswith(b"\xff\xd8\xff"):
+            return "image/jpeg"
+        elif file_bytes.startswith(b"GIF8"):
+            return "image/gif"
+        elif file_bytes.startswith(b"RIFF") and b"WEBP" in file_bytes[:12]:
+            return "image/webp"
+        elif file_bytes.startswith(b"%PDF"):
+            return "application/pdf"
+        elif file_bytes.startswith(b"PK\x03\x04"):
+            # ZIP-based formats (could be DOCX, etc.)
+            return "application/zip"
+        else:
+            return "application/octet-stream"
+    
+    async def _fetch_file_from_url(self, url: str) -> tuple[bytes, str]:
+        """
+        Fetch a file from a URL.
+        
+        Args:
+            url: URL to fetch file from
+            
+        Returns:
+            Tuple of (file_bytes, content_type)
+        """
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, follow_redirects=True)
+            response.raise_for_status()
+            
+            content_type = response.headers.get("content-type", "application/octet-stream")
+            # Clean up content type (remove charset etc.)
+            if ";" in content_type:
+                content_type = content_type.split(";")[0].strip()
+            
+            return response.content, content_type
+    
+    async def _decode_base64_file(
+        self,
+        base64_data: str,
+        content_type: str | None = None
+    ) -> tuple[bytes, str]:
+        """
+        Decode base64 file data.
+        
+        Args:
+            base64_data: Base64 encoded file data
+            content_type: Optional content type, will try to guess if not provided
+            
+        Returns:
+            Tuple of (file_bytes, content_type)
+        """
+        try:
+            file_bytes = base64.b64decode(base64_data)
+            if not content_type:
+                # Try to guess content type from first few bytes (magic numbers)
+                content_type = self._guess_content_type_from_bytes(file_bytes)
+            return file_bytes, content_type
+        except Exception as e:
+            raise ValueError(f"Invalid base64 data: {e}")
+    
+    async def process_file_from_source(
+        self,
+        source_type: str,
+        source_data: str,
+        filename: str = "unknown",
+        content_type: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Process a file from different sources (upload, url, base64).
+        
+        Args:
+            source_type: Type of source ("upload", "url", "base64")
+            source_data: Source-specific data:
+                - "upload": file path to read from storage
+                - "url": URL to fetch from
+                - "base64": base64 encoded file data
+            filename: Original filename
+            content_type: Optional content type hint
+            
+        Returns:
+            File attachment dictionary ready for LLM processing
+        """
+        try:
+            if source_type == "upload":
+                # Read file from local storage
+                with open(source_data, "rb") as f:
+                    file_bytes = f.read()
+                if not content_type:
+                    import mimetypes
+                    content_type = mimetypes.guess_type(source_data)[0] or "application/octet-stream"
+            
+            elif source_type == "url":
+                # Fetch file from URL
+                file_bytes, detected_content_type = await self._fetch_file_from_url(source_data)
+                content_type = content_type or detected_content_type
+            
+            elif source_type == "base64":
+                # Decode base64 data
+                file_bytes, detected_content_type = await self._decode_base64_file(
+                    source_data, content_type
+                )
+                content_type = content_type or detected_content_type
+            
+            else:
+                raise ValueError(f"Unsupported source type: {source_type}")
+            
+            return {
+                "type": "file",
+                "filename": filename,
+                "content_type": content_type,
+                "data": file_bytes,
+                "source_type": source_type,
+                "source_data": source_data,
+            }
+        
+        except Exception as e:
+            raise ValueError(f"Failed to process file from {source_type}: {e}")
+    
+    # Information Service Methods
+    
+    def get_available_providers(self) -> list[dict[str, Any]]:
+        """
+        Get information about all available LLM providers.
+        
+        Returns:
+            List of provider information dictionaries
+        """
+        # Use the info service to get provider information
+        if self.info_service:
+            providers = self.info_service.get_available_providers()
+            # Convert to dict format
+            return [
+                {
+                    "name": provider.name,
+                    "description": provider.description,
+                    "capabilities": provider.capabilities,
+                    "status": provider.status,
+                }
+                for provider in providers
+            ]
+        else:
+            # Default providers if info service not available
+            return [
+                {
+                    "name": "anthropic",
+                    "description": "Anthropic Claude models",
+                    "capabilities": ["chat", "tools", "vision"],
+                    "status": "available",
+                },
+                {
+                    "name": "openai",
+                    "description": "OpenAI GPT models",
+                    "capabilities": ["chat", "tools", "vision"],
+                    "status": "available",
+                },
+            ]
+    
+    async def get_transparency_report(
+        self,
+        user_id: str | None = None
+    ) -> dict[str, Any]:
+        """
+        Get a comprehensive transparency report for a user.
+        
+        Args:
+            user_id: User identifier (uses default if not provided)
+            
+        Returns:
+            Complete transparency report including all information
+        """
+        user_id = user_id or self.default_user_id
+        
+        # Gather information for the report
+        from datetime import datetime
+        report = {
+            "user_id": user_id,
+            "llm_model": self.llm_model,
+            "origin": self.origin,
+            "registered_tools": self.list_registered_tools(),
+            "mcp_connected": self.mcp_client is not None,
+            "current_conversation_id": self.current_conversation_id,
+            "available_providers": self.get_available_providers(),
+            "usage_stats": await self.get_usage_stats(user_id),
+            "enhanced_llm_config": {
+                "model": self.llm_model,
+                "default_model": self.llm_model,
+                "origin": self.origin,
+                "registered_tools": self.list_registered_tools(),
+                "mcp_enabled": self.mcp_client is not None,
+                "mcp_server_connected": self.mcp_client is not None,
+            },
+            "generated_at": datetime.utcnow().isoformat(),
+            "data_storage": self.get_data_storage_info(),
+            "user_data_summary": self.get_user_data_summary(user_id),
+        }
+        
+        # Add MCP server information if connected
+        if self.mcp_client:
+            try:
+                mcp_tools = await self.mcp_client.list_tools()
+                report["mcp_tools"] = [
+                    {"name": tool.get("name"), "description": tool.get("description")}
+                    for tool in mcp_tools
+                ]
+            except Exception:
+                report["mcp_tools"] = []
+        
+        return report
+    
+    def get_data_storage_info(self) -> dict[str, Any]:
+        """
+        Get information about data storage and privacy.
+        
+        Returns:
+            Information about how data is stored and managed
+        """
+        return {
+            "storage_type": "http_api",
+            "database_connection": False,
+            "persistence_url": self.http_client.base_url if hasattr(self, 'http_client') and self.http_client else None,
+            "conversation_storage": "server" if self.conversation_manager else "none",
+            "privacy_notes": "All data is stored via HTTP API endpoints. No local database access.",
+            "mcp_client_tables": ["conversations", "messages", "tool_calls", "usage"],  # Logical tables via API
+            "llm_service_tables": ["providers", "models", "usage_stats"],  # LLM service logical tables
+        }
+    
+    def get_user_data_summary(self, user_id: str | None = None) -> dict[str, Any]:
+        """
+        Get a summary of user data stored in the system.
+        
+        Args:
+            user_id: User ID (uses default if not provided)
+            
+        Returns:
+            Summary of user data
+        """
+        user_id = user_id or self.default_user_id
+        
+        return {
+            "user_id": user_id,
+            "origin": self.origin,
+            "has_conversations": self.current_conversation_id is not None,
+            "conversation_count": "unknown",  # Would need API endpoint
+            "message_count": "unknown",  # Would need API endpoint
+            "tool_usage_count": len(self.registered_tools),
+            "data_retention": "Server-managed",
+            "export_available": True,
+            "deletion_available": True,
         }

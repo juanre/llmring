@@ -176,8 +176,8 @@ def file_creator():
 @pytest_asyncio.fixture
 async def enhanced_llm():
     """Fixture to provide an Enhanced LLM instance."""
-    # Try to use a fast, cheap model for testing
-    model = "anthropic:claude-3-haiku-20240307"
+    # Use vision-capable models for file processing tests
+    model = "anthropic:claude-3-5-sonnet-20241022"  # Vision-capable Claude model
 
     # Check if we have any API keys
     has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
@@ -185,9 +185,9 @@ async def enhanced_llm():
     has_google = bool(os.getenv("GOOGLE_API_KEY"))
 
     if has_openai:
-        model = "openai:gpt-4o-mini"
+        model = "openai:gpt-4o-mini"  # Vision-capable OpenAI model
     elif has_google:
-        model = "google:gemini-1.5-flash"
+        model = "google:gemini-1.5-flash"  # Vision-capable Google model
     elif not has_anthropic:
         pytest.skip(
             "No LLM API keys found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY"
@@ -488,49 +488,6 @@ class TestFileProcessingIntegration:
         assert response.content is not None
         print(f"✓ Large file handling: {len(attachment['data'])} bytes processed")
 
-
-@pytest.mark.asyncio
-async def test_integration_with_task_engine(file_creator):
-    """Test integration with the agent engine Enhanced LLM service."""
-    # This test requires the agent engine to be available
-    try:
-        sys.path.insert(0, "/Users/juanre/prj/mcpp/mcp-server/agent-engine/src")
-        from providers.enhanced_llm_service import get_enhanced_llm_service
-
-        service = get_enhanced_llm_service()
-
-        # Create test file
-        image_path = file_creator.create_test_image("task_engine_test.png", "TASK ENGINE TEST")
-
-        # Read file as bytes
-        with open(image_path, "rb") as f:
-            image_bytes = f.read()
-
-        # Test execute_task with file attachments
-        result = await service.execute_task(
-            provider="anthropic",
-            model="claude-3-haiku-20240307",
-            system_prompt="You are a helpful assistant",
-            conversation=[{"role": "user", "content": "What text do you see in this image?"}],
-            file_attachments=[
-                {
-                    "type": "file",
-                    "filename": "task_engine_test.png",
-                    "content_type": "image/png",
-                    "data": image_bytes,
-                    "parameter_name": "test_image",
-                }
-            ],
-        )
-
-        assert result["content"] is not None
-        assert "tokens_used" in result
-        print(f"✓ Agent Engine Integration: {result['content'][:100]}...")
-
-    except ImportError:
-        pytest.skip("Agent engine not available for integration test")
-    except Exception as e:
-        pytest.skip(f"Agent engine integration failed: {e}")
 
 
 if __name__ == "__main__":
