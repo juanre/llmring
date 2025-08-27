@@ -16,6 +16,15 @@ from urllib.parse import urlparse
 
 import httpx
 
+from llmring.exceptions import (
+    FileProcessingError,
+    InvalidFileFormatError,
+    FileSizeError,
+    FileAccessError,
+    NetworkError,
+    ValidationError,
+)
+
 # Try to import magic for better content type detection
 try:
     import magic
@@ -40,8 +49,12 @@ def guess_content_type_from_bytes(data: bytes) -> str:
             mime = magic.Magic(mime=True)
             content_type = mime.from_buffer(data)
             return content_type
-        except Exception:
-            pass  # Fall through to basic detection
+        except (ImportError, OSError, RuntimeError) as e:
+            # Magic library issues - fall back to basic detection
+            pass
+        except Exception as e:
+            # Unexpected error with magic library - log and fall back
+            pass
     
     # Basic detection based on file signatures
         if data.startswith(b'\x89PNG'):
@@ -109,8 +122,10 @@ def decode_base64_file(base64_string: str) -> Tuple[bytes, str]:
             if ";" in header:
                 content_type = header.split(":")[1].split(";")[0]
             base64_string = data
+        except (IndexError, ValueError) as e:
+            raise InvalidFileFormatError(f"Invalid data URI format: {e}", details={"data_uri_prefix": base64_string[:50]})
         except Exception as e:
-            raise ValueError(f"Invalid data URI: {e}")
+            raise FileProcessingError(f"Unexpected error parsing data URI: {e}", details={"data_uri_prefix": base64_string[:50]})
     
     # Decode base64
     try:
@@ -121,8 +136,10 @@ def decode_base64_file(base64_string: str) -> Tuple[bytes, str]:
             content_type = guess_content_type_from_bytes(decoded)
             
         return decoded, content_type
+    except (ValueError, TypeError) as e:
+        raise InvalidFileFormatError(f"Invalid base64 encoding: {e}")
     except Exception as e:
-        raise ValueError(f"Invalid base64 string: {e}")
+        raise FileProcessingError(f"Unexpected error decoding base64: {e}")
 
 
 def process_file_from_source(
@@ -167,7 +184,12 @@ def process_file_from_source(
             elif os.path.exists(source):
                 source_type = "path"
             else:
-                raise ValueError(f"Cannot determine source type for: {source[:100]}")
+                raise ValidationError(
+                    f"Cannot determine source type for input", 
+                    field="source", 
+                    value=str(source)[:100], 
+                    expected_type="path, url, base64 string, or bytes"
+                )
     
     # Process based on source type
     if source_type == "bytes":
@@ -186,7 +208,7 @@ def process_file_from_source(
         
     elif source_type == "path":
         if not os.path.exists(source):
-            raise FileNotFoundError(f"File not found: {source}")
+            raise FileAccessError(f"File not found: {source}", filename=os.path.basename(source))
             
         with open(source, "rb") as f:
             result["content"] = f.read()
@@ -199,7 +221,12 @@ def process_file_from_source(
         result["filename"] = os.path.basename(source)
         
     else:
-        raise ValueError(f"Invalid source type: {source_type}")
+        raise ValidationError(
+            f"Invalid source type: {source_type}", 
+            field="source_type", 
+            value=source_type, 
+            expected_type="'path', 'url', 'base64', or 'bytes'"
+        )
     
     return result
 

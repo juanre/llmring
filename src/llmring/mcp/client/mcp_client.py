@@ -27,6 +27,16 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
 
+from llmring.exceptions import (
+    MCPError,
+    MCPTransportError,
+    MCPProtocolError,
+    MCPInitializationError,
+    ServerConnectionError,
+    NetworkError,
+    TimeoutError,
+)
+
 from llmring.mcp.client.transports import Transport
 from llmring.mcp.client.transports.http import HTTPTransport
 from llmring.mcp.client.transports.stdio import STDIOTransport
@@ -296,15 +306,20 @@ class MCPClient:
             # Wire onmessage handler if the transport supports it
             try:
                 self.transport.set_onmessage(self._on_transport_message)
-            except Exception:
-                pass
+            except (MCPTransportError, AttributeError) as e:
+                logger.debug(f"Transport doesn't support onmessage handler: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error setting onmessage handler: {e}")
 
             # Send request
             result = self._run_async(self.transport.send(request_data))
             return result
+        except (MCPTransportError, NetworkError, TimeoutError) as e:
+            self.logger.error(f"MCP transport request failed: {e}")
+            raise MCPError(f"Transport request failed: {e}")
         except Exception as e:
-            self.logger.error(f"Transport request failed: {e}")
-            raise
+            self.logger.error(f"Unexpected error in transport request: {e}")
+            raise MCPError(f"Unexpected transport error: {e}")
 
     def initialize(self) -> dict[str, Any]:
         """Initialize MCP session."""
@@ -330,8 +345,10 @@ class MCPClient:
             )
             try:
                 self.transport.set_protocol_version(self.negotiated_protocol_version)
-            except Exception:
-                pass
+            except (MCPProtocolError, AttributeError) as e:
+                logger.debug(f"Transport doesn't support protocol version setting: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error setting protocol version: {e}")
 
         # Send initialized notification as required by MCP protocol
         self._send_notification("initialized", {})
@@ -700,13 +717,17 @@ class MCPClient:
         if self._loop:
             try:
                 self._loop.call_soon_threadsafe(self._loop.stop)
-            except Exception:
-                pass
+            except (RuntimeError, AttributeError) as e:
+                logger.debug(f"Error stopping event loop: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error stopping event loop: {e}")
         if self._loop_thread and self._loop_thread.is_alive():
             try:
                 self._loop_thread.join(timeout=2.0)
-            except Exception:
-                pass
+            except (RuntimeError, OSError) as e:
+                logger.debug(f"Error joining thread: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error joining thread: {e}")
 
     def __enter__(self):
         """Context manager entry."""
@@ -779,8 +800,10 @@ class AsyncMCPClient:
         # Wire onmessage handler if supported
         try:
             self.transport.set_onmessage(self._on_transport_message)
-        except Exception:
-            pass
+        except (MCPTransportError, AttributeError) as e:
+            logger.debug(f"Transport doesn't support onmessage handler: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error setting onmessage handler: {e}")
 
         # Make request
         request_data = {
@@ -802,8 +825,10 @@ class AsyncMCPClient:
             )
             try:
                 self.transport.set_protocol_version(self.negotiated_protocol_version)
-            except Exception:
-                pass
+            except (MCPProtocolError, AttributeError) as e:
+                logger.debug(f"Transport doesn't support protocol version setting: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error setting protocol version: {e}")
 
         # Send initialized notification as required by MCP protocol
         await self._send_notification("initialized", {})
@@ -837,9 +862,11 @@ class AsyncMCPClient:
         """Schedule async dispatch for incoming transport messages."""
         try:
             asyncio.create_task(self._dispatch_incoming_message(message))
-        except Exception:
-            # Fallback: ignore if no loop
-            pass
+        except (RuntimeError, AttributeError) as e:
+            # No event loop available - this is expected in some scenarios
+            logger.debug(f"No event loop available for message dispatch: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error in message dispatch: {e}")
 
     async def _dispatch_incoming_message(self, message: dict[str, Any]) -> None:
         if "id" not in message:
@@ -849,8 +876,10 @@ class AsyncMCPClient:
             for handler in self._notification_handlers.get(method, []):
                 try:
                     handler(params)
-                except Exception:
-                    pass
+                except (MCPError, RuntimeError) as e:
+                    logger.debug(f"Error in notification handler: {e}")
+                except Exception as e:
+                    logger.warning(f"Unexpected error in notification handler: {e}")
             return
 
         method = message.get("method")
@@ -883,8 +912,10 @@ class AsyncMCPClient:
                     }
             try:
                 await self.transport.send_response(response)
-            except Exception:
-                pass
+            except (MCPTransportError, NetworkError) as e:
+                logger.debug(f"Error sending response via transport: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error sending response: {e}")
 
     async def _send_notification(self, method: str, params: dict[str, Any] | None = None) -> None:
         """Send a notification (no response expected)."""

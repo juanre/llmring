@@ -6,6 +6,7 @@ usage, and data storage. It mirrors and extends llmring functionality
 to give modules full transparency into what's happening behind the scenes.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -13,6 +14,15 @@ from typing import Any
 
 # LLMDatabase is not in llmring, will need to adapt
 from llmring.service import LLMRing
+from llmring.exceptions import (
+    ServerConnectionError,
+    ProviderError,
+    ModelError,
+    ValidationError,
+    ConfigurationError,
+)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -153,8 +163,10 @@ class MCPClientInfoService:
                         if stats:
                             total_cost = stats.get("total_cost")
                             total_calls = stats.get("total_calls")
-                    except Exception:
-                        pass
+                    except (ServerConnectionError, ProviderError) as e:
+                        logger.warning(f"Error getting provider usage stats: {e}")
+                    except Exception as e:
+                        logger.error(f"Unexpected error getting provider usage stats: {e}")
 
                 # Provider descriptions
                 descriptions = {
@@ -240,7 +252,7 @@ class MCPClientInfoService:
                         )
                     )
             except Exception as e:
-                print(f"Warning: Could not fetch models from database: {e}")
+                logger.warning(f"Could not fetch models from database: {e}")
 
         # Fall back to LLM service if database not available
         if not models and self.llmring:
@@ -293,8 +305,10 @@ class MCPClientInfoService:
                         if model.model_name == model_name:
                             provider = model.provider
                             break
-                except Exception:
-                    pass
+                except (ModelError, ServerConnectionError) as e:
+                    logger.warning(f"Error finding model provider: {e}")
+                except Exception as e:
+                    logger.error(f"Unexpected error finding model provider: {e}")
 
         if not provider:
             return None
@@ -379,7 +393,7 @@ class MCPClientInfoService:
                 calls_by_model=calls_by_model,
             )
         except Exception as e:
-            print(f"Error getting usage stats: {e}")
+            logger.error(f"Error getting usage stats: {e}")
             return None
 
     def get_data_storage_info(self) -> DataStorageInfo:
@@ -559,7 +573,11 @@ class MCPClientInfoService:
                             # Filter by provider if possible (this is a simplified approach)
                             total_cost += float(stats.total_cost or 0)
                             total_calls += stats.total_calls or 0
-                    except Exception:
+                    except (ServerConnectionError, ProviderError) as e:
+                        logger.warning(f"Error getting usage stats for provider model: {e}")
+                        continue
+                    except Exception as e:
+                        logger.error(f"Unexpected error getting usage stats: {e}")
                         continue
 
                 return {
@@ -570,7 +588,11 @@ class MCPClientInfoService:
                 }
 
             return None
-        except Exception:
+        except (ServerConnectionError, ProviderError) as e:
+            logger.warning(f"Error getting provider usage stats: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error in provider usage stats: {e}")
             return None
 
     def _get_model_usage_stats(
@@ -602,8 +624,10 @@ class MCPClientInfoService:
                             "model": model_identifier,
                             "period_days": days,
                         }
-                except Exception:
-                    pass
+                except (ServerConnectionError, ModelError) as e:
+                    logger.warning(f"Error getting model usage stats: {e}")
+                except Exception as e:
+                    logger.error(f"Unexpected error getting model usage stats: {e}")
 
             # Return empty stats if no data available
             return {
@@ -614,7 +638,11 @@ class MCPClientInfoService:
                 "model": model_identifier,
                 "period_days": days,
             }
-        except Exception:
+        except (ServerConnectionError, ModelError) as e:
+            logger.warning(f"Error getting model usage stats: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error in model usage stats: {e}")
             return None
 
     def _get_direct_usage_stats(self, user_id: str, days: int = 30) -> Any | None:
@@ -638,7 +666,11 @@ class MCPClientInfoService:
             # For now, return empty stats when LLM service is not available
             # In a full implementation, this would query the llm_api_calls table directly
             return BasicStats()
-        except Exception:
+        except (ConfigurationError, ServerConnectionError) as e:
+            logger.warning(f"Error getting direct usage stats: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error getting direct usage stats: {e}")
             return None
 
     def _get_models_used_by_user(self, user_id: str, days: int = 30) -> list[str]:
@@ -655,7 +687,11 @@ class MCPClientInfoService:
             # In a full implementation, this would query the database for all models
             # used by this user in the time period
             return []
-        except Exception:
+        except (ServerConnectionError, ModelError) as e:
+            logger.warning(f"Error getting models used by user: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error getting models used: {e}")
             return []
 
     def _get_cost_by_model(self, user_id: str, days: int = 30) -> dict[str, float]:
@@ -671,7 +707,11 @@ class MCPClientInfoService:
 
             # In a full implementation, this would aggregate costs by model
             return {}
-        except Exception:
+        except (ServerConnectionError, ModelError) as e:
+            logger.warning(f"Error getting cost by model: {e}")
+            return {}
+        except Exception as e:
+            logger.error(f"Unexpected error getting cost by model: {e}")
             return {}
 
     def _get_calls_by_model(self, user_id: str, days: int = 30) -> dict[str, int]:
@@ -687,7 +727,11 @@ class MCPClientInfoService:
 
             # In a full implementation, this would count calls by model
             return {}
-        except Exception:
+        except (ServerConnectionError, ModelError) as e:
+            logger.warning(f"Error getting calls by model: {e}")
+            return {}
+        except Exception as e:
+            logger.error(f"Unexpected error getting calls by model: {e}")
             return {}
 
     def _get_daily_usage_breakdown(self, user_id: str, days: int = 30) -> list[dict[str, Any]]:
@@ -716,7 +760,11 @@ class MCPClientInfoService:
                 )
 
             return breakdown
-        except Exception:
+        except (ServerConnectionError, ModelError) as e:
+            logger.warning(f"Error getting daily usage breakdown: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error getting daily usage breakdown: {e}")
             return []
 
     def to_dict(self, obj: Any) -> dict[str, Any]:

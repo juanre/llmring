@@ -10,6 +10,7 @@ This version is fully database-agnostic and uses HTTP endpoints exclusively.
 import asyncio
 import inspect
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -18,6 +19,15 @@ import httpx
 
 from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
+from llmring.exceptions import (
+    MCPError,
+    MCPToolError,
+    ServerConnectionError,
+    ConversationError,
+    ToolExecutionError,
+    FileProcessingError,
+    NetworkError,
+)
 
 from llmring.mcp.client.mcp_client import AsyncMCPClient
 from llmring.mcp.client.info_service import create_info_service
@@ -30,6 +40,8 @@ from llmring.mcp.client.file_utils import (
     decode_base64_file,
     create_file_content,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def create_enhanced_llm(
@@ -249,9 +261,12 @@ class EnhancedLLM:
                             "parameters": tool.get("inputSchema", {}),
                         }
                     })
-            except Exception as e:
+            except (MCPError, ServerConnectionError, NetworkError) as e:
                 # Log but don't fail
-                print(f"Failed to get MCP tools: {e}")
+                logger.warning(f"Failed to get MCP tools: {e}")
+            except Exception as e:
+                # Handle unexpected errors
+                logger.error(f"Unexpected error getting MCP tools: {e}")
         
         return tools
 
@@ -318,8 +333,10 @@ class EnhancedLLM:
             
             return {"result": result}
             
+        except (ToolExecutionError, MCPToolError) as e:
+            return {"error": f"Tool execution failed: {e}"}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": f"Unexpected error in tool execution: {e}"}
 
     async def chat(
         self,
@@ -444,10 +461,15 @@ class EnhancedLLM:
                         "tool_call_id": tool_call["id"],
                         "content": json.dumps(result) if not isinstance(result, str) else result,
                     })
+                except (ToolExecutionError, MCPToolError) as e:
+                    tool_results.append({
+                        "tool_call_id": tool_call["id"],
+                        "content": f"Tool execution failed: {e}",
+                    })
                 except Exception as e:
                     tool_results.append({
                         "tool_call_id": tool_call["id"],
-                        "content": f"Error executing tool: {e}",
+                        "content": f"Unexpected error executing tool: {e}",
                     })
             
             # Add tool results to messages and get final response
@@ -498,9 +520,12 @@ class EnhancedLLM:
                         "usage": response.usage,
                     },
                 )
-            except Exception as e:
+            except (ConversationError, ServerConnectionError) as e:
                 # Log but don't fail
-                print(f"Failed to store message: {e}")
+                logger.warning(f"Failed to store message: {e}")
+            except Exception as e:
+                # Handle unexpected storage errors
+                logger.error(f"Unexpected error storing message: {e}")
         
         return response
 
@@ -607,8 +632,10 @@ class EnhancedLLM:
             file_bytes = fetch_file_from_url(url)
             content_type = guess_content_type_from_bytes(file_bytes)
             return file_bytes, content_type
+        except (NetworkError, FileProcessingError) as e:
+            raise FileProcessingError(f"Failed to fetch file from URL: {e}", details={"url": url})
         except Exception as e:
-            raise ValueError(f"Failed to fetch file from URL: {e}")
+            raise FileProcessingError(f"Unexpected error fetching file: {e}", details={"url": url})
     
     async def _decode_base64_file(
         self,
@@ -671,8 +698,13 @@ class EnhancedLLM:
                 "source_data": source_data,
             }
         
+        except FileProcessingError:
+            raise  # Re-raise file processing errors as-is
         except Exception as e:
-            raise ValueError(f"Failed to process file from {source_type}: {e}")
+            raise FileProcessingError(
+                f"Failed to process file from {source_type}: {e}", 
+                details={"source_type": source_type, "filename": filename}
+            )
     
     # Information Service Methods
     
@@ -760,7 +792,11 @@ class EnhancedLLM:
                     {"name": tool.get("name"), "description": tool.get("description")}
                     for tool in mcp_tools
                 ]
-            except Exception:
+            except (MCPError, ServerConnectionError) as e:
+                logger.warning(f"Failed to get MCP tools for transparency report: {e}")
+                report["mcp_tools"] = []
+            except Exception as e:
+                logger.error(f"Unexpected error getting MCP tools for transparency report: {e}")
                 report["mcp_tools"] = []
         
         return report

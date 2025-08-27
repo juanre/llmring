@@ -1,22 +1,47 @@
-"""Exception hierarchy for LLMRing.
+"""
+Exception hierarchy for LLMRing.
 
 Clean, well-structured exception classes for proper error handling.
+Enhanced with specific exceptions for all components.
 """
+
+from typing import Any, Optional
 
 
 class LLMRingError(Exception):
     """Base exception for all LLMRing errors."""
-    pass
+    
+    def __init__(self, message: str, details: Optional[dict[str, Any]] = None):
+        super().__init__(message)
+        self.message = message
+        self.details = details or {}
 
 
+# Configuration Errors
 class ConfigurationError(LLMRingError):
     """Error in configuration (missing keys, invalid values, etc.)."""
     pass
 
 
+class InitializationError(LLMRingError):
+    """Raised when initialization of a component fails."""
+    pass
+
+
+# Provider Errors
 class ProviderError(LLMRingError):
     """Base error for provider-related issues."""
-    pass
+    
+    def __init__(
+        self, 
+        message: str, 
+        provider: Optional[str] = None,
+        status_code: Optional[int] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.provider = provider
+        self.status_code = status_code
 
 
 class ProviderNotFoundError(ProviderError):
@@ -31,7 +56,16 @@ class ProviderAuthenticationError(ProviderError):
 
 class ProviderRateLimitError(ProviderError):
     """Provider rate limit exceeded."""
-    pass
+    
+    def __init__(
+        self,
+        message: str,
+        provider: Optional[str] = None,
+        retry_after: Optional[float] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, provider, details=details)
+        self.retry_after = retry_after
 
 
 class ProviderTimeoutError(ProviderError):
@@ -39,9 +73,25 @@ class ProviderTimeoutError(ProviderError):
     pass
 
 
+class ProviderResponseError(ProviderError):
+    """Invalid or unexpected response from provider."""
+    pass
+
+
+# Model Errors
 class ModelError(LLMRingError):
     """Base error for model-related issues."""
-    pass
+    
+    def __init__(
+        self,
+        message: str,
+        model_name: Optional[str] = None,
+        provider: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.model_name = model_name
+        self.provider = provider
 
 
 class ModelNotFoundError(ModelError):
@@ -51,9 +101,19 @@ class ModelNotFoundError(ModelError):
 
 class ModelCapabilityError(ModelError):
     """Model doesn't support requested capability (e.g., vision, tools)."""
-    pass
+    
+    def __init__(
+        self,
+        message: str,
+        required_capability: Optional[str] = None,
+        model_name: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, model_name, details=details)
+        self.required_capability = required_capability
 
 
+# Registry Errors
 class RegistryError(LLMRingError):
     """Base error for registry-related issues."""
     pass
@@ -69,6 +129,7 @@ class RegistryValidationError(RegistryError):
     pass
 
 
+# Lockfile Errors
 class LockfileError(LLMRingError):
     """Base error for lockfile-related issues."""
     pass
@@ -89,9 +150,20 @@ class LockfileVersionError(LockfileError):
     pass
 
 
+# Server Errors
 class ServerError(LLMRingError):
     """Base error for server communication issues."""
-    pass
+    
+    def __init__(
+        self,
+        message: str,
+        status_code: Optional[int] = None,
+        endpoint: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.status_code = status_code
+        self.endpoint = endpoint
 
 
 class ServerConnectionError(ServerError):
@@ -109,9 +181,18 @@ class ServerResponseError(ServerError):
     pass
 
 
+# Conversation Errors
 class ConversationError(LLMRingError):
     """Base error for conversation-related issues."""
-    pass
+    
+    def __init__(
+        self,
+        message: str,
+        conversation_id: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.conversation_id = conversation_id
 
 
 class ConversationNotFoundError(ConversationError):
@@ -124,6 +205,7 @@ class ConversationAccessError(ConversationError):
     pass
 
 
+# Message Errors
 class MessageError(LLMRingError):
     """Base error for message-related issues."""
     pass
@@ -131,7 +213,17 @@ class MessageError(LLMRingError):
 
 class MessageValidationError(MessageError):
     """Message validation failed."""
-    pass
+    
+    def __init__(
+        self,
+        message: str,
+        field: Optional[str] = None,
+        value: Optional[Any] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.field = field
+        self.value = value
 
 
 class MessageStorageError(MessageError):
@@ -139,6 +231,7 @@ class MessageStorageError(MessageError):
     pass
 
 
+# Receipt Errors
 class ReceiptError(LLMRingError):
     """Base error for receipt-related issues."""
     pass
@@ -152,3 +245,289 @@ class ReceiptSignatureError(ReceiptError):
 class ReceiptStorageError(ReceiptError):
     """Failed to store receipt."""
     pass
+
+
+# MCP-specific Errors
+class MCPError(LLMRingError):
+    """Base class for MCP-related errors."""
+    pass
+
+
+class MCPProtocolError(MCPError):
+    """MCP protocol violation or invalid message."""
+    
+    def __init__(
+        self,
+        message: str,
+        error_code: Optional[int] = None,
+        method: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.error_code = error_code
+        self.method = method
+
+
+class MCPTransportError(MCPError):
+    """MCP transport layer error."""
+    pass
+
+
+class MCPToolError(MCPError):
+    """MCP tool execution error."""
+    
+    def __init__(
+        self,
+        message: str,
+        tool_name: Optional[str] = None,
+        arguments: Optional[dict[str, Any]] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.tool_name = tool_name
+        self.arguments = arguments
+
+
+class MCPResourceError(MCPError):
+    """MCP resource access error."""
+    
+    def __init__(
+        self,
+        message: str,
+        resource_uri: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.resource_uri = resource_uri
+
+
+class MCPServerError(MCPError):
+    """MCP server-side error."""
+    pass
+
+
+class MCPInitializationError(MCPError):
+    """MCP initialization failed."""
+    pass
+
+
+# File Processing Errors
+class FileProcessingError(LLMRingError):
+    """Base class for file processing errors."""
+    
+    def __init__(
+        self,
+        message: str,
+        filename: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.filename = filename
+
+
+class InvalidFileFormatError(FileProcessingError):
+    """File format is invalid or unsupported."""
+    pass
+
+
+class FileSizeError(FileProcessingError):
+    """File size exceeds limits."""
+    
+    def __init__(
+        self,
+        message: str,
+        file_size: Optional[int] = None,
+        max_size: Optional[int] = None,
+        filename: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, filename, details)
+        self.file_size = file_size
+        self.max_size = max_size
+
+
+class FileAccessError(FileProcessingError):
+    """Cannot access or read file."""
+    pass
+
+
+# Tool and Function Errors
+class ToolError(LLMRingError):
+    """Base class for tool-related errors."""
+    
+    def __init__(
+        self,
+        message: str,
+        tool_name: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.tool_name = tool_name
+
+
+class ToolNotFoundError(ToolError):
+    """Requested tool is not found."""
+    pass
+
+
+class ToolExecutionError(ToolError):
+    """Tool execution failed."""
+    
+    def __init__(
+        self,
+        message: str,
+        tool_name: Optional[str] = None,
+        error_type: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, tool_name, details)
+        self.error_type = error_type
+
+
+class ToolValidationError(ToolError):
+    """Tool arguments validation failed."""
+    
+    def __init__(
+        self,
+        message: str,
+        tool_name: Optional[str] = None,
+        invalid_args: Optional[dict[str, Any]] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, tool_name, details)
+        self.invalid_args = invalid_args
+
+
+# Circuit Breaker Errors
+class CircuitBreakerError(LLMRingError):
+    """Circuit breaker is open."""
+    
+    def __init__(
+        self,
+        message: str,
+        provider: Optional[str] = None,
+        retry_after: Optional[float] = None,
+        failure_count: Optional[int] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.provider = provider
+        self.retry_after = retry_after
+        self.failure_count = failure_count
+
+
+# Network Errors
+class NetworkError(LLMRingError):
+    """Network-related error."""
+    pass
+
+
+class TimeoutError(NetworkError):
+    """Operation timed out."""
+    
+    def __init__(
+        self,
+        message: str,
+        timeout: Optional[float] = None,
+        operation: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.timeout = timeout
+        self.operation = operation
+
+
+class ConnectionError(NetworkError):
+    """Connection failed."""
+    pass
+
+
+# Validation Errors
+class ValidationError(LLMRingError):
+    """Data validation failed."""
+    
+    def __init__(
+        self,
+        message: str,
+        field: Optional[str] = None,
+        value: Optional[Any] = None,
+        expected_type: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.field = field
+        self.value = value
+        self.expected_type = expected_type
+
+
+class SchemaValidationError(ValidationError):
+    """Schema validation failed."""
+    pass
+
+
+# Session Errors
+class SessionError(LLMRingError):
+    """Session-related error."""
+    pass
+
+
+class SessionExpiredError(SessionError):
+    """Session has expired."""
+    pass
+
+
+class SessionNotFoundError(SessionError):
+    """Session not found."""
+    pass
+
+
+# Utility Functions
+def wrap_exception(
+    exc: Exception,
+    wrapper_class: type[LLMRingError],
+    message: Optional[str] = None,
+    **kwargs
+) -> LLMRingError:
+    """
+    Wrap a generic exception in a LLMRing-specific exception.
+    
+    Args:
+        exc: The original exception
+        wrapper_class: The LLMRing exception class to use
+        message: Optional custom message
+        **kwargs: Additional arguments for the wrapper exception
+        
+    Returns:
+        A LLMRing-specific exception wrapping the original
+    """
+    if isinstance(exc, LLMRingError):
+        return exc
+    
+    msg = message or str(exc)
+    details = kwargs.pop("details", {})
+    details["original_error"] = str(exc)
+    details["original_type"] = type(exc).__name__
+    
+    return wrapper_class(msg, details=details, **kwargs)
+
+
+def is_retryable_error(exc: Exception) -> bool:
+    """
+    Check if an exception is retryable.
+    
+    Args:
+        exc: The exception to check
+        
+    Returns:
+        True if the error is temporary and can be retried
+    """
+    retryable_types = (
+        ProviderRateLimitError,
+        ProviderTimeoutError,
+        CircuitBreakerError,
+        TimeoutError,
+        ConnectionError,
+        ServerConnectionError,
+        MCPTransportError,
+    )
+    return isinstance(exc, retryable_types)

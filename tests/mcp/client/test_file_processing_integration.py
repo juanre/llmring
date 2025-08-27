@@ -31,6 +31,7 @@ import builtins
 import contextlib
 
 from llmring.mcp.client.enhanced_llm import create_enhanced_llm
+from llmring.exceptions import InvalidFileFormatError, FileProcessingError, FileAccessError
 
 
 class FileCreator:
@@ -430,19 +431,19 @@ class TestFileProcessingIntegration:
     async def test_error_handling(self, enhanced_llm):
         """Test error handling for invalid file processing."""
         # Test invalid base64
-        with pytest.raises(ValueError, match="Invalid base64 string"):
+        with pytest.raises((InvalidFileFormatError, FileProcessingError), match="Invalid base64"):
             await enhanced_llm.process_file_from_source(
                 source_type="base64", source_data="invalid-base64-data", filename="test.png"
             )
 
         # Test invalid source type
-        with pytest.raises(ValueError, match="Unsupported source type"):
+        with pytest.raises((ValueError, FileProcessingError), match="Unsupported source type"):
             await enhanced_llm.process_file_from_source(
                 source_type="invalid_source", source_data="some_data", filename="test.txt"
             )
 
         # Test non-existent file
-        with pytest.raises(ValueError, match="Failed to process file"):
+        with pytest.raises((FileAccessError, FileProcessingError), match="File not found"):
             await enhanced_llm.process_file_from_source(
                 source_type="upload", source_data="/nonexistent/path/file.txt", filename="test.txt"
             )
