@@ -21,6 +21,38 @@ from llmring.mcp.http_client import MCPHttpClient
 from llmring.mcp.client.conversation_manager_async import AsyncConversationManager
 
 
+def create_enhanced_llm(
+    llm_model: str = "anthropic:claude-3-haiku-20240307",
+    llmring_server_url: str | None = None,
+    mcp_server_url: str | None = None,
+    origin: str = "enhanced-llm",
+    user_id: str | None = None,
+    api_key: str | None = None,
+) -> "EnhancedLLM":
+    """
+    Factory function to create an EnhancedLLM instance.
+    
+    Args:
+        llm_model: The underlying LLM model to use
+        llmring_server_url: LLMRing server URL for persistence
+        mcp_server_url: Optional MCP server URL for additional tools
+        origin: Origin identifier for usage tracking
+        user_id: Default user ID for requests
+        api_key: Optional API key for LLMRing server
+        
+    Returns:
+        Configured EnhancedLLM instance
+    """
+    return EnhancedLLM(
+        llm_model=llm_model,
+        llmring_server_url=llmring_server_url,
+        mcp_server_url=mcp_server_url,
+        origin=origin,
+        user_id=user_id,
+        api_key=api_key,
+    )
+
+
 @dataclass
 class ToolDefinition:
     """Definition of a tool that can be registered with the enhanced LLM."""
@@ -131,7 +163,13 @@ class EnhancedLLM:
             parameters: JSON schema for tool parameters
             handler: Async function to execute the tool
             module_name: Optional module name for grouping
+            
+        Raises:
+            ValueError: If a tool with the same name is already registered
         """
+        if name in self.registered_tools:
+            raise ValueError(f"Tool '{name}' is already registered")
+            
         self.registered_tools[name] = ToolDefinition(
             name=name,
             description=description,
@@ -139,6 +177,38 @@ class EnhancedLLM:
             handler=handler,
             module_name=module_name,
         )
+    
+    def unregister_tool(self, name: str) -> bool:
+        """
+        Unregister a tool.
+        
+        Args:
+            name: Tool name to unregister
+            
+        Returns:
+            True if tool was unregistered, False if it wasn't registered
+        """
+        if name in self.registered_tools:
+            del self.registered_tools[name]
+            return True
+        return False
+    
+    def list_registered_tools(self) -> list[dict[str, Any]]:
+        """
+        List all registered tools.
+        
+        Returns:
+            List of tool descriptions with name, description, module_name, and parameters
+        """
+        tools = []
+        for tool_def in self.registered_tools.values():
+            tools.append({
+                "name": tool_def.name,
+                "description": tool_def.description,
+                "module_name": tool_def.module_name,
+                "parameters": tool_def.parameters,
+            })
+        return tools
 
     async def _get_available_tools(self) -> list[dict[str, Any]]:
         """Get all available tools (registered + MCP)."""
@@ -192,7 +262,16 @@ class EnhancedLLM:
         # Check if it's a registered tool
         if tool_name in self.registered_tools:
             tool_def = self.registered_tools[tool_name]
-            return await tool_def.handler(**arguments)
+            # Check if handler is async
+            import asyncio
+            import inspect
+            
+            if inspect.iscoroutinefunction(tool_def.handler):
+                return await tool_def.handler(**arguments)
+            else:
+                # Run sync function in executor
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(None, lambda: tool_def.handler(**arguments))
         
         # Check if it's an MCP tool
         if tool_name.startswith("mcp_") and self.mcp_client:
@@ -200,6 +279,42 @@ class EnhancedLLM:
             return await self.mcp_client.call_tool(actual_name, arguments)
         
         raise ValueError(f"Unknown tool: {tool_name}")
+    
+    async def _execute_registered_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Execute a registered tool by name and handle errors.
+        
+        Args:
+            tool_name: Name of the registered tool to execute
+            arguments: Tool arguments
+            
+        Returns:
+            Result dict with either success result or error message
+        """
+        try:
+            if tool_name not in self.registered_tools:
+                return {"error": f"Tool '{tool_name}' is not registered"}
+            
+            tool_def = self.registered_tools[tool_name]
+            # Check if handler is async
+            import asyncio
+            import inspect
+            
+            if inspect.iscoroutinefunction(tool_def.handler):
+                result = await tool_def.handler(**arguments)
+            else:
+                # Run sync function in executor
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, lambda: tool_def.handler(**arguments))
+            
+            return {"result": result}
+            
+        except Exception as e:
+            return {"error": str(e)}
 
     async def chat(
         self,
@@ -258,9 +373,14 @@ class EnhancedLLM:
             tool_results = []
             for tool_call in response.tool_calls:
                 try:
+                    # Parse arguments if they're a string
+                    args = tool_call["function"]["arguments"]
+                    if isinstance(args, str):
+                        args = json.loads(args)
+                    
                     result = await self._execute_tool(
                         tool_call["function"]["name"],
-                        json.loads(tool_call["function"]["arguments"]),
+                        args,
                     )
                     tool_results.append({
                         "tool_call_id": tool_call["id"],
@@ -273,10 +393,20 @@ class EnhancedLLM:
                     })
             
             # Add tool results to messages and get final response
+            # Parse tool call arguments to ensure they're dicts
+            parsed_tool_calls = []
+            for tc in response.tool_calls:
+                parsed_tc = tc.copy()
+                if "function" in parsed_tc and "arguments" in parsed_tc["function"]:
+                    args = parsed_tc["function"]["arguments"]
+                    if isinstance(args, str):
+                        parsed_tc["function"]["arguments"] = json.loads(args)
+                parsed_tool_calls.append(parsed_tc)
+            
             formatted_messages.append(Message(
                 role="assistant",
                 content=response.content or "",
-                tool_calls=response.tool_calls,
+                tool_calls=parsed_tool_calls,
             ))
             
             for tool_result in tool_results:
@@ -384,3 +514,25 @@ class EnhancedLLM:
             user_id=user_id or self.default_user_id,
             limit=limit,
         )
+    
+    async def get_usage_stats(
+        self,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Get usage statistics for the user.
+        
+        Args:
+            user_id: User ID (uses default if not provided)
+            
+        Returns:
+            Dictionary with usage statistics
+        """
+        # Placeholder implementation - would need server endpoint
+        return {
+            "user_id": user_id or self.default_user_id,
+            "total_calls": 0,
+            "total_tokens": 0,
+            "total_cost": 0.0,
+            "note": "Usage statistics not yet implemented - requires server endpoint",
+        }
