@@ -6,7 +6,7 @@ Manages conversation persistence and retrieval using HTTP API calls to llmring-s
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -139,15 +139,15 @@ class AsyncConversationManager:
             max_tokens=None,
             tool_config=None,
             created_by="user",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             messages=[
                 Message(
                     id=msg.get("id"),
                     conversation_id=conversation_id,
                     role=msg.get("role", "user"),
                     content=msg.get("content", ""),
-                    timestamp=datetime.fromisoformat(msg.get("timestamp", datetime.utcnow().isoformat())),
+                    timestamp=datetime.fromisoformat(msg.get("timestamp", datetime.now(UTC).isoformat())),
                     token_count=msg.get("token_count"),
                     metadata=msg.get("metadata"),
                 )
@@ -177,7 +177,7 @@ class AsyncConversationManager:
                 conversation_id=conversation_id,
                 role=msg.get("role", "user"),
                 content=msg.get("content", ""),
-                timestamp=datetime.fromisoformat(msg.get("timestamp", datetime.utcnow().isoformat())),
+                timestamp=datetime.fromisoformat(msg.get("timestamp", datetime.now(UTC).isoformat())),
                 token_count=msg.get("token_count"),
                 metadata=msg.get("metadata"),
             )

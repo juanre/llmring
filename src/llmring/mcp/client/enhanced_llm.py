@@ -761,7 +761,7 @@ class EnhancedLLM:
         user_id = user_id or self.default_user_id
         
         # Gather information for the report
-        from datetime import datetime
+        from datetime import datetime, UTC
         report = {
             "user_id": user_id,
             "llm_model": self.llm_model,
@@ -779,7 +779,7 @@ class EnhancedLLM:
                 "mcp_enabled": self.mcp_client is not None,
                 "mcp_server_connected": self.mcp_client is not None,
             },
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "data_storage": self.get_data_storage_info(),
             "user_data_summary": self.get_user_data_summary(user_id),
         }

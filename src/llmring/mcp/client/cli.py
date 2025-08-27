@@ -11,7 +11,7 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any, Optional
 
 from dotenv import load_dotenv
@@ -351,7 +351,7 @@ async def cmd_conversations_export(args: argparse.Namespace) -> None:
         # Prepare export data
         export_data = {
             "conversation_id": args.conversation_id,
-            "exported_at": datetime.utcnow().isoformat(),
+            "exported_at": datetime.now(UTC).isoformat(),
             "messages": []
         }
         

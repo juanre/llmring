@@ -195,7 +195,7 @@ class LLMRing:
 
         # If no lockfile or alias not found, assume it's a model name
         # and try to infer provider (backwards compatibility)
-        logger.warning(
+        logger.debug(
             f"Could not resolve alias '{alias_or_model}', treating as model name"
         )
         return alias_or_model

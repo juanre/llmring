@@ -345,10 +345,10 @@ async def cmd_export(args):
 
     # Export local receipts as JSON
     import json
-    from datetime import datetime
+    from datetime import datetime, UTC
 
     export_data = {
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
         "receipts": [
             {
                 "receipt_id": r.receipt_id,

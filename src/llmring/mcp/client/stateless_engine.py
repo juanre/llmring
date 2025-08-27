@@ -4,7 +4,7 @@ import logging
 import uuid
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any
 
 from llmring.schemas import LLMRequest, Message
@@ -133,7 +133,7 @@ class StatelessChatEngine:
         self, request: ChatRequest, mcp_client: MCPClient | None = None
     ) -> ChatResponse:
         """Process a chat request and return response."""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(UTC)
 
         try:
             # Create processing context
@@ -143,7 +143,7 @@ class StatelessChatEngine:
             # Add user message if provided
             if request.message:
                 user_message = Message(
-                    role="user", content=request.message, timestamp=datetime.utcnow()
+                    role="user", content=request.message, timestamp=datetime.now(UTC)
                 )
                 context.messages.append(user_message)
 
@@ -165,7 +165,7 @@ class StatelessChatEngine:
                 usage = self._calculate_usage(context.messages, response_message)
 
             # Calculate processing time
-            processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+            processing_time_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
 
             # Save to database if requested
             if request.save_to_db:
@@ -184,7 +184,7 @@ class StatelessChatEngine:
                 message=response_message,
                 usage=usage,
                 model=context.model,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
                 processing_time_ms=processing_time_ms,
                 tool_calls=tool_calls,
             )
@@ -203,7 +203,7 @@ class StatelessChatEngine:
         # Add user message
         if request.message:
             user_message = Message(
-                role="user", content=request.message, timestamp=datetime.utcnow()
+                role="user", content=request.message, timestamp=datetime.now(UTC)
             )
             context.messages.append(user_message)
 
@@ -236,7 +236,7 @@ class StatelessChatEngine:
         # Save complete response
         if request.save_to_db and full_response:
             response_message = Message(
-                role="assistant", content=full_response, timestamp=datetime.utcnow()
+                role="assistant", content=full_response, timestamp=datetime.now(UTC)
             )
 
             # Calculate usage
@@ -275,7 +275,7 @@ class StatelessChatEngine:
 
         # Create tool result
         tool_result = ToolResult(
-            tool_call_id=tool_call.id, result=result, timestamp=datetime.utcnow()
+            tool_call_id=tool_call.id, result=result, timestamp=datetime.now(UTC)
         )
 
         # Save tool result
@@ -359,7 +359,7 @@ class StatelessChatEngine:
         content = response.content
 
         # Create response message
-        response_message = Message(role="assistant", content=content, timestamp=datetime.utcnow())
+        response_message = Message(role="assistant", content=content, timestamp=datetime.now(UTC))
 
         # Handle tool calls if present
         tool_calls = None
@@ -387,7 +387,7 @@ class StatelessChatEngine:
                             ToolResult(
                                 tool_call_id=tool_call.id,
                                 result=result,
-                                timestamp=datetime.utcnow(),
+                                timestamp=datetime.now(UTC),
                             )
                         )
                     except Exception as e:
@@ -396,7 +396,7 @@ class StatelessChatEngine:
                             ToolResult(
                                 tool_call_id=tool_call.id,
                                 result={"error": str(e)},
-                                timestamp=datetime.utcnow(),
+                                timestamp=datetime.now(UTC),
                             )
                         )
 

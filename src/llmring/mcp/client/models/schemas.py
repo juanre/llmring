@@ -3,7 +3,7 @@ Pydantic schemas for MCP chat interface.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Any, Literal
 
@@ -148,7 +148,7 @@ class OAuthToken(BaseModel):
         """Check if token is expired."""
         if not self.expires_at:
             return False
-        return datetime.utcnow() >= self.expires_at
+        return datetime.now(UTC) >= self.expires_at
 
 
 class OAuthConfig(BaseModel):

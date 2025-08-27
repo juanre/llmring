@@ -324,7 +324,27 @@ class TestSimpleFileProcessing:
         # Test with a public image URL
         test_url = "https://httpbin.org/image/png"
 
-        content = analyze_image(test_url, "What type of image is this?")
+        # Check if the URL is accessible
+        import httpx
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                response = client.head(test_url)
+                if response.status_code != 200:
+                    pytest.skip(f"Test URL {test_url} not accessible (status: {response.status_code})")
+        except Exception as e:
+            pytest.skip(f"Cannot access test URL {test_url}: {e}")
+
+        # Enable remote URLs for this test
+        import os
+        old_value = os.environ.get("LLMRING_ALLOW_REMOTE_URLS")
+        os.environ["LLMRING_ALLOW_REMOTE_URLS"] = "true"
+        try:
+            content = analyze_image(test_url, "What type of image is this?")
+        finally:
+            if old_value is None:
+                os.environ.pop("LLMRING_ALLOW_REMOTE_URLS", None)
+            else:
+                os.environ["LLMRING_ALLOW_REMOTE_URLS"] = old_value
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
