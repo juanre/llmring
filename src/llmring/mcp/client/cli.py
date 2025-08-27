@@ -7,12 +7,10 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime
 
 from dotenv import load_dotenv
 from llmring.service import LLMRing
 from rich.console import Console
-from rich.syntax import Syntax
 from rich.table import Table
 
 from llmring.mcp.client.chat.app import MCPChatApp

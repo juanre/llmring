@@ -10,7 +10,7 @@ import io
 import json
 import logging
 import sys
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Dict, Optional
 
 from llmring.mcp.server.transport.base import Transport
 

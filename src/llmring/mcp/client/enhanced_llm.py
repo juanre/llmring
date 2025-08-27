@@ -1,31 +1,24 @@
 """
-Enhanced LLM Interface for MCP Client
+Enhanced LLM Interface for MCP Client - Fixed Version
 
 This module provides an LLM-compatible interface that modules can use to interact
 with the MCP client as if it were a smart LLM with tool capabilities.
 
-Modules can:
-1. Register their own tools
-2. Send the same messages they would send to an LLM
-3. Get responses that may include tool usage from both registered tools and MCP servers
+This version is fully database-agnostic and uses HTTP endpoints exclusively.
 """
 
-import asyncio
-import base64
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
-import httpx
-from llmring.file_utils import create_file_content, get_file_mime_type
 from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
 
 from llmring.mcp.client.mcp_client import AsyncMCPClient
 from llmring.mcp.client.info_service import create_info_service
 from llmring.mcp.http_client import MCPHttpClient
+from llmring.mcp.client.conversation_manager_async import AsyncConversationManager
 
 
 @dataclass
@@ -42,12 +35,8 @@ class ToolDefinition:
 class EnhancedLLM:
     """
     Enhanced LLM interface that combines LLM capabilities with MCP tool execution.
-
-    This class provides an LLM-compatible interface that modules can use to:
-    - Register their own tools
-    - Send conversation messages (system + user/assistant messages)
-    - Get intelligent responses that may use both registered tools and MCP server tools
-    - Track usage and costs like a regular LLM
+    
+    This version is fully database-agnostic and uses HTTP endpoints for all persistence.
     """
 
     def __init__(
@@ -73,33 +62,57 @@ class EnhancedLLM:
         self.llm_model = llm_model
         self.origin = origin
         self.default_user_id = user_id or "enhanced-llm-user"
-
+        self.api_key = api_key
+        
         # Initialize LLM service
         self.llmring = LLMRing(origin=origin)
-
-        # Initialize MCP client if server URL provided
-        self.mcp_client = None
-        if mcp_server_url:
-            self.mcp_client = AsyncMCPClient.http(mcp_server_url)
-
-        # Registry for module-registered tools
-        self.registered_tools: dict[str, ToolDefinition] = {}
-
-        # HTTP client for persistence (optional)
-        self.http_client = None
-        if llmring_server_url:
-            self.http_client = MCPHttpClient(
-                base_url=llmring_server_url,
-                api_key=api_key,
-            )
-
-        # Initialize info service for transparency
-        self.info_service = create_info_service(
-            llmring=self.llmring,
+        
+        # Initialize HTTP client for MCP operations
+        self.http_client = MCPHttpClient(
+            base_url=llmring_server_url,
+            api_key=api_key,
+        )
+        
+        # Initialize conversation manager
+        self.conversation_manager = AsyncConversationManager(
             llmring_server_url=llmring_server_url,
             api_key=api_key,
-            origin=origin,
         )
+        
+        # Initialize MCP client if server URL provided
+        self.mcp_client: AsyncMCPClient | None = None
+        if mcp_server_url:
+            # Parse URL to determine transport type
+            if mcp_server_url.startswith("ws://") or mcp_server_url.startswith("wss://"):
+                self.mcp_client = AsyncMCPClient.websocket(mcp_server_url)
+            elif mcp_server_url.startswith("stdio://"):
+                # Extract command from URL
+                command = mcp_server_url.replace("stdio://", "").split()
+                self.mcp_client = AsyncMCPClient.stdio(command)
+            else:
+                # Default to HTTP
+                self.mcp_client = AsyncMCPClient.http(mcp_server_url)
+        
+        # Create info service for system information
+        self.info_service = create_info_service()
+        
+        # Registered tools from modules
+        self.registered_tools: dict[str, ToolDefinition] = {}
+        
+        # Current conversation context
+        self.current_conversation_id: str | None = None
+        self.conversation_history: list[Message] = []
+
+    async def initialize(self) -> None:
+        """Initialize the MCP client if configured."""
+        if self.mcp_client:
+            await self.mcp_client.initialize()
+            
+    async def close(self) -> None:
+        """Clean up resources."""
+        if self.mcp_client:
+            await self.mcp_client.close()
+        await self.http_client.close()
 
     def register_tool(
         self,
@@ -110,32 +123,15 @@ class EnhancedLLM:
         module_name: str | None = None,
     ) -> None:
         """
-        Register a tool that the enhanced LLM can use.
-
+        Register a tool that can be used by the LLM.
+        
         Args:
-            name: Tool name (must be unique)
-            description: Description of what the tool does
+            name: Tool name
+            description: Tool description for the LLM
             parameters: JSON schema for tool parameters
-            handler: Function to call when tool is invoked
-            module_name: Optional module name for organization
-
-        Example:
-            enhanced_llm.register_tool(
-                name="calculate",
-                description="Perform mathematical calculations",
-                parameters={
-                    "type": "object",
-                    "properties": {
-                        "expression": {"type": "string", "description": "Math expression"}
-                    },
-                    "required": ["expression"]
-                },
-                handler=my_calculator_function
-            )
+            handler: Async function to execute the tool
+            module_name: Optional module name for grouping
         """
-        if name in self.registered_tools:
-            raise ValueError(f"Tool '{name}' is already registered")
-
         self.registered_tools[name] = ToolDefinition(
             name=name,
             description=description,
@@ -144,235 +140,66 @@ class EnhancedLLM:
             module_name=module_name,
         )
 
-    def unregister_tool(self, name: str) -> bool:
-        """
-        Unregister a tool.
-
-        Args:
-            name: Name of tool to unregister
-
-        Returns:
-            True if tool was found and removed, False otherwise
-        """
-        if name in self.registered_tools:
-            del self.registered_tools[name]
-            return True
-        return False
-
-    def list_registered_tools(self) -> list[dict[str, Any]]:
-        """
-        List all registered tools.
-
-        Returns:
-            List of tool definitions
-        """
-        return [
-            {
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": tool.parameters,
-                "module_name": tool.module_name,
-            }
-            for tool in self.registered_tools.values()
-        ]
-
-    async def _process_file_attachments(
-        self, attachments: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        """
-        Process file attachments and convert them to LLM-compatible format.
-
-        Args:
-            attachments: List of file attachment dictionaries with format:
-                {
-                    "type": "file",
-                    "filename": "document.pdf",
-                    "content_type": "application/pdf",
-                    "data": b"raw_file_bytes",
-                    "parameter_name": "pdf_file",  # Which agent parameter this came from
-                    "url": "optional_source_url"   # If fetched from URL
+    async def _get_available_tools(self) -> list[dict[str, Any]]:
+        """Get all available tools (registered + MCP)."""
+        tools = []
+        
+        # Add registered tools
+        for tool_def in self.registered_tools.values():
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": tool_def.name,
+                    "description": tool_def.description,
+                    "parameters": tool_def.parameters,
                 }
-
-        Returns:
-            List of content parts for LLM message
-        """
-        content_parts = []
-
-        for attachment in attachments:
+            })
+        
+        # Add MCP tools if client is available
+        if self.mcp_client:
             try:
-                file_data = attachment.get("data")
-                content_type = attachment.get("content_type", "application/octet-stream")
-                filename = attachment.get("filename", "unknown")
-
-                if not file_data:
-                    continue
-
-                # Convert bytes to base64 if needed
-                if isinstance(file_data, bytes):
-                    base64_data = base64.b64encode(file_data).decode("utf-8")
-                elif isinstance(file_data, str):
-                    # Assume it's already base64 encoded
-                    base64_data = file_data
-                else:
-                    continue
-
-                # Use universal file interface that works for all file types
-                try:
-                    file_content = create_file_content(
-                        base64_data,
-                        f"Please analyze this {filename} file.",
-                        content_type,
-                    )
-                    content_parts.extend(file_content)
-                except Exception as file_error:
-                    # Fallback for unsupported file types
-                    content_parts.append(
-                        {
-                            "type": "text",
-                            "text": f"Unable to process {content_type} file: {filename}. Error: {file_error!s}",
+                mcp_tools = await self.mcp_client.list_tools()
+                for tool in mcp_tools:
+                    tools.append({
+                        "type": "function",
+                        "function": {
+                            "name": f"mcp_{tool['name']}",
+                            "description": tool.get("description", ""),
+                            "parameters": tool.get("inputSchema", {}),
                         }
-                    )
-
+                    })
             except Exception as e:
-                # If file processing fails, add an error note
-                content_parts.append(
-                    {
-                        "type": "text",
-                        "text": f"Error processing file attachment {attachment.get('filename', 'unknown')}: {e!s}",
-                    }
-                )
+                # Log but don't fail
+                print(f"Failed to get MCP tools: {e}")
+        
+        return tools
 
-        return content_parts
-
-    async def _fetch_file_from_url(self, url: str) -> tuple[bytes, str]:
-        """
-        Fetch a file from a URL.
-
-        Args:
-            url: URL to fetch file from
-
-        Returns:
-            Tuple of (file_bytes, content_type)
-        """
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, follow_redirects=True)
-            response.raise_for_status()
-
-            content_type = response.headers.get("content-type", "application/octet-stream")
-            # Clean up content type (remove charset etc.)
-            if ";" in content_type:
-                content_type = content_type.split(";")[0].strip()
-
-            return response.content, content_type
-
-    async def _decode_base64_file(
-        self, base64_data: str, content_type: str | None = None
-    ) -> tuple[bytes, str]:
-        """
-        Decode base64 file data.
-
-        Args:
-            base64_data: Base64 encoded file data
-            content_type: Optional content type, will try to guess if not provided
-
-        Returns:
-            Tuple of (file_bytes, content_type)
-        """
-        try:
-            file_bytes = base64.b64decode(base64_data)
-            if not content_type:
-                # Try to guess content type from first few bytes (magic numbers)
-                content_type = self._guess_content_type_from_bytes(file_bytes)
-            return file_bytes, content_type
-        except Exception as e:
-            raise ValueError(f"Invalid base64 data: {e}")
-
-    def _guess_content_type_from_bytes(self, file_bytes: bytes) -> str:
-        """
-        Guess content type from file magic numbers.
-
-        Args:
-            file_bytes: Raw file bytes
-
-        Returns:
-            Guessed content type
-        """
-        if len(file_bytes) < 4:
-            return "application/octet-stream"
-
-        # Check common file signatures
-        if file_bytes.startswith(b"\x89PNG"):
-            return "image/png"
-        elif file_bytes.startswith(b"\xff\xd8\xff"):
-            return "image/jpeg"
-        elif file_bytes.startswith(b"GIF8"):
-            return "image/gif"
-        elif file_bytes.startswith(b"RIFF") and b"WEBP" in file_bytes[:12]:
-            return "image/webp"
-        elif file_bytes.startswith(b"%PDF"):
-            return "application/pdf"
-        elif file_bytes.startswith(b"PK\x03\x04"):
-            # ZIP-based formats (could be DOCX, etc.)
-            return "application/zip"
-        else:
-            return "application/octet-stream"
-
-    async def process_file_from_source(
+    async def _execute_tool(
         self,
-        source_type: str,
-        source_data: str,
-        filename: str = "unknown",
-        content_type: str | None = None,
-    ) -> dict[str, Any]:
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> Any:
         """
-        Process a file from different sources (upload, url, base64).
-
+        Execute a tool by name.
+        
         Args:
-            source_type: Type of source ("upload", "url", "base64")
-            source_data: Source-specific data:
-                - "upload": file path to read from storage
-                - "url": URL to fetch from
-                - "base64": base64 encoded file data
-            filename: Original filename
-            content_type: Optional content type hint
-
+            tool_name: Name of the tool to execute
+            arguments: Tool arguments
+            
         Returns:
-            File attachment dictionary ready for LLM processing
+            Tool execution result
         """
-        try:
-            if source_type == "upload":
-                # Read file from local storage
-                with open(source_data, "rb") as f:
-                    file_bytes = f.read()
-                if not content_type:
-                    content_type = get_file_mime_type(source_data)
-
-            elif source_type == "url":
-                # Fetch file from URL
-                file_bytes, detected_content_type = await self._fetch_file_from_url(source_data)
-                content_type = content_type or detected_content_type
-
-            elif source_type == "base64":
-                # Decode base64 data
-                file_bytes, detected_content_type = await self._decode_base64_file(
-                    source_data, content_type
-                )
-                content_type = content_type or detected_content_type
-
-            else:
-                raise ValueError(f"Unsupported source type: {source_type}")
-
-            return {
-                "type": "file",
-                "filename": filename,
-                "content_type": content_type,
-                "data": file_bytes,
-                "source_type": source_type,
-                "source_data": source_data,
-            }
-
-        except Exception as e:
-            raise ValueError(f"Failed to process file from {source_type}: {e}")
+        # Check if it's a registered tool
+        if tool_name in self.registered_tools:
+            tool_def = self.registered_tools[tool_name]
+            return await tool_def.handler(**arguments)
+        
+        # Check if it's an MCP tool
+        if tool_name.startswith("mcp_") and self.mcp_client:
+            actual_name = tool_name[4:]  # Remove "mcp_" prefix
+            return await self.mcp_client.call_tool(actual_name, arguments)
+        
+        raise ValueError(f"Unknown tool: {tool_name}")
 
     async def chat(
         self,
@@ -380,444 +207,180 @@ class EnhancedLLM:
         user_id: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        stream: bool = False,
         **kwargs,
     ) -> LLMResponse:
         """
         Send a conversation to the enhanced LLM and get a response.
-
-        This is the main interface that modules use - it's compatible with
-        regular LLM interfaces but adds tool execution capabilities.
-
+        
+        This method is compatible with the standard LLMRing interface.
+        
         Args:
-            messages: List of conversation messages (system, user, assistant)
-            user_id: User ID for tracking (uses default if not provided)
-            temperature: LLM temperature (optional)
-            max_tokens: Maximum tokens to generate (optional)
-            **kwargs: Additional parameters passed to LLM
-
+            messages: List of conversation messages
+            user_id: User ID for tracking
+            temperature: LLM temperature
+            max_tokens: Maximum tokens to generate
+            stream: Whether to stream the response
+            **kwargs: Additional parameters
+            
         Returns:
             LLMResponse with content and usage information
-
-        Example:
-            response = await enhanced_llm.chat([
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Calculate 15 * 23 and tell me about it."}
-            ])
         """
-        user_id = user_id or self.default_user_id
-
-        # Convert dict messages to Message objects and process file attachments
-        normalized_messages = []
+        # Convert messages to Message objects if needed
+        formatted_messages = []
         for msg in messages:
             if isinstance(msg, dict):
-                # Check for file attachments in this message
-                if "attachments" in msg:
-                    attachments = msg.pop("attachments")  # Remove from message dict
-
-                    # Process the file attachments
-                    file_content_parts = await self._process_file_attachments(attachments)
-
-                    # If we have file attachments, modify the message content
-                    if file_content_parts:
-                        original_content = msg.get("content", "")
-
-                        # Create structured content with text and file attachments
-                        if isinstance(original_content, str):
-                            # Start with text content
-                            content_parts = (
-                                [{"type": "text", "text": original_content}]
-                                if original_content
-                                else []
-                            )
-                            # Add file content parts
-                            content_parts.extend(file_content_parts)
-                            msg["content"] = content_parts
-                        elif isinstance(original_content, list):
-                            # Content is already structured, append file parts
-                            msg["content"] = original_content + file_content_parts
-
-                # Create Message object (without attachments field)
-                normalized_messages.append(Message(**msg))
+                formatted_messages.append(Message(**msg))
             else:
-                normalized_messages.append(msg)
-
-        # Prepare tools for LLM (both registered tools and MCP tools)
-        tools = await self._prepare_tools()
-
+                formatted_messages.append(msg)
+        
+        # Get available tools
+        tools = await self._get_available_tools()
+        
         # Create LLM request
         request = LLMRequest(
-            messages=normalized_messages,
             model=self.llm_model,
-            tools=tools,
+            messages=formatted_messages,
             temperature=temperature,
             max_tokens=max_tokens,
+            tools=tools if tools else None,
+            tool_choice="auto" if tools else None,
+            user_id=user_id or self.default_user_id,
             **kwargs,
         )
-
-        # Get initial LLM response
+        
+        # Send to LLM
         response = await self.llmring.chat(request)
-
+        
         # Handle tool calls if present
         if response.tool_calls:
-            # Execute tools and continue conversation
-            response = await self._handle_tool_calls(
-                normalized_messages,
-                response,
-                user_id,
-                temperature,
-                max_tokens,
+            # Execute tool calls
+            tool_results = []
+            for tool_call in response.tool_calls:
+                try:
+                    result = await self._execute_tool(
+                        tool_call["function"]["name"],
+                        json.loads(tool_call["function"]["arguments"]),
+                    )
+                    tool_results.append({
+                        "tool_call_id": tool_call["id"],
+                        "content": json.dumps(result) if not isinstance(result, str) else result,
+                    })
+                except Exception as e:
+                    tool_results.append({
+                        "tool_call_id": tool_call["id"],
+                        "content": f"Error executing tool: {e}",
+                    })
+            
+            # Add tool results to messages and get final response
+            formatted_messages.append(Message(
+                role="assistant",
+                content=response.content or "",
+                tool_calls=response.tool_calls,
+            ))
+            
+            for tool_result in tool_results:
+                formatted_messages.append(Message(
+                    role="tool",
+                    content=tool_result["content"],
+                    tool_call_id=tool_result["tool_call_id"],
+                ))
+            
+            # Get final response after tool execution
+            final_request = LLMRequest(
+                model=self.llm_model,
+                messages=formatted_messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                user_id=user_id or self.default_user_id,
                 **kwargs,
             )
-
+            response = await self.llmring.chat(final_request)
+        
+        # Store in conversation history if we have a conversation
+        if self.current_conversation_id:
+            try:
+                await self.conversation_manager.add_message(
+                    conversation_id=self.current_conversation_id,
+                    user_id=user_id or self.default_user_id,
+                    role="assistant",
+                    content=response.content or "",
+                    metadata={
+                        "model": self.llm_model,
+                        "usage": response.usage,
+                    },
+                )
+            except Exception as e:
+                # Log but don't fail
+                print(f"Failed to store message: {e}")
+        
         return response
 
-    async def _prepare_tools(self) -> list[dict[str, Any]]:
-        """Prepare tool definitions for the LLM."""
-        tools = []
-
-        # Add registered tools
-        for tool in self.registered_tools.values():
-            tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "parameters": tool.parameters,
-                    },
-                }
-            )
-
-        # Add MCP server tools if available
-        if self.mcp_client:
-            try:
-                # Get tools from MCP server
-                await self.mcp_client.connect()
-                mcp_tools = await self.mcp_client.list_tools()
-
-                for mcp_tool in mcp_tools.tools:
-                    tools.append(
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": f"mcp_{mcp_tool.name}",  # Prefix to avoid conflicts
-                                "description": mcp_tool.description
-                                or f"MCP tool: {mcp_tool.name}",
-                                "parameters": mcp_tool.inputSchema
-                                or {"type": "object", "properties": {}},
-                            },
-                        }
-                    )
-            except Exception:
-                # MCP server not available, continue without MCP tools
-                pass
-
-        return tools
-
-    async def _handle_tool_calls(
+    async def create_conversation(
         self,
-        original_messages: list[Message],
-        initial_response: LLMResponse,
-        user_id: str,
-        temperature: float | None,
-        max_tokens: int | None,
-        **kwargs,
-    ) -> LLMResponse:
-        """Handle tool calls and continue the conversation."""
-
-        # Execute all requested tools
-        tool_results = []
-        for tool_call in initial_response.tool_calls:
-            tool_name = tool_call["function"]["name"]
-            arguments = json.loads(tool_call["function"]["arguments"])
-
-            try:
-                # Check if it's a registered tool
-                if tool_name in self.registered_tools:
-                    result = await self._execute_registered_tool(tool_name, arguments)
-                elif tool_name.startswith("mcp_") and self.mcp_client:
-                    # MCP tool (remove prefix)
-                    mcp_tool_name = tool_name[4:]  # Remove "mcp_" prefix
-                    result = await self._execute_mcp_tool(mcp_tool_name, arguments)
-                else:
-                    result = {"error": f"Unknown tool: {tool_name}"}
-
-                tool_results.append({"tool_call_id": tool_call["id"], "result": result})
-
-            except Exception as e:
-                tool_results.append({"tool_call_id": tool_call["id"], "result": {"error": str(e)}})
-
-        # Build new conversation with tool results
-        new_messages = original_messages.copy()
-
-        # Add assistant message with tool calls
-        # Note: For now, we'll just include the content and handle tool results directly
-        # The LLM service will handle the tool call formatting internally
-        new_messages.append(
-            Message(
-                role="assistant",
-                content=initial_response.content or "I'll help you with that.",
-            )
-        )
-
-        # Add tool result messages as user messages with context
-        tool_results_text = []
-        for tool_result in tool_results:
-            result_data = tool_result["result"]
-            if "result" in result_data:
-                tool_results_text.append(f"Tool result: {result_data['result']}")
-            elif "error" in result_data:
-                tool_results_text.append(f"Tool error: {result_data['error']}")
-
-        if tool_results_text:
-            combined_results = "\\n".join(tool_results_text)
-            new_messages.append(
-                Message(
-                    role="user",
-                    content=f"Based on the tool results: {combined_results}\\n\\nPlease provide a comprehensive response to my original question.",
-                )
-            )
-
-        # Get final response from LLM
-        final_request = LLMRequest(
-            messages=new_messages,
+        title: str | None = None,
+        system_prompt: str | None = None,
+        user_id: str | None = None,
+    ) -> str:
+        """
+        Create a new conversation.
+        
+        Args:
+            title: Conversation title
+            system_prompt: System prompt
+            user_id: User ID
+            
+        Returns:
+            Conversation ID
+        """
+        conversation_id = await self.conversation_manager.create_conversation(
+            user_id=user_id or self.default_user_id,
+            title=title,
+            system_prompt=system_prompt,
             model=self.llm_model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            **kwargs,
         )
+        self.current_conversation_id = conversation_id
+        return conversation_id
 
-        final_response = await self.llmring.chat(final_request)
-
-        # Combine usage statistics
-        if hasattr(initial_response, "usage") and hasattr(final_response, "usage"):
-            final_response.usage = {
-                "prompt_tokens": initial_response.usage.get("prompt_tokens", 0)
-                + final_response.usage.get("prompt_tokens", 0),
-                "completion_tokens": initial_response.usage.get("completion_tokens", 0)
-                + final_response.usage.get("completion_tokens", 0),
-                "total_tokens": initial_response.usage.get("total_tokens", 0)
-                + final_response.usage.get("total_tokens", 0),
-            }
-
-        return final_response
-
-    async def _execute_registered_tool(
-        self, tool_name: str, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Execute a registered tool."""
-        tool = self.registered_tools[tool_name]
-
-        try:
-            # Call the tool handler
-            if asyncio.iscoroutinefunction(tool.handler):
-                result = await tool.handler(**arguments)
-            else:
-                result = tool.handler(**arguments)
-
-            return {"result": result, "status": "success"}
-        except Exception as e:
-            return {"error": str(e), "status": "error"}
-
-    async def _execute_mcp_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Execute an MCP server tool."""
-        try:
-            result = await self.mcp_client.call_tool(tool_name, arguments)
-            return {"result": result.content, "status": "success"}
-        except Exception as e:
-            return {"error": str(e), "status": "error"}
-
-    async def get_usage_stats(
-        self, user_id: str | None = None, days: int = 30
-    ) -> dict[str, Any] | None:
+    async def load_conversation(
+        self,
+        conversation_id: str,
+        user_id: str | None = None,
+    ) -> None:
         """
-        Get usage statistics for the enhanced LLM.
-
+        Load an existing conversation.
+        
         Args:
-            user_id: User ID to get stats for (uses default if not provided)
-            days: Number of days to look back
-
-        Returns:
-            Usage statistics or None if not available
+            conversation_id: Conversation ID to load
+            user_id: User ID for verification
         """
-        user_id = user_id or self.default_user_id
+        conversation = await self.conversation_manager.get_conversation(
+            conversation_id=conversation_id,
+            user_id=user_id or self.default_user_id,
+        )
+        
+        if conversation:
+            self.current_conversation_id = conversation_id
+            self.conversation_history = conversation.messages
+        else:
+            raise ValueError(f"Conversation {conversation_id} not found")
 
-        # LLMRing doesn't have get_usage_stats method
-        # This would need to be implemented via llmring-server HTTP endpoints
-        # For now, return a placeholder response
-        return {
-            "total_calls": 0,
-            "total_tokens": 0, 
-            "total_cost": 0.0,
-            "avg_cost_per_call": 0.0,
-            "most_used_model": None,
-            "success_rate": 100.0,
-            "avg_response_time_ms": 0,
-            "period_days": days,
-            "user_id": user_id,
-            "note": "Usage stats not yet implemented via HTTP endpoints"
-        }
-
-    async def close(self) -> None:
-        """Clean up resources."""
-        if self.llmring:
-            await self.llmring.close()
-        if self.mcp_client:
-            await self.mcp_client.disconnect()
-
-    # Transparency and Information Methods
-
-    def get_available_providers(self) -> list[dict[str, Any]]:
+    async def list_conversations(
+        self,
+        user_id: str | None = None,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
         """
-        Get information about all available LLM providers.
-
-        Returns:
-            List of provider information dictionaries
-        """
-        providers = self.info_service.get_available_providers()
-        return [self.info_service.to_dict(provider) for provider in providers]
-
-    def get_models_for_provider(self, provider: str) -> list[dict[str, Any]]:
-        """
-        Get detailed information about models for a specific provider.
-
+        List recent conversations.
+        
         Args:
-            provider: Provider name (e.g., 'anthropic', 'openai')
-
+            user_id: User ID
+            limit: Maximum number of conversations
+            
         Returns:
-            List of model information dictionaries
+            List of conversation summaries
         """
-        models = self.info_service.get_models_for_provider(provider)
-        return [self.info_service.to_dict(model) for model in models]
-
-    def get_model_cost_info(self, model_identifier: str) -> dict[str, Any] | None:
-        """
-        Get cost information for a specific model.
-
-        Args:
-            model_identifier: Either "provider:model" or just "model"
-
-        Returns:
-            Dictionary with cost information or None if not found
-        """
-        return self.info_service.get_model_cost_info(model_identifier)
-
-    async def get_enhanced_usage_stats(
-        self, user_id: str | None = None, days: int = 30
-    ) -> dict[str, Any] | None:
-        """
-        Get comprehensive usage statistics including tool usage.
-
-        Args:
-            user_id: User ID to get stats for (uses default if not provided)
-            days: Number of days to look back
-
-        Returns:
-            Comprehensive usage statistics or None if not available
-        """
-        user_id = user_id or self.default_user_id
-        # info_service.get_usage_stats is synchronous; call directly
-        usage_stats = self.info_service.get_usage_stats(user_id, days=days)
-
-        if usage_stats:
-            stats_dict = self.info_service.to_dict(usage_stats)
-            # Add enhanced LLM specific information
-            stats_dict["enhanced_llm_info"] = {
-                "registered_tools_count": len(self.registered_tools),
-                "mcp_server_connected": self.mcp_client is not None,
-                "origin": self.origin,
-                "default_model": self.llm_model,
-            }
-            return stats_dict
-
-        return None
-
-    def get_data_storage_info(self) -> dict[str, Any]:
-        """
-        Get comprehensive information about what data is stored where.
-
-        Returns:
-            Dictionary describing all data storage locations and policies
-        """
-        storage_info = self.info_service.get_data_storage_info()
-        return self.info_service.to_dict(storage_info)
-
-    def get_user_data_summary(self, user_id: str | None = None) -> dict[str, Any]:
-        """
-        Get a summary of all data stored for a specific user.
-
-        Args:
-            user_id: User identifier (uses default if not provided)
-
-        Returns:
-            Dictionary summarizing all stored user data
-        """
-        user_id = user_id or self.default_user_id
-        return self.info_service.get_user_data_summary(user_id)
-
-    async def get_transparency_report(self, user_id: str | None = None) -> dict[str, Any]:
-        """
-        Get a comprehensive transparency report for a user.
-
-        Args:
-            user_id: User identifier (uses default if not provided)
-
-        Returns:
-            Complete transparency report including all information
-        """
-        user_id = user_id or self.default_user_id
-
-        return {
-            "user_id": user_id,
-            "generated_at": datetime.now().isoformat(),
-            "enhanced_llm_config": {
-                "origin": self.origin,
-                "default_model": self.llm_model,
-                "registered_tools": [
-                    {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "module_name": tool.module_name,
-                    }
-                    for tool in self.registered_tools.values()
-                ],
-                "mcp_server_connected": self.mcp_client is not None,
-            },
-            "available_providers": self.get_available_providers(),
-            "usage_statistics": await self.get_enhanced_usage_stats(user_id),
-            "data_storage": self.get_data_storage_info(),
-            "user_data_summary": self.get_user_data_summary(user_id),
-        }
-
-
-# Convenience function for quick setup
-def create_enhanced_llm(
-    llm_model: str = "anthropic:claude-3-haiku-20240307",
-    llmring_server_url: str | None = None,
-    mcp_server_url: str | None = None,
-    origin: str = "enhanced-llm",
-    user_id: str | None = None,
-    api_key: str | None = None,
-) -> EnhancedLLM:
-    """
-    Create an Enhanced LLM instance with sensible defaults.
-
-    Args:
-        llm_model: The LLM model to use
-        llmring_server_url: Optional LLMRing server URL for persistence
-        mcp_server_url: Optional MCP server for additional tools
-        origin: Origin identifier for usage tracking
-        user_id: Default user ID
-        api_key: Optional API key for LLMRing server
-
-    Returns:
-        Configured EnhancedLLM instance
-    """
-    return EnhancedLLM(
-        llm_model=llm_model,
-        llmring_server_url=llmring_server_url,
-        mcp_server_url=mcp_server_url,
-        origin=origin,
-        user_id=user_id,
-        api_key=api_key,
-    )
+        return await self.conversation_manager.list_conversations(
+            user_id=user_id or self.default_user_id,
+            limit=limit,
+        )

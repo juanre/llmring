@@ -4,7 +4,7 @@ Extended LLM service with conversation support for MCP integration.
 
 import logging
 from typing import Any, Dict, List, Optional
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from llmring.schemas import LLMRequest, LLMResponse
 from llmring.server_client import ServerClient

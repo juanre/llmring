@@ -11,7 +11,7 @@ import asyncio
 import sys
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import logging
 
 from llmring.mcp.server.mcp_server import MCPServer

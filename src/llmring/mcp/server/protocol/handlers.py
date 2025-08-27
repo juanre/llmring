@@ -12,7 +12,7 @@ Implements handlers for all required MCP protocol methods including:
 
 import logging
 import base64
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional
 from types import SimpleNamespace
 from datetime import datetime, timezone
 

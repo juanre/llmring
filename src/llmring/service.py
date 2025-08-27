@@ -12,7 +12,7 @@ from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.providers.openai_api import OpenAIProvider
-from llmring.receipts import Receipt, ReceiptGenerator, ReceiptSigner
+from llmring.receipts import Receipt, ReceiptGenerator
 from llmring.registry import RegistryClient, RegistryModel
 from llmring.schemas import LLMRequest, LLMResponse
 

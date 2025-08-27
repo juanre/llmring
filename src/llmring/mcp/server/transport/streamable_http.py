@@ -20,7 +20,6 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Set, AsyncIterator, Callable, Union
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from collections import defaultdict
 from enum import Enum
 
 from llmring.mcp.server.transport.base import Transport, JSONRPCMessage

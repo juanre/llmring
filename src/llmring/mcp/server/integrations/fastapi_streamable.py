@@ -4,13 +4,11 @@ FastAPI integration for MCP Streamable HTTP transport.
 This module provides a FastAPI-specific implementation of the Streamable HTTP transport.
 """
 
-import json
 from typing import Dict, Any, Optional
 from fastapi import FastAPI, Request, Response, Header, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
-from starlette.background import BackgroundTask
 
-from llmring.mcp.server.transport.streamable_http import StreamableHTTPTransport, ResponseMode
+from llmring.mcp.server.transport.streamable_http import StreamableHTTPTransport
 
 
 class FastAPIStreamableTransport(StreamableHTTPTransport):
