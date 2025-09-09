@@ -647,17 +647,22 @@ class LLMRing:
             # Can't validate without limits
             return None
 
-        # Calculate approximate token count for input
-        # This is a rough estimate - providers have their own tokenizers
-        estimated_input_tokens = 0
+        # Calculate token count for input using proper tokenization
+        from llmring.token_counter import count_tokens
+        
+        # Convert messages to dict format for token counting
+        message_dicts = []
         for message in request.messages:
+            msg_dict = {"role": message.role}
             if isinstance(message.content, str):
-                # Rough estimate: 1 token per 4 characters
-                estimated_input_tokens += len(message.content) // 4
+                msg_dict["content"] = message.content
             elif isinstance(message.content, list):
-                for part in message.content:
-                    if isinstance(part, dict) and part.get("type") == "text":
-                        estimated_input_tokens += len(part.get("text", "")) // 4
+                msg_dict["content"] = message.content
+            else:
+                msg_dict["content"] = str(message.content)
+            message_dicts.append(msg_dict)
+        
+        estimated_input_tokens = count_tokens(message_dicts, provider_type, model_name)
 
         # Check input limit
         if estimated_input_tokens > registry_model.max_input_tokens:

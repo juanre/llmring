@@ -47,6 +47,7 @@ dependencies = [
     "tenacity>=9.1.2",
     "websockets>=15.0.1",
     "typing-extensions>=4.14.1",
+    "tiktoken>=0.5.0",
 ]
 
 [project.urls]
