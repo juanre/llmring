@@ -213,35 +213,81 @@ async def cmd_chat(args):
         model=args.model,
         temperature=args.temperature,
         max_tokens=args.max_tokens,
+        stream=args.stream if hasattr(args, 'stream') else False,
     )
 
     try:
         # Send request
         response = await ring.chat(request)
 
-        # Display response
-        if args.json:
-            print(
-                json.dumps(
-                    {
-                        "content": response.content,
-                        "model": response.model,
-                        "usage": response.usage,
-                        "finish_reason": response.finish_reason,
-                    },
-                    indent=2,
-                )
-            )
-        else:
-            print(response.content)
-
-            if args.verbose and response.usage:
-                print(f"\n[Model: {response.model}]")
+        # Handle streaming response
+        if args.stream if hasattr(args, 'stream') else False:
+            # Stream response chunks
+            import sys
+            full_content = ""
+            accumulated_usage = None
+            
+            async for chunk in response:
+                if chunk.delta:
+                    if not args.json:
+                        # Print chunks as they arrive
+                        sys.stdout.write(chunk.delta)
+                        sys.stdout.flush()
+                    full_content += chunk.delta
+                
+                # Capture final usage stats
+                if chunk.usage:
+                    accumulated_usage = chunk.usage
+            
+            if args.json:
+                # For JSON output, collect all chunks first
                 print(
-                    f"[Tokens: {response.usage.get('prompt_tokens', 0)} in, {response.usage.get('completion_tokens', 0)} out]"
+                    json.dumps(
+                        {
+                            "content": full_content,
+                            "model": chunk.model if chunk and chunk.model else args.model,
+                            "usage": accumulated_usage,
+                            "finish_reason": chunk.finish_reason if chunk else None,
+                        },
+                        indent=2,
+                    )
                 )
-                if "cost" in response.usage:
-                    print(f"[Cost: ${response.usage['cost']:.6f}]")
+            else:
+                # Print newline after streaming
+                print()
+                
+                if args.verbose and accumulated_usage:
+                    print(f"\n[Model: {chunk.model if chunk and chunk.model else args.model}]")
+                    print(
+                        f"[Tokens: {accumulated_usage.get('prompt_tokens', 0)} in, {accumulated_usage.get('completion_tokens', 0)} out]"
+                    )
+                    if "cost" in accumulated_usage:
+                        print(f"[Cost: ${accumulated_usage['cost']:.6f}]")
+        else:
+            # Non-streaming response (existing code)
+            # Display response
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "content": response.content,
+                            "model": response.model,
+                            "usage": response.usage,
+                            "finish_reason": response.finish_reason,
+                        },
+                        indent=2,
+                    )
+                )
+            else:
+                print(response.content)
+
+                if args.verbose and response.usage:
+                    print(f"\n[Model: {response.model}]")
+                    print(
+                        f"[Tokens: {response.usage.get('prompt_tokens', 0)} in, {response.usage.get('completion_tokens', 0)} out]"
+                    )
+                    if "cost" in response.usage:
+                        print(f"[Cost: ${response.usage['cost']:.6f}]")
 
     except Exception as e:
         print(f"Error: {e}")
@@ -506,6 +552,9 @@ def main():
         "--verbose", action="store_true", help="Show additional information"
     )
     chat_parser.add_argument("--profile", help="Profile to use for alias resolution")
+    chat_parser.add_argument(
+        "--stream", action="store_true", help="Stream response in real-time"
+    )
 
     # Info command
     info_parser = subparsers.add_parser("info", help="Show model information")
