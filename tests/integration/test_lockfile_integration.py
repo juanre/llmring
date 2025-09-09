@@ -128,9 +128,12 @@ class TestLockfileIntegration:
         assert error is None
 
         # Create request exceeding limits
-        # Token estimation is roughly 1 token per 4 characters
-        # So for 128k token limit, we need more than 512k characters
-        huge_message = "x" * 600_000  # ~150k tokens, way over 128k limit
+        # Need to create a message that actually exceeds 128k tokens
+        # Repeating patterns compress well in tokenization, so we need varied content
+        import string
+        # Create a varied message that won't compress well
+        varied_text = ''.join([string.ascii_letters[i % 52] + str(i % 10) for i in range(550_000)])
+        huge_message = varied_text  # This should tokenize to ~137k tokens
         request_huge = LLMRequest(
             model="openai:gpt-4o-mini",
             messages=[Message(role="user", content=huge_message)],

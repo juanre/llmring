@@ -56,6 +56,14 @@ class TestBaseLLMProvider:
 
             def get_default_model(self):
                 return "test-model"
+            
+            async def get_capabilities(self):
+                from llmring.base import ProviderCapabilities
+                return ProviderCapabilities(
+                    provider_name="test",
+                    supported_models=["test-model"],
+                    supports_streaming=False
+                )
 
         provider = CompleteProvider(api_key="test-key")
         assert provider.api_key == "test-key"
@@ -84,6 +92,14 @@ class TestBaseLLMProvider:
 
             def get_default_model(self):
                 return "model-1"
+            
+            async def get_capabilities(self):
+                from llmring.base import ProviderCapabilities
+                return ProviderCapabilities(
+                    provider_name="test",
+                    supported_models=self.get_supported_models(),
+                    supports_streaming=False
+                )
 
         provider = TestProvider()
         assert provider.get_default_model() == "model-1"
@@ -111,6 +127,14 @@ class TestBaseLLMProvider:
 
             def get_default_model(self):
                 return "default"
+            
+            async def get_capabilities(self):
+                from llmring.base import ProviderCapabilities
+                return ProviderCapabilities(
+                    provider_name="test",
+                    supported_models=[],
+                    supports_streaming=False
+                )
 
         provider = EmptyProvider()
         assert provider.get_default_model() == "default"
