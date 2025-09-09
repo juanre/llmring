@@ -11,7 +11,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from google import genai
 from google.genai import types
 
-from llmring.base import BaseLLMProvider, ProviderCapabilities
+from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
 from llmring.net.circuit_breaker import CircuitBreaker
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
@@ -38,22 +38,33 @@ class GoogleProvider(BaseLLMProvider):
             project_id: Google Cloud project ID (optional, for some use cases)
             model: Default model to use
         """
-        super().__init__(api_key=api_key, base_url=base_url)
-        self.api_key = (
+        # Get API key from parameter or environment
+        api_key = (
             api_key
             or os.environ.get("GEMINI_API_KEY", "")
             or os.environ.get("GOOGLE_API_KEY", "")
         )
-        self.project_id = project_id or os.environ.get("GOOGLE_PROJECT_ID", "")
-        self.default_model = model
-
-        if not self.api_key:
+        if not api_key:
             raise ValueError(
                 "Google API key must be provided (GEMINI_API_KEY or GOOGLE_API_KEY)"
             )
+            
+        # Create config for base class
+        config = ProviderConfig(
+            api_key=api_key,
+            base_url=base_url,
+            default_model=model,
+            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+        )
+        super().__init__(config)
+        
+        # Store for backward compatibility
+        self.api_key = api_key
+        self.project_id = project_id or os.environ.get("GOOGLE_PROJECT_ID", "")
+        self.default_model = model
 
         # Initialize the client
-        self.client = genai.Client(api_key=self.api_key)
+        self.client = genai.Client(api_key=api_key)
 
         # List of officially supported models
         self.supported_models = [

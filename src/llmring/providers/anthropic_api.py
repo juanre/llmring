@@ -11,7 +11,7 @@ from anthropic import AsyncAnthropic
 from anthropic.types import Message as AnthropicMessage
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
-from llmring.base import BaseLLMProvider, ProviderCapabilities
+from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.schemas import LLMResponse, Message, StreamChunk
@@ -34,19 +34,26 @@ class AnthropicProvider(BaseLLMProvider):
             base_url: Optional base URL for the API
             model: Default model to use
         """
-        super().__init__(api_key=api_key)
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        # Get API key from parameter or environment
+        api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            raise ValueError("Anthropic API key must be provided")
+            
+        # Create config for base class
+        config = ProviderConfig(
+            api_key=api_key,
+            base_url=base_url,
+            default_model=model,
+            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+        )
+        super().__init__(config)
+        
+        # Store for backward compatibility
+        self.api_key = api_key
         self.default_model = model
 
-        if not self.api_key:
-            raise ValueError("Anthropic API key must be provided")
-
         # Initialize the client with the SDK
-        client_kwargs = {"api_key": self.api_key}
-        if base_url:
-            client_kwargs["base_url"] = base_url
-
-        self.client = AsyncAnthropic(api_key=self.api_key, base_url=base_url)
+        self.client = AsyncAnthropic(api_key=api_key, base_url=base_url)
 
         # List of officially supported models
         self.supported_models = [

@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from ollama import AsyncClient, ResponseError
 
-from llmring.base import BaseLLMProvider, ProviderCapabilities
+from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.schemas import LLMResponse, Message, StreamChunk
@@ -35,14 +35,26 @@ class OllamaProvider(BaseLLMProvider):
             base_url: Base URL for the Ollama API server
             model: Default model to use
         """
-        super().__init__(api_key=None, base_url=base_url)
-        self.base_url = base_url or os.environ.get(
+        # Get base URL from parameter or environment
+        base_url = base_url or os.environ.get(
             "OLLAMA_BASE_URL", "http://localhost:11434"
         )
+        
+        # Create config for base class (no API key needed for Ollama)
+        config = ProviderConfig(
+            api_key=None,
+            base_url=base_url,
+            default_model=model,
+            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+        )
+        super().__init__(config)
+        
+        # Store for backward compatibility
+        self.base_url = base_url
         self.default_model = model
 
         # Initialize the client with the SDK
-        self.client = AsyncClient(host=self.base_url)
+        self.client = AsyncClient(host=base_url)
 
         # List of commonly supported models
         self.supported_models = [

@@ -12,7 +12,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 
-from llmring.base import BaseLLMProvider, ProviderCapabilities
+from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 
@@ -39,15 +39,26 @@ class OpenAIProvider(BaseLLMProvider):
             base_url: Optional base URL for the API
             model: Default model to use
         """
-        super().__init__(api_key=api_key, base_url=base_url)
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
+        # Get API key from parameter or environment
+        api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
+        if not api_key:
+            raise ValueError("OpenAI API key must be provided")
+            
+        # Create config for base class
+        config = ProviderConfig(
+            api_key=api_key,
+            base_url=base_url,
+            default_model=model,
+            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+        )
+        super().__init__(config)
+        
+        # Store for backward compatibility
+        self.api_key = api_key
         self.default_model = model
 
-        if not self.api_key:
-            raise ValueError("OpenAI API key must be provided")
-
         # Initialize the client with the SDK
-        self.client = AsyncOpenAI(api_key=self.api_key, base_url=base_url)
+        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
         # List of officially supported models (as of early 2025)
         self.supported_models = [
