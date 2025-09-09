@@ -4,7 +4,7 @@ LLM service that manages providers and routes requests.
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from llmring.base import BaseLLMProvider
 from llmring.lockfile import Lockfile
@@ -14,7 +14,7 @@ from llmring.providers.ollama_api import OllamaProvider
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.receipts import Receipt, ReceiptGenerator
 from llmring.registry import RegistryClient, RegistryModel
-from llmring.schemas import LLMRequest, LLMResponse
+from llmring.schemas import LLMRequest, LLMResponse, StreamChunk
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +202,7 @@ class LLMRing:
 
     async def chat(
         self, request: LLMRequest, profile: Optional[str] = None
-    ) -> LLMResponse:
+    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the appropriate provider.
 
@@ -211,7 +211,7 @@ class LLMRing:
             profile: Optional profile name for alias resolution
 
         Returns:
-            LLM response with cost information if available
+            LLM response or async iterator of stream chunks if streaming
         """
         # Store original alias for receipt
         original_alias = request.model or ""
@@ -243,7 +243,19 @@ class LLMRing:
             logger.warning(f"Context validation warning: {validation_error}")
             # We log but don't block - let the provider handle it
 
-        # Send request to provider
+        # Check if streaming is requested
+        if request.stream:
+            # For streaming, we need to wrap the stream to handle receipts
+            return self._create_streaming_wrapper(
+                provider=provider,
+                model_name=model_name,
+                request=request,
+                provider_type=provider_type,
+                original_alias=original_alias,
+                profile=profile
+            )
+        
+        # Send non-streaming request to provider
         response = await provider.chat(
             messages=request.messages,
             model=model_name,
@@ -252,6 +264,7 @@ class LLMRing:
             response_format=request.response_format,
             tools=request.tools,
             tool_choice=request.tool_choice,
+            stream=False,
         )
 
         # Calculate and add cost information if available
@@ -312,6 +325,107 @@ class LLMRing:
 
         return response
 
+    async def _create_streaming_wrapper(
+        self,
+        provider: BaseLLMProvider,
+        model_name: str,
+        request: LLMRequest,
+        provider_type: str,
+        original_alias: str,
+        profile: Optional[str] = None
+    ) -> AsyncIterator[StreamChunk]:
+        """
+        Create a streaming wrapper that handles receipts and cost calculation.
+        
+        Args:
+            provider: The provider instance
+            model_name: The model name
+            request: The original request
+            provider_type: Type of provider (openai, anthropic, etc.)
+            original_alias: Original alias used in request
+            profile: Optional profile name
+            
+        Yields:
+            Stream chunks from the provider with receipt handling
+        """
+        # Get the stream from provider
+        stream = await provider.chat(
+            messages=request.messages,
+            model=model_name,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            response_format=request.response_format,
+            tools=request.tools,
+            tool_choice=request.tool_choice,
+            stream=True,
+        )
+        
+        # Track usage for receipt generation
+        accumulated_usage = None
+        
+        # Stream chunks to client
+        async for chunk in stream:
+            # If this chunk has usage info, store it
+            if chunk.usage:
+                accumulated_usage = chunk.usage
+                
+            # Yield the chunk to client
+            yield chunk
+        
+        # After streaming completes, generate receipt if we have usage
+        if accumulated_usage and self.lockfile:
+            try:
+                # Calculate cost if possible
+                cost_info = None
+                if accumulated_usage:
+                    # Create a temporary response object for cost calculation
+                    temp_response = LLMResponse(
+                        content="",
+                        model=f"{provider_type}:{model_name}",
+                        usage=accumulated_usage,
+                        finish_reason="stop"
+                    )
+                    cost_info = await self.calculate_cost(temp_response)
+                
+                # Initialize receipt generator if needed
+                if not self.receipt_generator:
+                    self.receipt_generator = ReceiptGenerator()
+                
+                # Calculate lockfile digest
+                lock_digest = self.lockfile.calculate_digest()
+                
+                # Determine profile used
+                profile_name = (
+                    profile
+                    or os.getenv("LLMRING_PROFILE")
+                    or self.lockfile.default_profile
+                )
+                
+                # Generate receipt
+                receipt = self.receipt_generator.generate_receipt(
+                    alias=(
+                        original_alias if ":" not in original_alias else "direct_model"
+                    ),
+                    profile=profile_name,
+                    lock_digest=lock_digest,
+                    provider=provider_type,
+                    model=model_name,
+                    usage=accumulated_usage,
+                    costs=(
+                        cost_info
+                        if cost_info
+                        else {"input_cost": 0.0, "output_cost": 0.0, "total_cost": 0.0}
+                    ),
+                )
+                
+                # Store receipt locally
+                self.receipts.append(receipt)
+                logger.debug(
+                    f"Generated receipt {receipt.receipt_id} for streaming {provider_type}:{model_name}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to generate receipt for streaming: {e}")
+
     async def chat_with_alias(
         self,
         alias_or_model: str,
@@ -319,8 +433,9 @@ class LLMRing:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         profile: Optional[str] = None,
+        stream: Optional[bool] = False,
         **kwargs,
-    ) -> LLMResponse:
+    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Convenience method to chat using an alias or model string.
 
@@ -330,10 +445,11 @@ class LLMRing:
             temperature: Optional temperature
             max_tokens: Optional max tokens
             profile: Optional profile for alias resolution
+            stream: Whether to stream the response
             **kwargs: Additional parameters for the request
 
         Returns:
-            LLM response
+            LLM response or async iterator of stream chunks if streaming
         """
         # Resolve alias
         model = self.resolve_alias(alias_or_model, profile)
@@ -346,6 +462,7 @@ class LLMRing:
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
+            stream=stream,
             **kwargs,
         )
 
