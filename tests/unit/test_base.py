@@ -36,7 +36,9 @@ class TestBaseLLMProvider:
             """Complete provider implementation for testing."""
 
             def __init__(self, api_key=None, base_url=None):
-                super().__init__(api_key, base_url)
+                from llmring.base import ProviderConfig
+                config = ProviderConfig(api_key=api_key, base_url=base_url)
+                super().__init__(config)
 
             async def chat(self, messages, model, **kwargs):
                 return LLMResponse(
@@ -66,8 +68,8 @@ class TestBaseLLMProvider:
                 )
 
         provider = CompleteProvider(api_key="test-key")
-        assert provider.api_key == "test-key"
-        assert provider.base_url is None
+        assert provider.config.api_key == "test-key"
+        assert provider.config.base_url is None
 
     def test_get_default_model_fallback(self):
         """Test that get_default_model falls back to first supported model."""
@@ -76,7 +78,9 @@ class TestBaseLLMProvider:
             """Test provider for default model testing."""
 
             def __init__(self):
-                super().__init__(api_key="test")
+                from llmring.base import ProviderConfig
+                config = ProviderConfig(api_key="test")
+                super().__init__(config)
 
             async def chat(self, messages, model, **kwargs):
                 return LLMResponse(content="test", model=model)
@@ -111,7 +115,9 @@ class TestBaseLLMProvider:
             """Provider with no supported models."""
 
             def __init__(self):
-                super().__init__(api_key="test")
+                from llmring.base import ProviderConfig
+                config = ProviderConfig(api_key="test")
+                super().__init__(config)
 
             async def chat(self, messages, model, **kwargs):
                 return LLMResponse(content="test", model=model)
