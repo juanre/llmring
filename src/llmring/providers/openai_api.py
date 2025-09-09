@@ -12,7 +12,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 
-from llmring.base import BaseLLMProvider
+from llmring.base import BaseLLMProvider, ProviderCapabilities
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 
@@ -96,6 +96,27 @@ class OpenAIProvider(BaseLLMProvider):
             Default model name
         """
         return self.default_model
+    
+    async def get_capabilities(self) -> ProviderCapabilities:
+        """
+        Get the capabilities of this provider.
+        
+        Returns:
+            Provider capabilities
+        """
+        return ProviderCapabilities(
+            provider_name="openai",
+            supported_models=self.supported_models.copy(),
+            supports_streaming=True,
+            supports_tools=True,
+            supports_vision=True,
+            supports_audio=True,  # GPT-4o models support audio
+            supports_documents=True,  # Via Responses API file_search
+            supports_json_mode=True,
+            supports_caching=False,  # OpenAI doesn't have native caching like Anthropic
+            max_context_window=128000,  # GPT-4o context window
+            default_model=self.default_model,
+        )
 
     def _contains_pdf_content(self, messages: List[Message]) -> bool:
         """

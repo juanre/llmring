@@ -11,7 +11,7 @@ from anthropic import AsyncAnthropic
 from anthropic.types import Message as AnthropicMessage
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
-from llmring.base import BaseLLMProvider
+from llmring.base import BaseLLMProvider, ProviderCapabilities
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.schemas import LLMResponse, Message, StreamChunk
@@ -120,6 +120,27 @@ class AnthropicProvider(BaseLLMProvider):
             Default model name
         """
         return self.default_model
+    
+    async def get_capabilities(self) -> ProviderCapabilities:
+        """
+        Get the capabilities of this provider.
+        
+        Returns:
+            Provider capabilities
+        """
+        return ProviderCapabilities(
+            provider_name="anthropic",
+            supported_models=self.supported_models.copy(),
+            supports_streaming=True,
+            supports_tools=True,
+            supports_vision=True,
+            supports_audio=False,
+            supports_documents=True,  # Native document support
+            supports_json_mode=False,  # No native JSON mode, but can be prompted
+            supports_caching=True,  # Anthropic has prompt caching
+            max_context_window=200000,  # Claude 3 models have 200K context
+            default_model=self.default_model,
+        )
 
     async def chat(
         self,

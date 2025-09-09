@@ -6,14 +6,14 @@ import asyncio
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from ollama import AsyncClient, ResponseError
 
-from llmring.base import BaseLLMProvider
+from llmring.base import BaseLLMProvider, ProviderCapabilities
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
-from llmring.schemas import LLMResponse, Message
+from llmring.schemas import LLMResponse, Message, StreamChunk
 
 
 class OllamaProvider(BaseLLMProvider):
@@ -127,6 +127,27 @@ class OllamaProvider(BaseLLMProvider):
             Default model name
         """
         return self.default_model
+    
+    async def get_capabilities(self) -> ProviderCapabilities:
+        """
+        Get the capabilities of this provider.
+        
+        Returns:
+            Provider capabilities
+        """
+        return ProviderCapabilities(
+            provider_name="ollama",
+            supported_models=self.supported_models.copy(),
+            supports_streaming=True,
+            supports_tools=False,  # Ollama doesn't support function calling yet
+            supports_vision=True,  # Some models like llava support vision
+            supports_audio=False,
+            supports_documents=False,
+            supports_json_mode=True,  # Via format parameter
+            supports_caching=False,
+            max_context_window=32768,  # Varies by model
+            default_model=self.default_model,
+        )
 
     def get_token_count(self, text: str) -> int:
         """
@@ -187,7 +208,8 @@ class OllamaProvider(BaseLLMProvider):
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-    ) -> LLMResponse:
+        stream: Optional[bool] = False,
+    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the Ollama API using the official SDK.
 
@@ -201,8 +223,55 @@ class OllamaProvider(BaseLLMProvider):
             tool_choice: Optional tool choice parameter (implemented through prompt engineering)
 
         Returns:
-            LLM response
+            LLM response or async iterator of stream chunks if streaming
         """
+        # For now, streaming is not fully implemented - fall back to non-streaming
+        if stream:
+            async def _single_chunk_stream():
+                response = await self._chat_non_streaming(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    response_format=response_format,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    json_response=json_response,
+                    cache=cache,
+                )
+                yield StreamChunk(
+                    delta=response.content,
+                    model=response.model,
+                    finish_reason=response.finish_reason,
+                    usage=response.usage,
+                )
+            return _single_chunk_stream()
+        
+        return await self._chat_non_streaming(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
+            json_response=json_response,
+            cache=cache,
+        )
+    
+    async def _chat_non_streaming(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+    ) -> LLMResponse:
+        """Non-streaming chat implementation."""
         # Strip provider prefix if present
         if model.lower().startswith("ollama:"):
             model = model.split(":", 1)[1]

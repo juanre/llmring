@@ -11,7 +11,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from google import genai
 from google.genai import types
 
-from llmring.base import BaseLLMProvider
+from llmring.base import BaseLLMProvider, ProviderCapabilities
 from llmring.net.circuit_breaker import CircuitBreaker
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
@@ -198,6 +198,27 @@ class GoogleProvider(BaseLLMProvider):
             Default model name
         """
         return self.default_model
+    
+    async def get_capabilities(self) -> ProviderCapabilities:
+        """
+        Get the capabilities of this provider.
+        
+        Returns:
+            Provider capabilities
+        """
+        return ProviderCapabilities(
+            provider_name="google",
+            supported_models=self.supported_models.copy(),
+            supports_streaming=True,
+            supports_tools=True,
+            supports_vision=True,
+            supports_audio=True,  # Gemini models support audio
+            supports_documents=True,  # Gemini models support PDFs
+            supports_json_mode=True,  # Via response_mime_type
+            supports_caching=False,
+            max_context_window=1000000,  # Gemini 1.5 Pro has 1M context
+            default_model=self.default_model,
+        )
 
     def get_token_count(self, text: str) -> int:
         """
