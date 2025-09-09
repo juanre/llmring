@@ -226,12 +226,20 @@ class LLMRing:
         provider = self.get_provider(provider_type)
 
         # Validate model if provider supports it
-        if hasattr(provider, "validate_model") and not provider.validate_model(
-            model_name
-        ):
-            raise ValueError(
-                f"Model '{model_name}' not supported by {provider_type} provider"
-            )
+        if hasattr(provider, "validate_model"):
+            # Check if it's a coroutine (async mock in tests)
+            import inspect
+            validate_result = provider.validate_model(model_name)
+            if inspect.iscoroutine(validate_result):
+                # In tests with async mocks, we need to await
+                valid = await validate_result
+            else:
+                valid = validate_result
+                
+            if not valid:
+                raise ValueError(
+                    f"Model '{model_name}' not supported by {provider_type} provider"
+                )
 
         # If no model specified, use provider's default
         if not model_name and hasattr(provider, "get_default_model"):
@@ -648,21 +656,32 @@ class LLMRing:
             return None
 
         # Calculate token count for input using proper tokenization
-        from llmring.token_counter import count_tokens
+        # First do a quick character-based check to avoid expensive tokenization for obviously too-large inputs
+        total_chars = sum(
+            len(message.content) if isinstance(message.content, str) else 
+            len(str(message.content)) for message in request.messages
+        )
         
-        # Convert messages to dict format for token counting
-        message_dicts = []
-        for message in request.messages:
-            msg_dict = {"role": message.role}
-            if isinstance(message.content, str):
-                msg_dict["content"] = message.content
-            elif isinstance(message.content, list):
-                msg_dict["content"] = message.content
-            else:
-                msg_dict["content"] = str(message.content)
-            message_dicts.append(msg_dict)
-        
-        estimated_input_tokens = count_tokens(message_dicts, provider_type, model_name)
+        # If we have way more characters than could possibly fit (assuming worst case 1 char = 1 token)
+        # Skip expensive tokenization
+        if total_chars > registry_model.max_input_tokens * 2:
+            estimated_input_tokens = total_chars  # Use char count as rough estimate
+        else:
+            from llmring.token_counter import count_tokens
+            
+            # Convert messages to dict format for token counting
+            message_dicts = []
+            for message in request.messages:
+                msg_dict = {"role": message.role}
+                if isinstance(message.content, str):
+                    msg_dict["content"] = message.content
+                elif isinstance(message.content, list):
+                    msg_dict["content"] = message.content
+                else:
+                    msg_dict["content"] = str(message.content)
+                message_dicts.append(msg_dict)
+            
+            estimated_input_tokens = count_tokens(message_dicts, provider_type, model_name)
 
         # Check input limit
         if estimated_input_tokens > registry_model.max_input_tokens:

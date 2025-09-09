@@ -197,9 +197,11 @@ class TestServiceWithRegistry:
         assert error is None  # No error, within limits
 
         # Create request exceeding limits
-        huge_content = "x" * 600000  # ~150K tokens (rough estimate)
+        # Create varied content that will exceed 128k token limit
+        import string
+        varied_content = ''.join([string.ascii_letters[i % 52] + str(i % 10) for i in range(550_000)])
         request = LLMRequest(
-            messages=[Message(role="user", content=huge_content)],
+            messages=[Message(role="user", content=varied_content)],
             model="openai:gpt-4o-mini",
             max_tokens=10000,
         )
