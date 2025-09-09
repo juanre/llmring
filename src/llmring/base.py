@@ -3,9 +3,9 @@ Base class for LLM providers.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
-from llmring.schemas import LLMResponse, Message
+from llmring.schemas import LLMResponse, Message, StreamChunk
 
 
 class BaseLLMProvider(ABC):
@@ -34,7 +34,8 @@ class BaseLLMProvider(ABC):
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-    ) -> LLMResponse:
+        stream: Optional[bool] = False,
+    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the LLM provider.
 
@@ -48,9 +49,10 @@ class BaseLLMProvider(ABC):
             tool_choice: Optional tool choice configuration
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
+            stream: Optional flag to enable streaming responses
 
         Returns:
-            LLM response
+            LLM response or async iterator of stream chunks
         """
         pass
 

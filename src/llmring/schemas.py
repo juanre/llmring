@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel
 
@@ -28,6 +28,7 @@ class LLMRequest(BaseModel):
     cache: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
     json_response: Optional[bool] = None
+    stream: Optional[bool] = False  # Support for streaming responses
 
 
 class LLMResponse(BaseModel):
@@ -47,3 +48,13 @@ class LLMResponse(BaseModel):
         return self.usage.get("total_tokens") or (
             self.usage.get("prompt_tokens", 0) + self.usage.get("completion_tokens", 0)
         )
+
+
+class StreamChunk(BaseModel):
+    """A chunk of a streaming response."""
+    
+    delta: str  # The text delta in this chunk
+    model: Optional[str] = None
+    finish_reason: Optional[str] = None
+    usage: Optional[Dict[str, Any]] = None  # Only present in final chunk
+    tool_calls: Optional[List[Dict[str, Any]]] = None

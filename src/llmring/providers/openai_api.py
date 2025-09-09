@@ -7,7 +7,7 @@ import base64
 import copy
 import os
 import tempfile
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
@@ -19,7 +19,7 @@ from llmring.net.retry import retry_async
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.net.safe_fetcher import SafeFetchError
 from llmring.net.safe_fetcher import fetch_bytes as safe_fetch_bytes
-from llmring.schemas import LLMResponse, Message
+from llmring.schemas import LLMResponse, Message, StreamChunk
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -340,7 +340,335 @@ class OpenAIProvider(BaseLLMProvider):
             finish_reason="stop",
         )
 
+    async def _stream_chat(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """
+        Stream a chat response from OpenAI.
+        
+        Args:
+            messages: List of messages
+            model: Model to use
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+            response_format: Optional response format
+            tools: Optional list of tools
+            tool_choice: Optional tool choice parameter
+            
+        Yields:
+            Stream chunks from the response
+        """
+        # Strip provider prefix if present
+        if model.lower().startswith("openai:"):
+            model = model.split(":", 1)[1]
+            
+        # Verify model is supported
+        if not self.validate_model(model):
+            raise ValueError(f"Unsupported model: {model}")
+            
+        # o1 models and PDF processing don't support streaming yet
+        if model.startswith("o1") or self._contains_pdf_content(messages):
+            # Fall back to non-streaming for these cases
+            response = await self._chat_non_streaming(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
+            )
+            # Return the full response as a single chunk
+            yield StreamChunk(
+                delta=response.content,
+                model=response.model,
+                finish_reason=response.finish_reason,
+                usage=response.usage,
+            )
+            return
+            
+        # Convert messages to OpenAI format (reuse existing logic)
+        openai_messages = await self._prepare_openai_messages(messages)
+        
+        # Build request parameters
+        request_params = {
+            "model": model,
+            "messages": openai_messages,
+            "temperature": temperature or 0.7,
+            "stream": True,  # Enable streaming
+        }
+        
+        if max_tokens:
+            request_params["max_tokens"] = max_tokens
+            
+        # Handle response format
+        if response_format:
+            if response_format.get("type") == "json_object":
+                request_params["response_format"] = {"type": "json_object"}
+            elif response_format.get("type") == "json":
+                request_params["response_format"] = {"type": "json_object"}
+            else:
+                request_params["response_format"] = response_format
+                
+        # Handle tools if provided
+        if tools:
+            openai_tools = self._prepare_tools(tools)
+            request_params["tools"] = openai_tools
+            
+            if tool_choice is not None:
+                request_params["tool_choice"] = self._prepare_tool_choice(tool_choice)
+                
+        # Make the streaming API call
+        try:
+            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+            
+            stream = await asyncio.wait_for(
+                self.client.chat.completions.create(**request_params),
+                timeout=timeout_s,
+            )
+            
+            # Process the stream
+            accumulated_content = ""
+            async for chunk in stream:
+                if chunk.choices and len(chunk.choices) > 0:
+                    choice = chunk.choices[0]
+                    if choice.delta and choice.delta.content:
+                        accumulated_content += choice.delta.content
+                        yield StreamChunk(
+                            delta=choice.delta.content,
+                            model=model,
+                            finish_reason=choice.finish_reason,
+                        )
+                    elif choice.finish_reason:
+                        # Final chunk with usage information
+                        yield StreamChunk(
+                            delta="",
+                            model=model,
+                            finish_reason=choice.finish_reason,
+                            usage={
+                                "prompt_tokens": self.get_token_count(str(openai_messages)),
+                                "completion_tokens": self.get_token_count(accumulated_content),
+                                "total_tokens": self.get_token_count(str(openai_messages)) + self.get_token_count(accumulated_content),
+                            }
+                        )
+                        
+        except Exception as e:
+            error_msg = str(e)
+            if "API key" in error_msg.lower() or "unauthorized" in error_msg.lower():
+                raise ValueError(f"OpenAI API authentication failed: {error_msg}") from e
+            elif "rate limit" in error_msg.lower() or "quota" in error_msg.lower():
+                raise ValueError(f"OpenAI API rate limit exceeded: {error_msg}") from e
+            else:
+                raise Exception(f"OpenAI API error: {error_msg}") from e
+
+    async def _prepare_openai_messages(self, messages: List[Message]) -> List[Dict[str, Any]]:
+        """Convert messages to OpenAI format."""
+        openai_messages = []
+        for msg in messages:
+            # Handle special message types
+            if hasattr(msg, "tool_calls") and msg.role == "assistant":
+                # Assistant message with tool calls
+                message_dict = {
+                    "role": msg.role,
+                    "content": msg.content or "",
+                }
+                if msg.tool_calls:
+                    message_dict["tool_calls"] = msg.tool_calls
+                openai_messages.append(message_dict)
+            elif hasattr(msg, "tool_call_id") and msg.role == "tool":
+                # Tool response messages
+                openai_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.tool_call_id,
+                        "content": msg.content,
+                    }
+                )
+            else:
+                # Regular messages (system, user, assistant)
+                if isinstance(msg.content, str):
+                    openai_messages.append(
+                        {
+                            "role": msg.role,
+                            "content": msg.content,
+                        }
+                    )
+                elif isinstance(msg.content, list):
+                    # Handle multimodal content (text and images)
+                    content_parts = []
+                    for part in msg.content:
+                        if isinstance(part, str):
+                            content_parts.append({"type": "text", "text": part})
+                        elif isinstance(part, dict):
+                            if part.get("type") == "text":
+                                content_parts.append(copy.deepcopy(part))
+                            elif part.get("type") == "image_url":
+                                content_parts.append(copy.deepcopy(part))
+                            elif part.get("type") == "document":
+                                # OpenAI doesn't support document content blocks
+                                source = part.get("source", {})
+                                media_type = source.get("media_type", "unknown")
+                                content_parts.append(
+                                    {
+                                        "type": "text",
+                                        "text": f"[Document file of type {media_type} was provided but OpenAI doesn't support document processing. Please use Anthropic Claude or Google Gemini for document analysis.]",
+                                    }
+                                )
+                            else:
+                                # Unknown content type
+                                content_parts.append(
+                                    {
+                                        "type": "text",
+                                        "text": f"[Unsupported content type: {part.get('type', 'unknown')}]",
+                                    }
+                                )
+                    openai_messages.append(
+                        {
+                            "role": msg.role,
+                            "content": content_parts,
+                        }
+                    )
+                else:
+                    openai_messages.append(
+                        {
+                            "role": msg.role,
+                            "content": str(msg.content),
+                        }
+                    )
+                    
+        # Optional: inline remote images using safe fetcher if enabled
+        if os.getenv("LLMRING_INLINE_REMOTE_IMAGES", "false").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
+            for message in openai_messages:
+                if isinstance(message, dict) and isinstance(
+                    message.get("content"), list
+                ):
+                    for part in message["content"]:
+                        if (
+                            isinstance(part, dict)
+                            and part.get("type") == "image_url"
+                            and isinstance(part.get("image_url"), dict)
+                        ):
+                            url = part["image_url"].get("url")
+                            if isinstance(url, str) and url.startswith(
+                                ("http://", "https://")
+                            ):
+                                try:
+                                    data, mime = await safe_fetch_bytes(url)
+                                    b64 = base64.b64encode(data).decode("utf-8")
+                                    part["image_url"][
+                                        "url"
+                                    ] = f"data:{mime};base64,{b64}"
+                                except (SafeFetchError, Exception):
+                                    # Leave URL as-is if fetch fails
+                                    pass
+                                    
+        return openai_messages
+    
+    def _prepare_tools(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Convert tools to OpenAI format."""
+        openai_tools = []
+        for tool in tools:
+            # Check if tool is already in OpenAI format
+            if "type" in tool and tool["type"] == "function" and "function" in tool:
+                # Already in OpenAI format, use as-is
+                openai_tools.append(tool)
+            else:
+                # Convert from simplified format to OpenAI format
+                openai_tool = {
+                    "type": "function",
+                    "function": {
+                        "name": tool["name"],
+                        "description": tool.get("description", ""),
+                        "parameters": tool.get(
+                            "parameters", {"type": "object", "properties": {}}
+                        ),
+                    },
+                }
+                openai_tools.append(openai_tool)
+        return openai_tools
+    
+    def _prepare_tool_choice(self, tool_choice: Union[str, Dict[str, Any]]) -> Union[str, Dict[str, Any]]:
+        """Convert tool choice to OpenAI format."""
+        if isinstance(tool_choice, str):
+            return tool_choice
+        elif isinstance(tool_choice, dict):
+            # Convert our format to OpenAI's format
+            if "function" in tool_choice:
+                return {
+                    "type": "function",
+                    "function": {"name": tool_choice["function"]},
+                }
+            else:
+                return tool_choice
+        return tool_choice
+
     async def chat(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+        stream: Optional[bool] = False,
+    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
+        """
+        Send a chat request to the OpenAI API using the official SDK.
+        
+        Args:
+            messages: List of messages
+            model: Model to use (e.g., "gpt-4o")
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            response_format: Optional response format
+            tools: Optional list of tools
+            tool_choice: Optional tool choice parameter
+            json_response: Optional flag to request JSON response
+            cache: Optional cache configuration
+            stream: Whether to stream the response
+            
+        Returns:
+            LLM response or async iterator of stream chunks if streaming
+        """
+        if stream:
+            return self._stream_chat(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
+            )
+        else:
+            return await self._chat_non_streaming(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
+                json_response=json_response,
+                cache=cache,
+            )
+
+    async def _chat_non_streaming(
         self,
         messages: List[Message],
         model: str,
@@ -353,7 +681,7 @@ class OpenAIProvider(BaseLLMProvider):
         cache: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """
-        Send a chat request to the OpenAI API using the official SDK.
+        Send a non-streaming chat request to the OpenAI API.
 
         Args:
             messages: List of messages
@@ -403,111 +731,8 @@ class OpenAIProvider(BaseLLMProvider):
                 max_tokens=max_tokens,
             )
 
-        # Convert messages to OpenAI format
-        openai_messages = []
-        for msg in messages:
-            # Handle special message types
-            if hasattr(msg, "tool_calls") and msg.role == "assistant":
-                # Assistant message with tool calls
-                message_dict = {
-                    "role": msg.role,
-                    "content": msg.content or "",
-                }
-                if msg.tool_calls:
-                    message_dict["tool_calls"] = msg.tool_calls
-                openai_messages.append(message_dict)
-            elif hasattr(msg, "tool_call_id") and msg.role == "tool":
-                # Tool response messages
-                openai_messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": msg.tool_call_id,
-                        "content": msg.content,
-                    }
-                )
-            else:
-                # Regular messages (system, user, assistant)
-                if isinstance(msg.content, str):
-                    openai_messages.append(
-                        {
-                            "role": msg.role,
-                            "content": msg.content,
-                        }
-                    )
-                elif isinstance(msg.content, list):
-                    # Handle multimodal content (text and images)
-                    content_parts = []
-                    for part in msg.content:
-                        if isinstance(part, str):
-                            content_parts.append({"type": "text", "text": part})
-                        elif isinstance(part, dict):
-                            if part.get("type") == "text":
-                                content_parts.append(copy.deepcopy(part))
-                            elif part.get("type") == "image_url":
-                                content_parts.append(copy.deepcopy(part))
-                            elif part.get("type") == "document":
-                                # OpenAI doesn't support document content blocks
-                                # Convert to a text description instead
-                                source = part.get("source", {})
-                                media_type = source.get("media_type", "unknown")
-                                content_parts.append(
-                                    {
-                                        "type": "text",
-                                        "text": f"[Document file of type {media_type} was provided but OpenAI doesn't support document processing. Please use Anthropic Claude or Google Gemini for document analysis.]",
-                                    }
-                                )
-                            else:
-                                # Unknown content type - convert to text description
-                                content_parts.append(
-                                    {
-                                        "type": "text",
-                                        "text": f"[Unsupported content type: {part.get('type', 'unknown')}]",
-                                    }
-                                )
-                    openai_messages.append(
-                        {
-                            "role": msg.role,
-                            "content": content_parts,
-                        }
-                    )
-                else:
-                    openai_messages.append(
-                        {
-                            "role": msg.role,
-                            "content": str(msg.content),
-                        }
-                    )
-
-        # Optional: inline remote images using safe fetcher if enabled
-        if os.getenv("LLMRING_INLINE_REMOTE_IMAGES", "false").lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }:
-            for message in openai_messages:
-                if isinstance(message, dict) and isinstance(
-                    message.get("content"), list
-                ):
-                    for part in message["content"]:
-                        if (
-                            isinstance(part, dict)
-                            and part.get("type") == "image_url"
-                            and isinstance(part.get("image_url"), dict)
-                        ):
-                            url = part["image_url"].get("url")
-                            if isinstance(url, str) and url.startswith(
-                                ("http://", "https://")
-                            ):
-                                try:
-                                    data, mime = await safe_fetch_bytes(url)
-                                    b64 = base64.b64encode(data).decode("utf-8")
-                                    part["image_url"][
-                                        "url"
-                                    ] = f"data:{mime};base64,{b64}"
-                                except (SafeFetchError, Exception):
-                                    # Leave URL as-is if fetch fails or not allowed
-                                    pass
+        # Convert messages to OpenAI format using helper method
+        openai_messages = await self._prepare_openai_messages(messages)
 
         # Build the request parameters
         request_params = {
@@ -531,40 +756,11 @@ class OpenAIProvider(BaseLLMProvider):
 
         # Handle tools if provided
         if tools:
-            openai_tools = []
-            for tool in tools:
-                # Check if tool is already in OpenAI format
-                if "type" in tool and tool["type"] == "function" and "function" in tool:
-                    # Already in OpenAI format, use as-is
-                    openai_tools.append(tool)
-                else:
-                    # Convert from simplified format to OpenAI format
-                    openai_tool = {
-                        "type": "function",
-                        "function": {
-                            "name": tool["name"],
-                            "description": tool.get("description", ""),
-                            "parameters": tool.get(
-                                "parameters", {"type": "object", "properties": {}}
-                            ),
-                        },
-                    }
-                    openai_tools.append(openai_tool)
-            request_params["tools"] = openai_tools
-
+            request_params["tools"] = self._prepare_tools(tools)
+            
             # Handle tool choice
             if tool_choice is not None:
-                if isinstance(tool_choice, str):
-                    request_params["tool_choice"] = tool_choice
-                elif isinstance(tool_choice, dict):
-                    # Convert our format to OpenAI's format
-                    if "function" in tool_choice:
-                        request_params["tool_choice"] = {
-                            "type": "function",
-                            "function": {"name": tool_choice["function"]},
-                        }
-                    else:
-                        request_params["tool_choice"] = tool_choice
+                request_params["tool_choice"] = self._prepare_tool_choice(tool_choice)
 
         # Make the API call using the SDK
         try:
