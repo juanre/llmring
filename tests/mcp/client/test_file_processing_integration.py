@@ -178,7 +178,7 @@ def file_creator():
 async def enhanced_llm():
     """Fixture to provide an Enhanced LLM instance."""
     # Use vision-capable models for file processing tests
-    model = "anthropic:claude-3-5-sonnet-20241022"  # Vision-capable Claude model
+    model = "anthropic:claude-3-7-sonnet"  # Vision-capable Claude model
 
     # Check if we have any API keys
     has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))

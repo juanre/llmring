@@ -175,7 +175,7 @@ class TestSimpleFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="claude-3-5-sonnet-20241022",
+            model="claude-3-7-sonnet",
             max_tokens=200,
         )
 
@@ -248,7 +248,7 @@ class TestSimpleFileProcessing:
         # Try Anthropic first, then Google as fallback
         model = None
         if available_models.get("anthropic"):
-            model = "claude-3-5-sonnet-20241022"
+            model = "claude-3-7-sonnet"
         elif available_models.get("google"):
             model = "gemini-1.5-flash"
         else:

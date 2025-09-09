@@ -108,6 +108,10 @@ markers = [
     "google: marks tests as Google-specific",
     "ollama: marks tests as Ollama-specific",
 ]
+filterwarnings = [
+    "ignore:websockets.legacy is deprecated:DeprecationWarning",
+    "ignore:websockets.server.WebSocketServerProtocol is deprecated:DeprecationWarning",
+]
 
 [tool.uv.sources]
 llmring-server = { path = "../llmring-server" }
