@@ -5,7 +5,7 @@ Anthropic Claude API provider implementation using the official SDK.
 import asyncio
 import json
 import os
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from anthropic import AsyncAnthropic
 from anthropic.types import Message as AnthropicMessage
@@ -14,7 +14,7 @@ from anthropic.types import Message as AnthropicMessage
 from llmring.base import BaseLLMProvider
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
-from llmring.schemas import LLMResponse, Message
+from llmring.schemas import LLMResponse, Message, StreamChunk
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -130,8 +130,10 @@ class AnthropicProvider(BaseLLMProvider):
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-    ) -> LLMResponse:
+        stream: Optional[bool] = False,
+    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the Anthropic Claude API using the official SDK.
 
@@ -143,10 +145,61 @@ class AnthropicProvider(BaseLLMProvider):
             response_format: Optional response format
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
+            json_response: Optional flag to request JSON response
+            cache: Optional cache configuration
+            stream: Whether to stream the response
 
         Returns:
-            LLM response
+            LLM response or async iterator of stream chunks if streaming
         """
+        # For now, streaming is not fully implemented - fall back to non-streaming
+        if stream:
+            # Create an async generator that yields the full response as a single chunk
+            async def _single_chunk_stream():
+                response = await self._chat_non_streaming(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    response_format=response_format,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    json_response=json_response,
+                    cache=cache,
+                )
+                yield StreamChunk(
+                    delta=response.content,
+                    model=response.model,
+                    finish_reason=response.finish_reason,
+                    usage=response.usage,
+                )
+            return _single_chunk_stream()
+        
+        return await self._chat_non_streaming(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
+            json_response=json_response,
+            cache=cache,
+        )
+    
+    async def _chat_non_streaming(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+    ) -> LLMResponse:
+        """Non-streaming chat implementation."""
         # Strip provider prefix if present (e.g., "anthropic:claude-3-sonnet" -> "claude-3-sonnet")
         original_model = model
         if model.lower().startswith("anthropic:"):
