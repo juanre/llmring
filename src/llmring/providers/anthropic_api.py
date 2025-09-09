@@ -152,28 +152,18 @@ class AnthropicProvider(BaseLLMProvider):
         Returns:
             LLM response or async iterator of stream chunks if streaming
         """
-        # For now, streaming is not fully implemented - fall back to non-streaming
         if stream:
-            # Create an async generator that yields the full response as a single chunk
-            async def _single_chunk_stream():
-                response = await self._chat_non_streaming(
-                    messages=messages,
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format=response_format,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    json_response=json_response,
-                    cache=cache,
-                )
-                yield StreamChunk(
-                    delta=response.content,
-                    model=response.model,
-                    finish_reason=response.finish_reason,
-                    usage=response.usage,
-                )
-            return _single_chunk_stream()
+            return self._stream_chat(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
+                json_response=json_response,
+                cache=cache,
+            )
         
         return await self._chat_non_streaming(
             messages=messages,
@@ -187,6 +177,216 @@ class AnthropicProvider(BaseLLMProvider):
             cache=cache,
         )
     
+    async def _stream_chat(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """Stream a chat response from Anthropic."""
+        # Process model name
+        original_model = model
+        if model.lower().startswith("anthropic:"):
+            model = model.split(":", 1)[1]
+            
+        # Find latest version for models without date
+        if "-202" not in model:
+            for supported_model in self.supported_models:
+                if supported_model.startswith(model + "-"):
+                    model = supported_model
+                    break
+                    
+        # Verify model is supported
+        if not self.validate_model(model):
+            raise ValueError(f"Unsupported model: {original_model}")
+            
+        # Prepare messages and system prompt
+        anthropic_messages, system_message = self._prepare_messages(messages)
+        
+        # Build request parameters
+        request_params = {
+            "model": model,
+            "messages": anthropic_messages,
+            "temperature": temperature or 0.7,
+            "max_tokens": max_tokens or 4096,
+            "stream": True,
+        }
+        
+        if system_message:
+            request_params["system"] = system_message
+            
+        # Handle tools if provided
+        if tools:
+            request_params["tools"] = self._prepare_tools(tools)
+            if tool_choice:
+                request_params["tool_choice"] = self._prepare_tool_choice(tool_choice)
+                
+        # Handle JSON response format
+        if json_response or (response_format and response_format.get("type") in ["json_object", "json"]):
+            json_instruction = "\n\nIMPORTANT: You must respond with valid JSON only."
+            request_params["system"] = (request_params.get("system", "") + json_instruction).strip()
+            
+        # Make streaming API call
+        try:
+            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+            
+            stream = await asyncio.wait_for(
+                self.client.messages.create(**request_params),
+                timeout=timeout_s
+            )
+            
+            # Process the stream
+            accumulated_content = ""
+            async for event in stream:
+                if event.type == "content_block_delta":
+                    if hasattr(event.delta, 'text'):
+                        accumulated_content += event.delta.text
+                        yield StreamChunk(
+                            delta=event.delta.text,
+                            model=model,
+                            finish_reason=None,
+                        )
+                elif event.type == "message_delta":
+                    # Final event with usage information
+                    if hasattr(event, 'usage'):
+                        yield StreamChunk(
+                            delta="",
+                            model=model,
+                            finish_reason=event.stop_reason if hasattr(event, 'stop_reason') else "stop",
+                            usage={
+                                "prompt_tokens": event.usage.input_tokens,
+                                "completion_tokens": event.usage.output_tokens,
+                                "total_tokens": event.usage.input_tokens + event.usage.output_tokens,
+                            } if event.usage else None
+                        )
+                        
+        except Exception as e:
+            error_msg = str(e)
+            if "API key" in error_msg.lower():
+                raise ValueError(f"Anthropic API authentication failed: {error_msg}") from e
+            elif "rate limit" in error_msg.lower():
+                raise ValueError(f"Anthropic API rate limit exceeded: {error_msg}") from e
+            else:
+                raise Exception(f"Anthropic API error: {error_msg}") from e
+    
+    def _prepare_messages(self, messages: List[Message]) -> tuple[List[Dict], Optional[str]]:
+        """Convert messages to Anthropic format and extract system message."""
+        anthropic_messages = []
+        system_message = None
+        
+        for msg in messages:
+            if msg.role == "system":
+                system_message = msg.content if isinstance(msg.content, str) else str(msg.content)
+            else:
+                # Handle tool calls and responses
+                if msg.role == "assistant" and hasattr(msg, "tool_calls") and msg.tool_calls:
+                    content = []
+                    if msg.content:
+                        content.append({"type": "text", "text": msg.content})
+                    for tool_call in msg.tool_calls:
+                        content.append({
+                            "type": "tool_use",
+                            "id": tool_call["id"],
+                            "name": tool_call["function"]["name"],
+                            "input": tool_call["function"]["arguments"],
+                        })
+                    anthropic_messages.append({"role": "assistant", "content": content})
+                elif hasattr(msg, "tool_call_id") and msg.tool_call_id:
+                    anthropic_messages.append({
+                        "role": "user",
+                        "content": [{
+                            "type": "tool_result",
+                            "tool_use_id": msg.tool_call_id,
+                            "content": msg.content,
+                        }],
+                    })
+                else:
+                    # Regular messages
+                    content = self._format_message_content(msg.content)
+                    anthropic_messages.append({"role": msg.role, "content": content})
+                    
+        return anthropic_messages, system_message
+    
+    def _format_message_content(self, content: Any) -> List[Dict]:
+        """Format message content to Anthropic's expected format."""
+        if isinstance(content, str):
+            return [{"type": "text", "text": content}]
+        elif isinstance(content, list):
+            formatted = []
+            for item in content:
+                if isinstance(item, str):
+                    formatted.append({"type": "text", "text": item})
+                elif isinstance(item, dict):
+                    if item.get("type") == "image_url":
+                        # Convert OpenAI format to Anthropic
+                        image_data = item["image_url"]["url"]
+                        if image_data.startswith("data:"):
+                            media_type, base64_data = (
+                                image_data.split(";")[0].split(":")[1],
+                                image_data.split(",")[1],
+                            )
+                            formatted.append({
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": base64_data,
+                                },
+                            })
+                        else:
+                            formatted.append({
+                                "type": "image",
+                                "source": {"type": "url", "url": image_data},
+                            })
+                    elif item.get("type") == "document":
+                        # Anthropic supports documents directly
+                        formatted.append(item)
+                    else:
+                        formatted.append(item)
+            return formatted
+        else:
+            return [{"type": "text", "text": str(content)}]
+    
+    def _prepare_tools(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Convert tools to Anthropic format."""
+        anthropic_tools = []
+        for tool in tools:
+            if "function" in tool:
+                # OpenAI format
+                func = tool["function"]
+                anthropic_tools.append({
+                    "name": func["name"],
+                    "description": func.get("description", ""),
+                    "input_schema": func.get("parameters", {"type": "object", "properties": {}}),
+                })
+            else:
+                # Direct format
+                anthropic_tools.append({
+                    "name": tool["name"],
+                    "description": tool.get("description", ""),
+                    "input_schema": tool.get("input_schema", tool.get("parameters", {"type": "object", "properties": {}})),
+                })
+        return anthropic_tools
+    
+    def _prepare_tool_choice(self, tool_choice: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """Convert tool choice to Anthropic format."""
+        if tool_choice == "auto":
+            return {"type": "auto"}
+        elif tool_choice == "any":
+            return {"type": "any"}
+        elif tool_choice == "none":
+            return {"type": "none"}
+        elif isinstance(tool_choice, dict):
+            return tool_choice
+        else:
+            return {"type": "auto"}
+
     async def _chat_non_streaming(
         self,
         messages: List[Message],
@@ -200,13 +400,13 @@ class AnthropicProvider(BaseLLMProvider):
         cache: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
-        # Strip provider prefix if present (e.g., "anthropic:claude-3-sonnet" -> "claude-3-sonnet")
+        # Process model name
         original_model = model
         if model.lower().startswith("anthropic:"):
             model = model.split(":", 1)[1]
 
-        # For models without version, find the latest version
-        if "-202" not in model:  # If no date in model name
+        # Find latest version for models without date
+        if "-202" not in model:
             for supported_model in self.supported_models:
                 if supported_model.startswith(model + "-"):
                     model = supported_model
