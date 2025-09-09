@@ -1,11 +1,11 @@
 # LLMRing
 
-Alias-first LLM service for Python. Map tasks to models, not code to model IDs. Supports OpenAI, Anthropic, Google, and Ollama with a unified interface.
+LLM Python library with a centralized model registry and MCP support. Supports OpenAI, Anthropic, Google, and Ollama with a unified interface.
 
 ## Highlights
 
 - **Alias-first identity**: Map semantic tasks to models via lockfile
-- **Lockfile-based configuration**: Version-controlled, reproducible model bindings  
+- **Lockfile-based configuration**: Version-controlled, reproducible model bindings
 - **Multi-provider support**: OpenAI, Anthropic, Google, Ollama
 - **Profile support**: Different configurations for prod/staging/dev
 - **Registry integration**: Automatic model capabilities and pricing from GitHub Pages
@@ -68,13 +68,13 @@ from llmring import LLMRing, LLMRequest, Message
 async def main():
     # Initialize service
     service = LLMRing()
-    
+
     # Use an alias instead of hardcoding model names
     request = LLMRequest(
         messages=[Message(role="user", content="Summarize this text...")],
         model="summarizer"  # Uses the alias from lockfile
     )
-    
+
     response = await service.chat(request)
     print(response.content)
 
@@ -237,7 +237,7 @@ model = "gpt-4"
 constraints = { temperature = 0.9, max_tokens = 2000 }
 
 [[profiles.default.bindings]]
-alias = "code_reviewer"  
+alias = "code_reviewer"
 provider = "anthropic"
 model = "claude-3-5-sonnet-20241022"
 constraints = { temperature = 0.2 }
@@ -249,7 +249,7 @@ constraints = { temperature = 0.2 }
 # Use the convenience method for simpler alias-based chat
 async def main():
     service = LLMRing()
-    
+
     # Direct alias usage without creating a request object
     response = await service.chat_with_alias(
         "summarizer",  # Alias or model string
@@ -294,7 +294,7 @@ messages = [
 ]
 
 response = await analyze_image(
-    service, 
+    service,
     "path/to/image.png",
     "Describe this image",
     model="openai:gpt-4o"  # Or use an alias
@@ -329,22 +329,22 @@ from llmring.mcp.client import AsyncMCPClient
 # Initialize MCP client
 async def use_mcp():
     client = AsyncMCPClient("http://localhost:8080")
-    
+
     # Initialize connection
     await client.initialize()
-    
+
     # List available tools
     tools = await client.list_tools()
-    
+
     # Execute a tool
     result = await client.call_tool(
         "weather_tool",
         {"location": "San Francisco"}
     )
-    
+
     # List resources
     resources = await client.list_resources()
-    
+
     # Read a resource
     content = await client.read_resource("file://docs/guide.md")
 ```
@@ -389,7 +389,7 @@ server = Server(name="my-mcp-server")
 class WeatherTool(Tool):
     name = "weather"
     description = "Get weather information"
-    
+
     async def execute(self, location: str) -> dict:
         # Implementation here
         return {"temp": 72, "conditions": "sunny"}

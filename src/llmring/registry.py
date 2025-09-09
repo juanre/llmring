@@ -334,17 +334,14 @@ class RegistryClient:
                 if "provider" not in model_data:
                     model_data["provider"] = provider
 
-                # Add model_name if not present (handle model_id field)
-                if "model_name" not in model_data:
-                    if "model_id" in model_data:
-                        model_data["model_name"] = model_data["model_id"]
-                    else:
-                        model_data["model_name"] = model_name
-
                 # Validate required fields
+                if "model_name" not in model_data:
+                    print(f"Warning: Model '{model_key}' missing required field 'model_name'")
+                    continue
+                    
                 if not model_data.get("display_name"):
-                    print(f"Warning: Model '{model_key}' missing display_name")
-                    model_data["display_name"] = model_name
+                    print(f"Warning: Model '{model_key}' missing required field 'display_name'")
+                    continue
 
                 model = RegistryModel(**model_data)
                 models.append(model)
