@@ -13,11 +13,11 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, AsyncIterator
 
 import httpx
 
-from llmring.schemas import LLMRequest, LLMResponse, Message
+from llmring.schemas import LLMRequest, LLMResponse, Message, StreamChunk
 from llmring.service import LLMRing
 from llmring.exceptions import (
     MCPError,
@@ -40,6 +40,7 @@ from llmring.mcp.client.file_utils import (
     decode_base64_file,
     create_file_content,
 )
+from llmring.mcp.client.streaming_handler import StreamingToolHandler
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,9 @@ class EnhancedLLM:
         
         # Initialize MCP client if server URL provided
         self.mcp_client: AsyncMCPClient | None = None
+        
+        # Initialize streaming handler for tool support
+        self.streaming_handler = StreamingToolHandler(self)
         if mcp_server_url:
             # Parse URL to determine transport type
             if mcp_server_url.startswith("ws://") or mcp_server_url.startswith("wss://"):
@@ -346,7 +350,7 @@ class EnhancedLLM:
         max_tokens: int | None = None,
         stream: bool = False,
         **kwargs,
-    ) -> LLMResponse:
+    ) -> LLMResponse | AsyncIterator[StreamChunk]:
         """
         Send a conversation to the enhanced LLM and get a response.
         
@@ -436,10 +440,23 @@ class EnhancedLLM:
             tools=tools if tools else None,
             tool_choice="auto" if tools else None,
             user_id=user_id or self.default_user_id,
+            stream=stream,
             **kwargs,
         )
         
-        # Send to LLM
+        # Handle streaming
+        if stream:
+            if tools:
+                # Streaming with tools - use the handler
+                return self.streaming_handler.handle_streaming_with_tools(
+                    request,
+                    formatted_messages,
+                )
+            else:
+                # Streaming without tools - pass through directly
+                return await self.llmring.chat(request)
+        
+        # Send to LLM (non-streaming)
         response = await self.llmring.chat(request)
         
         # Handle tool calls if present
@@ -473,14 +490,15 @@ class EnhancedLLM:
                     })
             
             # Add tool results to messages and get final response
-            # Parse tool call arguments to ensure they're dicts
+            # Ensure tool call arguments are strings for the message history
             parsed_tool_calls = []
             for tc in response.tool_calls:
                 parsed_tc = tc.copy()
                 if "function" in parsed_tc and "arguments" in parsed_tc["function"]:
                     args = parsed_tc["function"]["arguments"]
-                    if isinstance(args, str):
-                        parsed_tc["function"]["arguments"] = json.loads(args)
+                    # Ensure arguments are strings for the API
+                    if not isinstance(args, str):
+                        parsed_tc["function"]["arguments"] = json.dumps(args)
                 parsed_tool_calls.append(parsed_tc)
             
             formatted_messages.append(Message(
