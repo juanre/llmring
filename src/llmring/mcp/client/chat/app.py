@@ -22,16 +22,16 @@ from rich.table import Table
 # Load environment variables from .env file
 load_dotenv()
 
-from llmring.schemas import LLMRequest, LLMResponse, Message
-from llmring.service import LLMRing
-# Database imports removed - now using HTTP-based architecture
-# from pgdbm import AsyncDatabaseManager, DatabaseConfig, MonitoredAsyncDatabaseManager
-
 from llmring.mcp.client import MCPClient
 from llmring.mcp.client.chat.styles import PROMPT_STYLE, RICH_THEME
 
 # Database model removed - now using HTTP-based architecture
 from llmring.mcp.client.pool_config import CHAT_APP_POOL
+from llmring.schemas import LLMRequest, LLMResponse, Message
+from llmring.service import LLMRing
+
+# Database imports removed - now using HTTP-based architecture
+# from pgdbm import AsyncDatabaseManager, DatabaseConfig, MonitoredAsyncDatabaseManager
 
 
 class CommandCompleter(Completer):

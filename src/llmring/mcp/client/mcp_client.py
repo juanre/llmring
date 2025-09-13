@@ -29,12 +29,11 @@ from typing import Any
 
 from llmring.exceptions import (
     MCPError,
-    MCPTransportError,
     MCPProtocolError,
+    MCPTransportError,
     NetworkError,
     TimeoutError,
 )
-
 from llmring.mcp.client.transports import Transport
 from llmring.mcp.client.transports.http import HTTPTransport
 from llmring.mcp.client.transports.stdio import STDIOTransport
@@ -141,9 +140,9 @@ class MCPClient:
 
         # Bidirectional communication support
         self._notification_handlers: dict[str, list[Callable]] = defaultdict(list)
-        self._method_handlers: dict[
-            str, Callable[[dict[str, Any]], dict[str, Any]]
-        ] = {}
+        self._method_handlers: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = (
+            {}
+        )
         self._connection_state = ConnectionState.DISCONNECTED
         self._connection_state_handlers: list[Callable[[ConnectionState], None]] = []
         self._connected_handlers: list[Callable[[], None]] = []
@@ -780,9 +779,9 @@ class AsyncMCPClient:
 
         # Bidirectional communication support
         self._notification_handlers: dict[str, list[Callable]] = defaultdict(list)
-        self._method_handlers: dict[
-            str, Callable[[dict[str, Any]], dict[str, Any]]
-        ] = {}
+        self._method_handlers: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = (
+            {}
+        )
         self._connection_state = ConnectionState.DISCONNECTED
 
     @classmethod

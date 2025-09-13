@@ -17,9 +17,9 @@ from urllib.parse import urlparse
 import httpx
 
 from llmring.exceptions import (
+    FileAccessError,
     FileProcessingError,
     InvalidFileFormatError,
-    FileAccessError,
     ValidationError,
 )
 

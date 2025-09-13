@@ -3,7 +3,7 @@ Authentication provider interface for MCP Server Engine.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 
 class AuthProvider(ABC):

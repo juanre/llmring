@@ -4,6 +4,17 @@ __version__ = "0.4.0"
 
 from .base import BaseLLMProvider
 
+# Import exceptions
+from .exceptions import (
+    ConfigurationError,
+    ConversationNotFoundError,
+    LLMRingError,
+    ModelNotFoundError,
+    ProviderError,
+    ProviderNotFoundError,
+    ServerConnectionError,
+)
+
 # Import file utilities
 from .file_utils import (  # Core functions; Content creation; Convenience functions
     analyze_image,
@@ -21,18 +32,7 @@ from .schemas import LLMRequest, LLMResponse, Message
 
 # Import main components
 from .service import LLMRing
-from .service_extended import LLMRingExtended, ConversationManager
-
-# Import exceptions
-from .exceptions import (
-    LLMRingError,
-    ConfigurationError,
-    ProviderError,
-    ProviderNotFoundError,
-    ModelNotFoundError,
-    ConversationNotFoundError,
-    ServerConnectionError,
-)
+from .service_extended import ConversationManager, LLMRingExtended
 
 __all__ = [
     # Core classes

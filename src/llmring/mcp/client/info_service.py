@@ -12,14 +12,15 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+from llmring.exceptions import (
+    ConfigurationError,
+    ModelError,
+    ProviderError,
+    ServerConnectionError,
+)
+
 # LLMDatabase is not in llmring, will need to adapt
 from llmring.service import LLMRing
-from llmring.exceptions import (
-    ServerConnectionError,
-    ProviderError,
-    ModelError,
-    ConfigurationError,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -246,9 +247,9 @@ class MCPClientInfoService:
                             cost_per_1k_input_tokens=cost_per_1k_input,
                             cost_per_1k_output_tokens=cost_per_1k_output,
                             is_active=model.is_active,
-                            last_used=usage_stats.get("last_used")
-                            if usage_stats
-                            else None,
+                            last_used=(
+                                usage_stats.get("last_used") if usage_stats else None
+                            ),
                             total_usage_last_30_days=(
                                 usage_stats.get("total_tokens") if usage_stats else None
                             ),
@@ -774,9 +775,11 @@ class MCPClientInfoService:
                         "date": date.strftime("%Y-%m-%d"),
                         "calls": stats.total_calls // max(days, 1) if i == 0 else 0,
                         "tokens": stats.total_tokens // max(days, 1) if i == 0 else 0,
-                        "cost": float(stats.total_cost or 0) / max(days, 1)
-                        if i == 0
-                        else 0.0,
+                        "cost": (
+                            float(stats.total_cost or 0) / max(days, 1)
+                            if i == 0
+                            else 0.0
+                        ),
                     }
                 )
 

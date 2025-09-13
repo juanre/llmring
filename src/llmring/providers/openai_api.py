@@ -566,9 +566,9 @@ class OpenAIProvider(BaseLLMProvider):
 
                             if tool_call_delta.function:
                                 if tool_call_delta.function.name:
-                                    accumulated_tool_calls[idx]["function"]["name"] = (
-                                        tool_call_delta.function.name
-                                    )
+                                    accumulated_tool_calls[idx]["function"][
+                                        "name"
+                                    ] = tool_call_delta.function.name
 
                                 if tool_call_delta.function.arguments:
                                     accumulated_tool_calls[idx]["function"][
@@ -727,9 +727,9 @@ class OpenAIProvider(BaseLLMProvider):
                                 try:
                                     data, mime = await safe_fetch_bytes(url)
                                     b64 = base64.b64encode(data).decode("utf-8")
-                                    part["image_url"]["url"] = (
-                                        f"data:{mime};base64,{b64}"
-                                    )
+                                    part["image_url"][
+                                        "url"
+                                    ] = f"data:{mime};base64,{b64}"
                                 except (SafeFetchError, Exception):
                                     # Leave URL as-is if fetch fails
                                     pass

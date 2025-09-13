@@ -4,14 +4,14 @@ import logging
 import uuid
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
+from llmring.mcp.client.conversation_manager_async import AsyncConversationManager
+from llmring.mcp.client.mcp_client import MCPClient
+from llmring.mcp.client.models.schemas import ToolCall, ToolResult
 from llmring.schemas import LLMRequest, Message
 from llmring.service import LLMRing
-from llmring.mcp.client.mcp_client import MCPClient
-from llmring.mcp.client.conversation_manager_async import AsyncConversationManager
-from llmring.mcp.client.models.schemas import ToolCall, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +61,9 @@ class ChatResponse:
             "model": self.model,
             "created_at": self.created_at.isoformat(),
             "processing_time_ms": self.processing_time_ms,
-            "tool_calls": [tc.dict() for tc in self.tool_calls]
-            if self.tool_calls
-            else None,
+            "tool_calls": (
+                [tc.dict() for tc in self.tool_calls] if self.tool_calls else None
+            ),
         }
 
     def to_json(self) -> str:

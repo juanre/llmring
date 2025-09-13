@@ -565,9 +565,11 @@ class GoogleProvider(BaseLLMProvider):
                                         "type": "function",
                                         "function": {
                                             "name": function_call.name,
-                                            "arguments": json.dumps(function_call.args)
-                                            if function_call.args
-                                            else "{}",
+                                            "arguments": (
+                                                json.dumps(function_call.args)
+                                                if function_call.args
+                                                else "{}"
+                                            ),
                                         },
                                     }
                                 )
@@ -917,9 +919,11 @@ class GoogleProvider(BaseLLMProvider):
                                 "type": "function",
                                 "function": {
                                     "name": function_call.name,
-                                    "arguments": json.dumps(function_call.args)
-                                    if function_call.args
-                                    else "{}",
+                                    "arguments": (
+                                        json.dumps(function_call.args)
+                                        if function_call.args
+                                        else "{}"
+                                    ),
                                 },
                             }
                         )

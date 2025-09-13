@@ -2,11 +2,11 @@
 LLM service that manages providers and routes requests.
 """
 
+import json
 import logging
 import os
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
-import json
 from llmring.base import BaseLLMProvider
 from llmring.exceptions import ModelNotFoundError, ProviderNotFoundError
 from llmring.lockfile import Lockfile
@@ -804,6 +804,7 @@ class LLMRing:
 
                         # Single retry with repair prompt
                         from copy import deepcopy
+
                         from llmring.schemas import Message
 
                         repair_request = deepcopy(request)
@@ -820,9 +821,11 @@ class LLMRing:
                                 provider = self.get_provider(provider_type)
                                 repair_response = await provider.chat(
                                     messages=repair_request.messages,
-                                    model=repair_request.model.split(":", 1)[1]
-                                    if ":" in repair_request.model
-                                    else repair_request.model,
+                                    model=(
+                                        repair_request.model.split(":", 1)[1]
+                                        if ":" in repair_request.model
+                                        else repair_request.model
+                                    ),
                                     temperature=0.1,  # Lower temperature for better JSON
                                     max_tokens=repair_request.max_tokens,
                                     json_response=True,
@@ -930,9 +933,11 @@ class LLMRing:
         # Calculate token count for input using proper tokenization
         # First do a quick character-based check to avoid expensive tokenization for obviously too-large inputs
         total_chars = sum(
-            len(message.content)
-            if isinstance(message.content, str)
-            else len(str(message.content))
+            (
+                len(message.content)
+                if isinstance(message.content, str)
+                else len(str(message.content))
+            )
             for message in request.messages
         )
 

@@ -11,7 +11,7 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 from rich.console import Console

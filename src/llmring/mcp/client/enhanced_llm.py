@@ -15,31 +15,29 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
-
-from llmring.schemas import LLMRequest, LLMResponse, Message, StreamChunk
-from llmring.service import LLMRing
 from llmring.exceptions import (
+    ConversationError,
+    FileProcessingError,
     MCPError,
     MCPToolError,
-    ServerConnectionError,
-    ConversationError,
-    ToolExecutionError,
-    FileProcessingError,
     NetworkError,
+    ServerConnectionError,
+    ToolExecutionError,
 )
-
-from llmring.mcp.client.mcp_client import AsyncMCPClient
-from llmring.mcp.client.info_service import create_info_service
-from llmring.mcp.http_client import MCPHttpClient
 from llmring.mcp.client.conversation_manager_async import AsyncConversationManager
 from llmring.mcp.client.file_utils import (
-    process_file_from_source as process_file_util,
-    guess_content_type_from_bytes,
-    fetch_file_from_url,
-    decode_base64_file,
     create_file_content,
+    decode_base64_file,
+    fetch_file_from_url,
+    guess_content_type_from_bytes,
 )
+from llmring.mcp.client.file_utils import process_file_from_source as process_file_util
+from llmring.mcp.client.info_service import create_info_service
+from llmring.mcp.client.mcp_client import AsyncMCPClient
 from llmring.mcp.client.streaming_handler import StreamingToolHandler
+from llmring.mcp.http_client import MCPHttpClient
+from llmring.schemas import LLMRequest, LLMResponse, Message, StreamChunk
+from llmring.service import LLMRing
 
 logger = logging.getLogger(__name__)
 
@@ -497,9 +495,11 @@ class EnhancedLLM:
                     tool_results.append(
                         {
                             "tool_call_id": tool_call["id"],
-                            "content": json.dumps(result)
-                            if not isinstance(result, str)
-                            else result,
+                            "content": (
+                                json.dumps(result)
+                                if not isinstance(result, str)
+                                else result
+                            ),
                         }
                     )
                 except (ToolExecutionError, MCPToolError) as e:
@@ -814,7 +814,7 @@ class EnhancedLLM:
         user_id = user_id or self.default_user_id
 
         # Gather information for the report
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
 
         report = {
             "user_id": user_id,
@@ -867,9 +867,11 @@ class EnhancedLLM:
         return {
             "storage_type": "http_api",
             "database_connection": False,
-            "persistence_url": self.http_client.base_url
-            if hasattr(self, "http_client") and self.http_client
-            else None,
+            "persistence_url": (
+                self.http_client.base_url
+                if hasattr(self, "http_client") and self.http_client
+                else None
+            ),
             "conversation_storage": "server" if self.conversation_manager else "none",
             "privacy_notes": "All data is stored via HTTP API endpoints. No local database access.",
             "mcp_client_tables": [

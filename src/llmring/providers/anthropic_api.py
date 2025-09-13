@@ -351,9 +351,11 @@ class AnthropicProvider(BaseLLMProvider):
                         yield StreamChunk(
                             delta="",
                             model=model,
-                            finish_reason=event.stop_reason
-                            if hasattr(event, "stop_reason")
-                            else "stop",
+                            finish_reason=(
+                                event.stop_reason
+                                if hasattr(event, "stop_reason")
+                                else "stop"
+                            ),
                             usage=usage_dict if event.usage else None,
                         )
 

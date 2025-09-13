@@ -151,9 +151,11 @@ class LLMRingExtended(LLMRing):
                         "metadata": {
                             "model_used": response.model,
                             "finish_reason": response.finish_reason,
-                            "tool_calls": response.tool_calls
-                            if hasattr(response, "tool_calls")
-                            else None,
+                            "tool_calls": (
+                                response.tool_calls
+                                if hasattr(response, "tool_calls")
+                                else None
+                            ),
                         },
                     }
                 )

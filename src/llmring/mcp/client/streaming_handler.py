@@ -8,8 +8,8 @@ import json
 import logging
 from typing import AsyncIterator
 
-from llmring.schemas import LLMRequest, Message, StreamChunk
 from llmring.exceptions import MCPToolError, ToolExecutionError
+from llmring.schemas import LLMRequest, Message, StreamChunk
 
 logger = logging.getLogger(__name__)
 
@@ -138,9 +138,11 @@ class StreamingToolHandler:
                 tool_results.append(
                     {
                         "tool_call_id": tool_call["id"],
-                        "content": json.dumps(result)
-                        if not isinstance(result, str)
-                        else result,
+                        "content": (
+                            json.dumps(result)
+                            if not isinstance(result, str)
+                            else result
+                        ),
                     }
                 )
 

@@ -6,8 +6,8 @@ consolidating the various HTTP client implementations across the codebase.
 """
 
 import logging
-from typing import Any, Dict, Optional, Union
 from contextlib import asynccontextmanager
+from typing import Any, Dict, Optional, Union
 
 import httpx
 

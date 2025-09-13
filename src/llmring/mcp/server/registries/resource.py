@@ -3,8 +3,8 @@ Resource registry for MCP Server Engine.
 Provides management of resources that can be exposed via MCP.
 """
 
-from typing import Any, Callable, Dict, List, Optional
 import inspect
+from typing import Any, Callable, Dict, List, Optional
 
 
 class ResourceRegistry:

@@ -10,14 +10,13 @@ Implements handlers for all required MCP protocol methods including:
 - Lifecycle (ping/shutdown)
 """
 
-import logging
 import base64
-from typing import Dict, Any, Optional
-from types import SimpleNamespace
+import logging
 from datetime import datetime, timezone
+from types import SimpleNamespace
+from typing import Any, Dict, Optional
 
 from llmring.mcp.server.protocol.json_rpc import JSONRPCError
-
 
 logger = logging.getLogger(__name__)
 

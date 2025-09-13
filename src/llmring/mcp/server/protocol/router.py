@@ -5,12 +5,12 @@ JSON-RPC router for handling MCP requests.
 import logging
 from typing import Any, Callable, Dict, Optional
 
+from llmring.mcp.server.protocol.handlers import ProtocolError
 from llmring.mcp.server.protocol.json_rpc import (
+    JSONRPCError,
     JSONRPCRequest,
     JSONRPCResponse,
-    JSONRPCError,
 )
-from llmring.mcp.server.protocol.handlers import ProtocolError
 
 
 class JSONRPCRouter:

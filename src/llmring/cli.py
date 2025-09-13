@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from llmring import LLMRequest, LLMRing, Message
 from llmring.lockfile import Lockfile
 from llmring.registry import RegistryClient
+
 # Alias sync removed per source-of-truth v3.8 - aliases are purely local
 
 # Load environment variables from .env file
@@ -246,9 +247,9 @@ async def cmd_chat(args):
                     json.dumps(
                         {
                             "content": full_content,
-                            "model": chunk.model
-                            if chunk and chunk.model
-                            else args.model,
+                            "model": (
+                                chunk.model if chunk and chunk.model else args.model
+                            ),
                             "usage": accumulated_usage,
                             "finish_reason": chunk.finish_reason if chunk else None,
                         },
@@ -396,7 +397,7 @@ async def cmd_export(args):
 
     # Export local receipts as JSON
     import json
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
 
     export_data = {
         "exported_at": datetime.now(UTC).isoformat(),

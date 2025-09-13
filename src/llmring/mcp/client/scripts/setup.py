@@ -17,6 +17,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from llmring.mcp.client import MCPClient
+
 # Database model removed - now using HTTP-based architecture
 # from llmring.mcp.client.models.db import MCPClientDB
 
