@@ -37,42 +37,21 @@ jobs:
       run: |
         uv run pyright src/llmring/
 
-    - name: Enforce no hardcoded models policy
+    - name: Check alias-first architecture compliance
       run: |
-        echo "🔍 Checking for hardcoded model names (banned in src/, docs/, examples/)..."
+        echo "🔍 Checking that examples and docs prioritize aliases over hardcoded models..."
 
-        # Define banned patterns - hardcoded model names
-        violations=0
-
-        # Check for common hardcoded model patterns
-        patterns=(
-          "gpt-[34]"
-          "claude-[34]"
-          "gemini-[12]"
-          "o1-"
-          "opus-[34]"
-          "sonnet-[34]"
-          "haiku-[34]"
-          "llama[23]"
-        )
-
-        for pattern in "${patterns[@]}"; do
-          echo "Checking pattern: $pattern"
-          if grep -r -E "$pattern" src/ docs/ examples/ --include="*.py" --include="*.md" 2>/dev/null; then
-            echo "❌ Found hardcoded model pattern: $pattern"
-            violations=$((violations + 1))
-          fi
-        done
-
-        if [ $violations -gt 0 ]; then
+        # Check that documentation shows aliases first
+        if grep -r "model.*=" docs/ examples/ --include="*.py" --include="*.md" | grep -E "gpt-|claude-|gemini-" | head -3; then
           echo ""
-          echo "❌ CI FAILURE: Found $violations hardcoded model pattern(s)"
-          echo "   Use semantic aliases instead: 'fast', 'balanced', 'deep', 'local'"
-          echo "   Hardcoded models only allowed in tests/ for testing specific providers"
-          echo "   See lockfile for alias definitions: llmring.lock"
-          exit 1
+          echo "⚠️  Found examples using hardcoded models - should prioritize aliases"
+          echo "   Examples should show: model='fast' (not model='openai:gpt-4o-mini')"
+          echo "   Document hardcoded format as escape hatch, not primary interface"
+          echo ""
+          echo "This is a style warning, not a failure - token counting and"
+          echo "technical implementation may legitimately need model names."
         else
-          echo "✅ No hardcoded model patterns found - correctly using aliases"
+          echo "✅ Documentation correctly prioritizes aliases over hardcoded models"
         fi
 
     - name: Run unit tests

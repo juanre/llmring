@@ -124,7 +124,7 @@ def count_tokens_anthropic(
 
 
 def count_tokens_google(
-    messages: List[Dict[str, Any]], model: str = "gemini-pro"
+    messages: List[Dict[str, Any]], model: str = "gemini-1.5-pro"
 ) -> int:
     """
     Count tokens for Google models.

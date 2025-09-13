@@ -231,15 +231,8 @@ class LLMRing:
 
         # Validate model if provider supports it
         if hasattr(provider, "validate_model"):
-            # Check if it's a coroutine (async mock in tests)
-            import inspect
-
-            validate_result = provider.validate_model(model_name)
-            if inspect.iscoroutine(validate_result):
-                # In tests with async mocks, we need to await
-                valid = await validate_result
-            else:
-                valid = validate_result
+            # All validate_model methods are now async due to registry integration
+            valid = await provider.validate_model(model_name)
 
             if not valid:
                 raise ModelNotFoundError(

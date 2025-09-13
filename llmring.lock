@@ -1,65 +1,28 @@
 version = "1.0"
-created_at = "2025-09-13T15:00:00.000000+00:00"
-updated_at = "2025-09-13T15:00:00.000000+00:00"
+created_at = "2025-09-13T15:35:40.977615+00:00"
+updated_at = "2025-09-13T15:35:40.977616+00:00"
 default_profile = "default"
-
-# Intelligent lockfile created with registry-based analysis
-# Uses current models from September 2025 registry data
 
 [profiles.default]
 name = "default"
+[[profiles.default.bindings]]
+alias = "advisor"
+provider = "anthropic"
+model = "claude-opus-4-20250514"
 
 [[profiles.default.bindings]]
 alias = "deep"
 provider = "anthropic"
 model = "claude-opus-4-20250514"
-# Most capable reasoning model for complex analysis and research
-
-[[profiles.default.bindings]]
-alias = "balanced"
-provider = "anthropic"
-model = "claude-3-5-haiku-20241022"
-# Excellent balance of capability and cost for general use
 
 [[profiles.default.bindings]]
 alias = "fast"
 provider = "openai"
 model = "gpt-4o-mini"
-# Fast, cost-effective responses for simple queries
 
 [[profiles.default.bindings]]
-alias = "advisor"
+alias = "balanced"
 provider = "anthropic"
-model = "claude-opus-4-20250514"
-# Powers the intelligent lockfile creation system
-
-[[profiles.default.bindings]]
-alias = "local"
-provider = "ollama"
-model = "llama3.3:latest"
-# Local execution for privacy and offline use
-
-[profiles.default.metadata]
-created_by = "llmring-intelligent-v1.0.0"
-registry_analysis_date = "2025-09-13"
-rationale = "Selected based on registry analysis for optimal cost/performance balance"
+model = "claude-3-5-haiku-20241022"
 
 [profiles.default.registry_versions]
-
-[profiles.prod]
-name = "prod"
-bindings = []
-
-[profiles.staging]
-name = "staging"
-bindings = []
-
-[profiles.dev]
-name = "dev"
-bindings = []
-
-[profiles.prod.registry_versions]
-
-[profiles.staging.registry_versions]
-
-[profiles.dev.registry_versions]

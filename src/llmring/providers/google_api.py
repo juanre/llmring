@@ -36,7 +36,7 @@ class GoogleProvider(BaseLLMProvider):
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         project_id: Optional[str] = None,
-        model: str = "gemini-1.5-pro",
+        model: Optional[str] = None,
     ):
         """
         Initialize the Google Gemini provider.
@@ -72,7 +72,7 @@ class GoogleProvider(BaseLLMProvider):
         # Store for backward compatibility
         self.api_key = api_key
         self.project_id = project_id or os.environ.get("GOOGLE_PROJECT_ID", "")
-        self.default_model = model
+        self.default_model = model  # Will be derived from registry if None
 
         # Initialize the client
         self.client = genai.Client(api_key=api_key)
@@ -205,14 +205,102 @@ class GoogleProvider(BaseLLMProvider):
             logging.warning(f"Registry unavailable for supported models, returning empty list: {e}")
             return []
 
-    def get_default_model(self) -> str:
+    async def get_default_model(self) -> str:
         """
-        Get the default model to use.
+        Get the default model to use, derived from registry if not specified.
 
         Returns:
             Default model name
         """
-        return self.default_model
+        if self.default_model:
+            return self.default_model
+
+        # Derive from registry using policy-based selection
+        try:
+            models = await self.get_supported_models()
+            if models:
+                # Use registry-based selection policy (no hardcoded preferences)
+                selected_model = await self._select_default_from_registry(models)
+                self.default_model = selected_model
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Google: Derived default model from registry: {selected_model}")
+                return selected_model
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Could not derive default model from registry: {e}")
+
+        # Ultimate fallback - log and fail gracefully
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error("No default model available and registry inaccessible")
+        from llmring.exceptions import ModelNotFoundError
+        raise ModelNotFoundError("No default model available", provider="google")
+
+    async def _select_default_from_registry(self, available_models: List[str]) -> str:
+        """
+        Select default model from registry using policy (no hardcoded preferences).
+
+        Args:
+            available_models: List of available model names from registry
+
+        Returns:
+            Selected default model
+        """
+        # Policy: Select based on registry metadata if available
+        try:
+            registry_models = await self._registry_client.fetch_current_models("google")
+            active_models = [m for m in registry_models if m.is_active and m.model_name in available_models]
+
+            if active_models:
+                # Select most balanced: reasonable cost + good capabilities + recent
+                scored_models = []
+                for model in active_models:
+                    score = 0
+                    # Prefer models with moderate cost (not cheapest, not most expensive)
+                    input_cost = model.dollars_per_million_tokens_input or 0
+                    if 0.01 <= input_cost <= 10.0:  # Balanced cost range for Google
+                        score += 10
+
+                    # Prefer models with good capabilities
+                    if model.supports_function_calling:
+                        score += 5
+                    if model.supports_vision:
+                        score += 3
+
+                    # Prefer larger context models
+                    if model.max_input_tokens and model.max_input_tokens >= 1000000:  # 1M+ context
+                        score += 4
+
+                    # Prefer more recent models (if added_date is available)
+                    if model.added_date:
+                        import datetime
+                        days_since_added = (datetime.datetime.now(datetime.timezone.utc) - model.added_date).days
+                        if days_since_added < 180:  # Less than 6 months old
+                            score += 5
+
+                    scored_models.append((model.model_name, score))
+
+                if scored_models:
+                    # Select highest scoring model
+                    best_model = max(scored_models, key=lambda x: x[1])
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"Google: Selected default model '{best_model[0]}' with score {best_model[1]} from registry analysis")
+                    return best_model[0]
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Could not use registry metadata for Google selection: {e}")
+
+        # Fallback: first available model
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Google: Fallback to first available model: {available_models[0]}")
+        return available_models[0]
 
     async def get_capabilities(self) -> ProviderCapabilities:
         """
@@ -235,7 +323,7 @@ class GoogleProvider(BaseLLMProvider):
             supports_json_mode=True,  # Via response_mime_type
             supports_caching=False,
             max_context_window=1000000,  # Gemini 1.5 Pro has 1M context
-            default_model=self.default_model,
+            default_model=await self.get_default_model(),
         )
 
     def get_token_count(self, text: str) -> int:
