@@ -13,12 +13,9 @@ import asyncio
 import json
 import pytest
 from typing import Dict, Any, List, Optional
-from unittest.mock import AsyncMock, MagicMock
-from types import SimpleNamespace
 
 from llmring.mcp.server import MCPServer
 from llmring.mcp.server.transport.base import Transport
-from llmring.mcp.server.protocol.handlers import ProtocolError
 from llmring.mcp.server.protocol.json_rpc import JSONRPCError
 
 
@@ -52,12 +49,16 @@ class MockTransport(Transport):
         try:
             message = json.loads(line)
             self._handle_message(message)
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
             # Send parse error response
             error_response = {
                 "jsonrpc": "2.0",
                 "id": None,
-                "error": {"code": -32700, "message": "Parse error", "data": {"line": line[:100]}},
+                "error": {
+                    "code": -32700,
+                    "message": "Parse error",
+                    "data": {"line": line[:100]},
+                },
             }
             await self.send_message(error_response)
 
@@ -84,7 +85,9 @@ class TestProtocolCompliance:
 
         try:
             # Try to call method before initialization
-            transport._handle_message({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+            transport._handle_message(
+                {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+            )
 
             # Wait for response
             await asyncio.sleep(0.1)
@@ -143,7 +146,9 @@ class TestProtocolCompliance:
 
             # Step 3: Can now make requests
             transport.clear_messages()
-            transport._handle_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+            transport._handle_message(
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+            )
 
             await asyncio.sleep(0.1)
 
@@ -240,7 +245,9 @@ class TestProtocolCompliance:
 
         try:
             # Test method not found (-32601)
-            transport._handle_message({"jsonrpc": "2.0", "id": 1, "method": "unknown/method"})
+            transport._handle_message(
+                {"jsonrpc": "2.0", "id": 1, "method": "unknown/method"}
+            )
 
             await asyncio.sleep(0.1)
 
@@ -314,7 +321,9 @@ class TestProtocolCompliance:
 
             # List tools
             transport.clear_messages()
-            transport._handle_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+            transport._handle_message(
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+            )
 
             await asyncio.sleep(0.1)
 
@@ -386,7 +395,9 @@ class TestProtocolCompliance:
 
             # List resources
             transport.clear_messages()
-            transport._handle_message({"jsonrpc": "2.0", "id": 2, "method": "resources/list"})
+            transport._handle_message(
+                {"jsonrpc": "2.0", "id": 2, "method": "resources/list"}
+            )
 
             await asyncio.sleep(0.1)
 
@@ -453,12 +464,17 @@ class TestProtocolCompliance:
         server.register_prompt(
             name="test_prompt",
             description="A test prompt",
-            arguments=[{"name": "topic", "description": "Topic to discuss", "required": True}],
+            arguments=[
+                {"name": "topic", "description": "Topic to discuss", "required": True}
+            ],
             handler=lambda args: {
                 "messages": [
                     {
                         "role": "user",
-                        "content": {"type": "text", "text": f"Tell me about {args['topic']}"},
+                        "content": {
+                            "type": "text",
+                            "text": f"Tell me about {args['topic']}",
+                        },
                     }
                 ]
             },
@@ -482,7 +498,9 @@ class TestProtocolCompliance:
 
             # List prompts
             transport.clear_messages()
-            transport._handle_message({"jsonrpc": "2.0", "id": 2, "method": "prompts/list"})
+            transport._handle_message(
+                {"jsonrpc": "2.0", "id": 2, "method": "prompts/list"}
+            )
 
             await asyncio.sleep(0.1)
 
@@ -510,7 +528,10 @@ class TestProtocolCompliance:
             assert response["id"] == 3
             assert "result" in response
             assert "messages" in response["result"]
-            assert "Tell me about Python" in response["result"]["messages"][0]["content"]["text"]
+            assert (
+                "Tell me about Python"
+                in response["result"]["messages"][0]["content"]["text"]
+            )
 
         finally:
             server._running = False
@@ -692,7 +713,10 @@ class TestEdgeCases:
                         "jsonrpc": "2.0",
                         "id": i + 10,
                         "method": "tools/call",
-                        "params": {"name": "slow", "arguments": {"duration": 0.1 * (i + 1)}},
+                        "params": {
+                            "name": "slow",
+                            "arguments": {"duration": 0.1 * (i + 1)},
+                        },
                     }
                 )
 

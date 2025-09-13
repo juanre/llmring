@@ -48,7 +48,10 @@ class FastAPIStreamableTransport(StreamableHTTPTransport):
 
         # Check Accept header
         accept_header = request.headers.get("accept", "")
-        if "text/event-stream" not in accept_header and "application/json" not in accept_header:
+        if (
+            "text/event-stream" not in accept_header
+            and "application/json" not in accept_header
+        ):
             raise HTTPException(
                 status_code=406,
                 detail="Accept header must include 'application/json' and/or 'text/event-stream'",
@@ -82,7 +85,9 @@ class FastAPIStreamableTransport(StreamableHTTPTransport):
             )
 
 
-def create_mcp_endpoint(transport: FastAPIStreamableTransport, endpoint_path: str = "/mcp"):
+def create_mcp_endpoint(
+    transport: FastAPIStreamableTransport, endpoint_path: str = "/mcp"
+):
     """
     Create FastAPI endpoint handlers for MCP Streamable HTTP.
 
@@ -95,7 +100,8 @@ def create_mcp_endpoint(transport: FastAPIStreamableTransport, endpoint_path: st
     """
 
     async def handle_post(
-        request: Request, mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id")
+        request: Request,
+        mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
     ):
         """Handle POST requests to the MCP endpoint."""
         return await transport.create_response(request)
@@ -108,28 +114,33 @@ def create_mcp_endpoint(transport: FastAPIStreamableTransport, endpoint_path: st
         """Handle GET requests for SSE streams."""
         if not transport.enable_sessions:
             raise HTTPException(
-                status_code=400, detail="GET requests require session management to be enabled"
+                status_code=400,
+                detail="GET requests require session management to be enabled",
             )
 
         if not mcp_session_id:
             raise HTTPException(
-                status_code=400, detail="Mcp-Session-Id header required for GET requests"
+                status_code=400,
+                detail="Mcp-Session-Id header required for GET requests",
             )
 
         return await transport.create_response(request)
 
     async def handle_delete(
-        request: Request, mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id")
+        request: Request,
+        mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
     ):
         """Handle DELETE requests for session termination."""
         if not transport.enable_sessions:
             raise HTTPException(
-                status_code=400, detail="DELETE requests require session management to be enabled"
+                status_code=400,
+                detail="DELETE requests require session management to be enabled",
             )
 
         if not mcp_session_id:
             raise HTTPException(
-                status_code=400, detail="Mcp-Session-Id header required for DELETE requests"
+                status_code=400,
+                detail="Mcp-Session-Id header required for DELETE requests",
             )
 
         await transport.handle_request(request)
@@ -138,7 +149,9 @@ def create_mcp_endpoint(transport: FastAPIStreamableTransport, endpoint_path: st
     return handle_post, handle_get, handle_delete
 
 
-def setup_mcp_routes(app, transport: FastAPIStreamableTransport, endpoint_path: str = "/mcp"):
+def setup_mcp_routes(
+    app, transport: FastAPIStreamableTransport, endpoint_path: str = "/mcp"
+):
     """
     Setup MCP routes on a FastAPI application.
 
@@ -147,7 +160,9 @@ def setup_mcp_routes(app, transport: FastAPIStreamableTransport, endpoint_path: 
         transport: The configured transport instance
         endpoint_path: The endpoint path (default: /mcp)
     """
-    post_handler, get_handler, delete_handler = create_mcp_endpoint(transport, endpoint_path)
+    post_handler, get_handler, delete_handler = create_mcp_endpoint(
+        transport, endpoint_path
+    )
 
     app.post(endpoint_path)(post_handler)
     app.get(endpoint_path)(get_handler)

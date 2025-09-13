@@ -65,7 +65,11 @@ class TestMCPClientWithLLM:
         """Test sampling request with unsupported method."""
         client = MCPClientWithLLM("http://test.example.com")
 
-        request = {"method": "sampling/unsupportedMethod", "params": {}, "id": "test-123"}
+        request = {
+            "method": "sampling/unsupportedMethod",
+            "params": {},
+            "id": "test-123",
+        }
 
         response = client.handle_sampling_request(request)
 
@@ -102,7 +106,10 @@ class TestMCPClientWithLLM:
         assert response["id"] == "test-123"
         assert "error" in response
         assert response["error"]["code"] == -32602
-        assert "role" in response["error"]["data"] and "content" in response["error"]["data"]
+        assert (
+            "role" in response["error"]["data"]
+            and "content" in response["error"]["data"]
+        )
 
     def test_missing_model(self):
         """Test sampling request without model and no default."""
@@ -257,7 +264,9 @@ class TestAsyncMCPClientWithLLM:
         mock_llm_service.chat = AsyncMock(return_value=mock_response)
 
         client = AsyncMCPClientWithLLM(
-            "http://test.example.com", llmring=mock_llm_service, default_model="claude-3"
+            "http://test.example.com",
+            llmring=mock_llm_service,
+            default_model="claude-3",
         )
 
         request = {
@@ -279,7 +288,9 @@ class TestAsyncMCPClientWithLLM:
     async def test_async_sampling_disabled(self):
         """Test async sampling when disabled."""
         config = {"enabled": False}
-        client = AsyncMCPClientWithLLM("http://test.example.com", sampling_config=config)
+        client = AsyncMCPClientWithLLM(
+            "http://test.example.com", sampling_config=config
+        )
 
         request = {
             "method": "sampling/createMessage",
@@ -421,7 +432,9 @@ class TestLLMSamplingIntegration:
         )
 
         client = MCPClientWithLLM(
-            "http://test.example.com", llmring=mock_llm_service, default_model="test-model"
+            "http://test.example.com",
+            llmring=mock_llm_service,
+            default_model="test-model",
         )
 
         request = {

@@ -141,7 +141,9 @@ class MCPClient:
 
         # Bidirectional communication support
         self._notification_handlers: dict[str, list[Callable]] = defaultdict(list)
-        self._method_handlers: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {}
+        self._method_handlers: dict[
+            str, Callable[[dict[str, Any]], dict[str, Any]]
+        ] = {}
         self._connection_state = ConnectionState.DISCONNECTED
         self._connection_state_handlers: list[Callable[[ConnectionState], None]] = []
         self._connected_handlers: list[Callable[[], None]] = []
@@ -268,7 +270,9 @@ class MCPClient:
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         return future.result(timeout=120.0)
 
-    def _make_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _make_request(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Make a JSON-RPC request via transport."""
         request_id = str(uuid.uuid4())
 
@@ -293,10 +297,14 @@ class MCPClient:
                     f"Transport not connected, starting... (current state: {self.transport.state})"
                 )
                 self._run_async(self.transport.start())
-                self.logger.debug(f"Transport state after start: {self.transport.state}")
+                self.logger.debug(
+                    f"Transport state after start: {self.transport.state}"
+                )
             elif not hasattr(self.transport, "state"):
                 # Fallback for transports without state tracking
-                self.logger.debug("Transport has no state tracking, checking if already started")
+                self.logger.debug(
+                    "Transport has no state tracking, checking if already started"
+                )
                 if not getattr(self.transport, "_started", False):
                     self._run_async(self.transport.start())
                     self.transport._started = True
@@ -377,7 +385,9 @@ class MCPClient:
     def get_negotiated_protocol_version(self) -> str | None:
         return self.negotiated_protocol_version
 
-    def _send_notification(self, method: str, params: dict[str, Any] | None = None) -> None:
+    def _send_notification(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> None:
         """Send a notification (no response expected)."""
         notification = {
             "jsonrpc": "2.0",
@@ -394,9 +404,13 @@ class MCPClient:
                 await self.transport.send_notification(notification)
                 self.logger.info("Successfully sent via transport.send_notification")
             except AttributeError as e:
-                self.logger.info(f"send_notification not available: {e}, trying direct send")
+                self.logger.info(
+                    f"send_notification not available: {e}, trying direct send"
+                )
                 # Transport might not support notifications, try direct send
-                if hasattr(self.transport, "process") and hasattr(self.transport.process, "stdin"):
+                if hasattr(self.transport, "process") and hasattr(
+                    self.transport.process, "stdin"
+                ):
                     # Direct send for stdio transport
                     message_json = json.dumps(notification) + "\n"
                     self.logger.info(f"Sending directly: {message_json.strip()}")
@@ -439,7 +453,9 @@ class MCPClient:
             return result["roots"]
         return result if isinstance(result, list) else []
 
-    def get_prompt(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    def get_prompt(
+        self, name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Get a prompt with arguments."""
         if not name or not isinstance(name, str):
             raise ValueError("Prompt name must be a non-empty string")
@@ -464,7 +480,9 @@ class MCPClient:
         params = {"uri": uri}
         return self._make_request("resources/read", params)
 
-    def subscribe_to_resource(self, uri: str, callback: Callable[[dict[str, Any]], None]) -> str:
+    def subscribe_to_resource(
+        self, uri: str, callback: Callable[[dict[str, Any]], None]
+    ) -> str:
         """
         Subscribe to resource change notifications.
 
@@ -569,7 +587,9 @@ class MCPClient:
                     try:
                         callback(params)
                     except Exception as e:
-                        logger.error(f"Error in resource notification callback for {uri}: {e}")
+                        logger.error(
+                            f"Error in resource notification callback for {uri}: {e}"
+                        )
         elif method == "notifications/resources/list_changed":
             # Handle resource list changes - call all callbacks
             params = notification.get("params", {})
@@ -701,7 +721,9 @@ class MCPClient:
             try:
                 self.unsubscribe_from_resource(uri)
             except Exception as e:
-                self.logger.warning(f"Error unsubscribing from resource {uri} during close: {e}")
+                self.logger.warning(
+                    f"Error unsubscribing from resource {uri} during close: {e}"
+                )
 
         try:
             self._run_async(self.transport.close())
@@ -758,7 +780,9 @@ class AsyncMCPClient:
 
         # Bidirectional communication support
         self._notification_handlers: dict[str, list[Callable]] = defaultdict(list)
-        self._method_handlers: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {}
+        self._method_handlers: dict[
+            str, Callable[[dict[str, Any]], dict[str, Any]]
+        ] = {}
         self._connection_state = ConnectionState.DISCONNECTED
 
     @classmethod
@@ -915,7 +939,9 @@ class AsyncMCPClient:
             except Exception as e:
                 logger.warning(f"Unexpected error sending response: {e}")
 
-    async def _send_notification(self, method: str, params: dict[str, Any] | None = None) -> None:
+    async def _send_notification(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> None:
         """Send a notification (no response expected)."""
         notification = {
             "jsonrpc": "2.0",
@@ -928,7 +954,9 @@ class AsyncMCPClient:
             await self.transport.send_notification(notification)
         except AttributeError:
             # Transport might not support notifications, try direct send
-            if hasattr(self.transport, "process") and hasattr(self.transport.process, "stdin"):
+            if hasattr(self.transport, "process") and hasattr(
+                self.transport.process, "stdin"
+            ):
                 # Direct send for stdio transport
                 message_json = json.dumps(notification) + "\n"
                 self.transport.process.stdin.write(message_json.encode("utf-8"))

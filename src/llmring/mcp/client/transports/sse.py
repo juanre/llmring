@@ -150,7 +150,9 @@ class SSETransport(Transport):
 
             # Remove timestamps older than 1 minute
             cutoff = now - 60.0
-            self._request_timestamps = [ts for ts in self._request_timestamps if ts > cutoff]
+            self._request_timestamps = [
+                ts for ts in self._request_timestamps if ts > cutoff
+            ]
 
             # Check if we're at the limit
             if len(self._request_timestamps) >= self.rate_limit_requests_per_minute:
@@ -229,7 +231,10 @@ class SSETransport(Transport):
             except Exception as e:
                 logger.error(f"SSE connection error: {e}")
 
-                if self._should_reconnect and self.state != ConnectionState.DISCONNECTED:
+                if (
+                    self._should_reconnect
+                    and self.state != ConnectionState.DISCONNECTED
+                ):
                     await self._handle_reconnection()
                 else:
                     break
@@ -251,7 +256,9 @@ class SSETransport(Transport):
         # Apply protocol version header if negotiated
         if self._protocol_version:
             sse_headers["MCP-Protocol-Version"] = self._protocol_version
-        async with self.sse_client.stream("GET", sse_url, headers=sse_headers) as response:
+        async with self.sse_client.stream(
+            "GET", sse_url, headers=sse_headers
+        ) as response:
             response.raise_for_status()
 
             # Validate response headers for security
@@ -312,22 +319,31 @@ class SSETransport(Transport):
                     if isinstance(error, dict):
                         error_msg = error.get("message", str(error))
                         code = error.get("code", -32000)
-                        future.set_exception(ValueError(f"JSON-RPC error {code}: {error_msg}"))
+                        future.set_exception(
+                            ValueError(f"JSON-RPC error {code}: {error_msg}")
+                        )
                     else:
                         future.set_exception(ValueError(f"JSON-RPC error: {error}"))
                 else:
                     # Successful response
                     future.set_result(message.get("result", {}))
             else:
-                logger.warning(f"Received response for unknown request ID: {request_id}")
+                logger.warning(
+                    f"Received response for unknown request ID: {request_id}"
+                )
         else:
             # This is a notification (no id field)
             self._handle_message(message)
 
     async def _handle_reconnection(self) -> None:
         """Handle SSE reconnection with exponential backoff."""
-        if self.max_reconnect_attempts and self._reconnect_count >= self.max_reconnect_attempts:
-            logger.error(f"Max reconnection attempts ({self.max_reconnect_attempts}) reached")
+        if (
+            self.max_reconnect_attempts
+            and self._reconnect_count >= self.max_reconnect_attempts
+        ):
+            logger.error(
+                f"Max reconnection attempts ({self.max_reconnect_attempts}) reached"
+            )
             self._set_state(ConnectionState.ERROR)
             return
 
@@ -381,11 +397,15 @@ class SSETransport(Transport):
                 "Content-Type": "application/json",
             }
 
-            logger.debug(f"Sending SSE HTTP request: {message.get('method', 'unknown')}")
+            logger.debug(
+                f"Sending SSE HTTP request: {message.get('method', 'unknown')}"
+            )
 
             if self._protocol_version:
                 post_headers["MCP-Protocol-Version"] = self._protocol_version
-            response = await self.http_client.post(rpc_url, headers=post_headers, json=message)
+            response = await self.http_client.post(
+                rpc_url, headers=post_headers, json=message
+            )
 
             # Check for immediate HTTP errors
             response.raise_for_status()
@@ -482,7 +502,9 @@ class SSETransport(Transport):
         if self.enable_cors_validation:
             access_control_origin = response.headers.get("access-control-allow-origin")
             if access_control_origin == "*":
-                logger.warning("Server allows all origins (*) which may be a security risk")
+                logger.warning(
+                    "Server allows all origins (*) which may be a security risk"
+                )
 
         # Check for security headers
         security_headers = {

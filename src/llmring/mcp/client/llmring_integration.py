@@ -24,13 +24,13 @@ logger = logging.getLogger(__name__)
 class MCPLLMRingIntegration:
     """
     Integration layer that connects MCP with LLMRing and llmring-server.
-    
+
     This class:
     - Uses LLMRing for actual LLM calls
     - Uses llmring-server API for all persistence
     - Maintains no database dependencies
     """
-    
+
     def __init__(
         self,
         origin: str = "mcp",
@@ -39,23 +39,23 @@ class MCPLLMRingIntegration:
     ):
         """
         Initialize the integration layer.
-        
+
         Args:
             origin: Origin identifier for tracking
             llmring_server_url: URL of llmring-server for persistence
             api_key: API key for llmring-server
         """
         self.origin = origin
-        
+
         # Initialize LLMRing for LLM calls
         self.llmring = LLMRing(origin=origin)
-        
+
         # HTTP client for llmring-server API
         self.http_client = MCPHttpClient(
             base_url=llmring_server_url,
             api_key=api_key,
         )
-    
+
     async def chat(
         self,
         messages: List[Dict[str, Any]],
@@ -67,7 +67,7 @@ class MCPLLMRingIntegration:
     ) -> LLMResponse:
         """
         Send a chat request via LLMRing.
-        
+
         Args:
             messages: List of message dictionaries
             model: Model alias or identifier
@@ -75,7 +75,7 @@ class MCPLLMRingIntegration:
             max_tokens: Maximum tokens to generate
             conversation_id: Optional conversation ID for tracking
             **kwargs: Additional parameters
-            
+
         Returns:
             LLM response
         """
@@ -87,16 +87,16 @@ class MCPLLMRingIntegration:
             max_tokens=max_tokens,
             **kwargs,
         )
-        
+
         # Make the LLM call
         response = await self.llmring.chat(request)
-        
+
         # If we have a conversation ID, log to llmring-server
         if conversation_id:
             await self._log_to_server(conversation_id, messages, response)
-        
+
         return response
-    
+
     async def _log_to_server(
         self,
         conversation_id: UUID,
@@ -113,7 +113,7 @@ class MCPLLMRingIntegration:
                     role=user_message.get("role", "user"),
                     content=user_message.get("content", ""),
                 )
-            
+
             # Log assistant response
             if response.content:
                 await self.http_client.add_message(
@@ -123,7 +123,7 @@ class MCPLLMRingIntegration:
                 )
         except Exception as e:
             logger.warning(f"Failed to log to server: {e}")
-    
+
     async def create_conversation(
         self,
         title: str,
@@ -133,13 +133,13 @@ class MCPLLMRingIntegration:
     ) -> UUID:
         """
         Create a new conversation via llmring-server.
-        
+
         Args:
             title: Conversation title
             system_prompt: System prompt
             model_alias: Model to use
             project_id: Project ID
-            
+
         Returns:
             Conversation ID
         """
@@ -149,7 +149,7 @@ class MCPLLMRingIntegration:
             model_alias=model_alias,
             project_id=project_id,
         )
-    
+
     async def get_conversation_messages(
         self,
         conversation_id: UUID,
@@ -157,11 +157,11 @@ class MCPLLMRingIntegration:
     ) -> List[Dict[str, Any]]:
         """
         Get messages for a conversation from llmring-server.
-        
+
         Args:
             conversation_id: Conversation ID
             limit: Maximum messages to return
-            
+
         Returns:
             List of messages
         """
@@ -169,7 +169,7 @@ class MCPLLMRingIntegration:
             conversation_id=conversation_id,
             limit=limit,
         )
-    
+
     async def register_mcp_server(
         self,
         name: str,
@@ -180,14 +180,14 @@ class MCPLLMRingIntegration:
     ) -> Dict[str, Any]:
         """
         Register an MCP server via llmring-server.
-        
+
         Args:
             name: Server name
             url: Server URL
             transport_type: Transport type
             auth_config: Auth configuration
             project_id: Optional project ID
-            
+
         Returns:
             Server data with ID
         """
@@ -198,7 +198,7 @@ class MCPLLMRingIntegration:
             auth_config=auth_config,
             project_id=project_id,
         )
-    
+
     async def get_mcp_tools(
         self,
         server_id: Optional[UUID] = None,
@@ -206,11 +206,11 @@ class MCPLLMRingIntegration:
     ) -> List[Dict[str, Any]]:
         """
         Get all registered MCP tools via llmring-server.
-        
+
         Args:
             server_id: Filter by server ID
             project_id: Filter by project ID
-            
+
         Returns:
             List of tool definitions
         """
@@ -218,7 +218,7 @@ class MCPLLMRingIntegration:
             server_id=server_id,
             project_id=project_id,
         )
-    
+
     async def execute_mcp_tool(
         self,
         tool_id: UUID,
@@ -227,12 +227,12 @@ class MCPLLMRingIntegration:
     ) -> Dict[str, Any]:
         """
         Execute an MCP tool and record via llmring-server.
-        
+
         Args:
             tool_id: Tool ID
             input: Tool input
             conversation_id: Optional conversation ID
-            
+
         Returns:
             Execution result
         """
@@ -241,7 +241,7 @@ class MCPLLMRingIntegration:
             input=input,
             conversation_id=conversation_id,
         )
-    
+
     async def get_mcp_resources(
         self,
         server_id: Optional[UUID] = None,
@@ -249,11 +249,11 @@ class MCPLLMRingIntegration:
     ) -> List[Dict[str, Any]]:
         """
         Get all registered MCP resources via llmring-server.
-        
+
         Args:
             server_id: Filter by server ID
             project_id: Filter by project ID
-            
+
         Returns:
             List of resource definitions
         """
@@ -261,7 +261,7 @@ class MCPLLMRingIntegration:
             server_id=server_id,
             project_id=project_id,
         )
-    
+
     async def get_mcp_prompts(
         self,
         server_id: Optional[UUID] = None,
@@ -269,11 +269,11 @@ class MCPLLMRingIntegration:
     ) -> List[Dict[str, Any]]:
         """
         Get all registered MCP prompts via llmring-server.
-        
+
         Args:
             server_id: Filter by server ID
             project_id: Filter by project ID
-            
+
         Returns:
             List of prompt definitions
         """
@@ -281,7 +281,7 @@ class MCPLLMRingIntegration:
             server_id=server_id,
             project_id=project_id,
         )
-    
+
     async def close(self):
         """Clean up resources."""
         await self.http_client.close()

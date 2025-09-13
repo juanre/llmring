@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Message:
     """Message model"""
+
     id: Optional[str]
     conversation_id: str
     role: str
@@ -30,6 +31,7 @@ class Message:
 @dataclass
 class Conversation:
     """Complete conversation model"""
+
     id: str
     title: Optional[str]
     system_prompt: Optional[str]
@@ -48,6 +50,7 @@ class Conversation:
 @dataclass
 class ConversationSummary:
     """Conversation summary for list views"""
+
     id: str
     title: Optional[str]
     created_by: str
@@ -67,7 +70,7 @@ class AsyncConversationManager:
         api_key: Optional[str] = None,
     ):
         """Initialize the async conversation manager.
-        
+
         Args:
             llmring_server_url: URL of llmring-server
             api_key: Optional API key for authentication
@@ -124,10 +127,10 @@ class AsyncConversationManager:
         messages = await self.http_client.get_conversation_messages(
             conversation_id=UUID(conversation_id)
         )
-        
+
         if not messages and not include_messages:
             return None
-        
+
         # Construct conversation object from messages
         # This is a simplified version - real implementation would fetch full conversation data
         conversation = Conversation(
@@ -147,16 +150,20 @@ class AsyncConversationManager:
                     conversation_id=conversation_id,
                     role=msg.get("role", "user"),
                     content=msg.get("content", ""),
-                    timestamp=datetime.fromisoformat(msg.get("timestamp", datetime.now(UTC).isoformat())),
+                    timestamp=datetime.fromisoformat(
+                        msg.get("timestamp", datetime.now(UTC).isoformat())
+                    ),
                     token_count=msg.get("token_count"),
                     metadata=msg.get("metadata"),
                 )
                 for msg in messages
             ],
-            total_tokens=sum(msg.get("token_count", 0) for msg in messages if msg.get("token_count")),
+            total_tokens=sum(
+                msg.get("token_count", 0) for msg in messages if msg.get("token_count")
+            ),
             message_count=len(messages),
         )
-        
+
         return conversation
 
     async def get_conversation_messages(
@@ -170,14 +177,16 @@ class AsyncConversationManager:
             conversation_id=UUID(conversation_id),
             limit=limit,
         )
-        
+
         return [
             Message(
                 id=msg.get("id"),
                 conversation_id=conversation_id,
                 role=msg.get("role", "user"),
                 content=msg.get("content", ""),
-                timestamp=datetime.fromisoformat(msg.get("timestamp", datetime.now(UTC).isoformat())),
+                timestamp=datetime.fromisoformat(
+                    msg.get("timestamp", datetime.now(UTC).isoformat())
+                ),
                 token_count=msg.get("token_count"),
                 metadata=msg.get("metadata"),
             )

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class ServerClient(BaseHTTPClient):
     """Client for communicating with llmring-server or llmring-api."""
-    
+
     def __init__(
         self,
         base_url: str,
@@ -24,7 +24,7 @@ class ServerClient(BaseHTTPClient):
         timeout: float = 30.0,
     ):
         """Initialize the server client.
-        
+
         Args:
             base_url: Base URL of the server
             api_key: Optional API key for authentication
@@ -35,13 +35,13 @@ class ServerClient(BaseHTTPClient):
             api_key=api_key,
             timeout=timeout,
         )
-    
+
     # The base class provides all the needed methods:
     # - post(path, json) -> Dict[str, Any]
-    # - get(path, params) -> Dict[str, Any] 
+    # - get(path, params) -> Dict[str, Any]
     # - put(path, json) -> Dict[str, Any]
     # - delete(path) -> Union[Dict[str, Any], bool]
     # - close() -> None
     # - __aenter__ and __aexit__ for context manager support
-    
+
     # Any additional server-specific methods can be added here

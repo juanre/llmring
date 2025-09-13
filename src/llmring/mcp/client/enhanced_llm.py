@@ -54,7 +54,7 @@ def create_enhanced_llm(
 ) -> "EnhancedLLM":
     """
     Factory function to create an EnhancedLLM instance.
-    
+
     Args:
         llm_model: The underlying LLM model to use
         llmring_server_url: LLMRing server URL for persistence
@@ -62,7 +62,7 @@ def create_enhanced_llm(
         origin: Origin identifier for usage tracking
         user_id: Default user ID for requests
         api_key: Optional API key for LLMRing server
-        
+
     Returns:
         Configured EnhancedLLM instance
     """
@@ -90,7 +90,7 @@ class ToolDefinition:
 class EnhancedLLM:
     """
     Enhanced LLM interface that combines LLM capabilities with MCP tool execution.
-    
+
     This version is fully database-agnostic and uses HTTP endpoints for all persistence.
     """
 
@@ -118,30 +118,32 @@ class EnhancedLLM:
         self.origin = origin
         self.default_user_id = user_id or "enhanced-llm-user"
         self.api_key = api_key
-        
+
         # Initialize LLM service
         self.llmring = LLMRing(origin=origin)
-        
+
         # Initialize HTTP client for MCP operations
         self.http_client = MCPHttpClient(
             base_url=llmring_server_url,
             api_key=api_key,
         )
-        
+
         # Initialize conversation manager
         self.conversation_manager = AsyncConversationManager(
             llmring_server_url=llmring_server_url,
             api_key=api_key,
         )
-        
+
         # Initialize MCP client if server URL provided
         self.mcp_client: AsyncMCPClient | None = None
-        
+
         # Initialize streaming handler for tool support
         self.streaming_handler = StreamingToolHandler(self)
         if mcp_server_url:
             # Parse URL to determine transport type
-            if mcp_server_url.startswith("ws://") or mcp_server_url.startswith("wss://"):
+            if mcp_server_url.startswith("ws://") or mcp_server_url.startswith(
+                "wss://"
+            ):
                 self.mcp_client = AsyncMCPClient.websocket(mcp_server_url)
             elif mcp_server_url.startswith("stdio://"):
                 # Extract command from URL
@@ -150,13 +152,13 @@ class EnhancedLLM:
             else:
                 # Default to HTTP
                 self.mcp_client = AsyncMCPClient.http(mcp_server_url)
-        
+
         # Create info service for system information
         self.info_service = create_info_service()
-        
+
         # Registered tools from modules
         self.registered_tools: dict[str, ToolDefinition] = {}
-        
+
         # Current conversation context
         self.current_conversation_id: str | None = None
         self.conversation_history: list[Message] = []
@@ -165,7 +167,7 @@ class EnhancedLLM:
         """Initialize the MCP client if configured."""
         if self.mcp_client:
             await self.mcp_client.initialize()
-            
+
     async def close(self) -> None:
         """Clean up resources."""
         if self.mcp_client:
@@ -182,20 +184,20 @@ class EnhancedLLM:
     ) -> None:
         """
         Register a tool that can be used by the LLM.
-        
+
         Args:
             name: Tool name
             description: Tool description for the LLM
             parameters: JSON schema for tool parameters
             handler: Async function to execute the tool
             module_name: Optional module name for grouping
-            
+
         Raises:
             ValueError: If a tool with the same name is already registered
         """
         if name in self.registered_tools:
             raise ValueError(f"Tool '{name}' is already registered")
-            
+
         self.registered_tools[name] = ToolDefinition(
             name=name,
             description=description,
@@ -203,14 +205,14 @@ class EnhancedLLM:
             handler=handler,
             module_name=module_name,
         )
-    
+
     def unregister_tool(self, name: str) -> bool:
         """
         Unregister a tool.
-        
+
         Args:
             name: Tool name to unregister
-            
+
         Returns:
             True if tool was unregistered, False if it wasn't registered
         """
@@ -218,59 +220,65 @@ class EnhancedLLM:
             del self.registered_tools[name]
             return True
         return False
-    
+
     def list_registered_tools(self) -> list[dict[str, Any]]:
         """
         List all registered tools.
-        
+
         Returns:
             List of tool descriptions with name, description, module_name, and parameters
         """
         tools = []
         for tool_def in self.registered_tools.values():
-            tools.append({
-                "name": tool_def.name,
-                "description": tool_def.description,
-                "module_name": tool_def.module_name,
-                "parameters": tool_def.parameters,
-            })
+            tools.append(
+                {
+                    "name": tool_def.name,
+                    "description": tool_def.description,
+                    "module_name": tool_def.module_name,
+                    "parameters": tool_def.parameters,
+                }
+            )
         return tools
 
     async def _get_available_tools(self) -> list[dict[str, Any]]:
         """Get all available tools (registered + MCP)."""
         tools = []
-        
+
         # Add registered tools
         for tool_def in self.registered_tools.values():
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": tool_def.name,
-                    "description": tool_def.description,
-                    "parameters": tool_def.parameters,
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool_def.name,
+                        "description": tool_def.description,
+                        "parameters": tool_def.parameters,
+                    },
                 }
-            })
-        
+            )
+
         # Add MCP tools if client is available
         if self.mcp_client:
             try:
                 mcp_tools = await self.mcp_client.list_tools()
                 for tool in mcp_tools:
-                    tools.append({
-                        "type": "function",
-                        "function": {
-                            "name": f"mcp_{tool['name']}",
-                            "description": tool.get("description", ""),
-                            "parameters": tool.get("inputSchema", {}),
+                    tools.append(
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": f"mcp_{tool['name']}",
+                                "description": tool.get("description", ""),
+                                "parameters": tool.get("inputSchema", {}),
+                            },
                         }
-                    })
+                    )
             except (MCPError, ServerConnectionError, NetworkError) as e:
                 # Log but don't fail
                 logger.warning(f"Failed to get MCP tools: {e}")
             except Exception as e:
                 # Handle unexpected errors
                 logger.error(f"Unexpected error getting MCP tools: {e}")
-        
+
         return tools
 
     async def _execute_tool(
@@ -280,11 +288,11 @@ class EnhancedLLM:
     ) -> Any:
         """
         Execute a tool by name.
-        
+
         Args:
             tool_name: Name of the tool to execute
             arguments: Tool arguments
-            
+
         Returns:
             Tool execution result
         """
@@ -297,15 +305,17 @@ class EnhancedLLM:
             else:
                 # Run sync function in executor
                 loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(None, lambda: tool_def.handler(**arguments))
-        
+                return await loop.run_in_executor(
+                    None, lambda: tool_def.handler(**arguments)
+                )
+
         # Check if it's an MCP tool
         if tool_name.startswith("mcp_") and self.mcp_client:
             actual_name = tool_name[4:]  # Remove "mcp_" prefix
             return await self.mcp_client.call_tool(actual_name, arguments)
-        
+
         raise ValueError(f"Unknown tool: {tool_name}")
-    
+
     async def _execute_registered_tool(
         self,
         tool_name: str,
@@ -313,18 +323,18 @@ class EnhancedLLM:
     ) -> dict[str, Any]:
         """
         Execute a registered tool by name and handle errors.
-        
+
         Args:
             tool_name: Name of the registered tool to execute
             arguments: Tool arguments
-            
+
         Returns:
             Result dict with either success result or error message
         """
         try:
             if tool_name not in self.registered_tools:
                 return {"error": f"Tool '{tool_name}' is not registered"}
-            
+
             tool_def = self.registered_tools[tool_name]
             # Check if handler is async
             if inspect.iscoroutinefunction(tool_def.handler):
@@ -332,10 +342,12 @@ class EnhancedLLM:
             else:
                 # Run sync function in executor
                 loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(None, lambda: tool_def.handler(**arguments))
-            
+                result = await loop.run_in_executor(
+                    None, lambda: tool_def.handler(**arguments)
+                )
+
             return {"result": result}
-            
+
         except (ToolExecutionError, MCPToolError) as e:
             return {"error": f"Tool execution failed: {e}"}
         except Exception as e:
@@ -352,9 +364,9 @@ class EnhancedLLM:
     ) -> LLMResponse | AsyncIterator[StreamChunk]:
         """
         Send a conversation to the enhanced LLM and get a response.
-        
+
         This method is compatible with the standard LLMRing interface.
-        
+
         Args:
             messages: List of conversation messages
             user_id: User ID for tracking
@@ -362,7 +374,7 @@ class EnhancedLLM:
             max_tokens: Maximum tokens to generate
             stream: Whether to stream the response
             **kwargs: Additional parameters
-            
+
         Returns:
             LLMResponse with content and usage information
         """
@@ -374,62 +386,71 @@ class EnhancedLLM:
                 msg = msg.copy()
                 # Check for attachments in the message
                 attachments = msg.pop("attachments", None)
-                
+
                 # If we have attachments, process them into the message content
                 if attachments:
                     # Convert attachments to content parts
                     content_parts = []
-                    
+
                     # Add text content first if present
                     if msg.get("content"):
-                        content_parts.append({
-                            "type": "text",
-                            "text": msg["content"]
-                        })
-                    
+                        content_parts.append({"type": "text", "text": msg["content"]})
+
                     # Process each attachment
                     for attachment in attachments:
                         if attachment.get("type") == "file" and attachment.get("data"):
                             # Convert file data to base64 for the API
                             file_data = attachment["data"]
                             if isinstance(file_data, bytes):
-                                content_type = attachment.get("content_type", "application/octet-stream")
-                                base64_url = create_file_content(file_data, content_type, as_base64=True)
+                                content_type = attachment.get(
+                                    "content_type", "application/octet-stream"
+                                )
+                                base64_url = create_file_content(
+                                    file_data, content_type, as_base64=True
+                                )
                                 # Extract just the base64 part for compatibility
                                 if base64_url.startswith("data:"):
-                                    base64_data = base64_url.split(",")[1] if "," in base64_url else base64_url
+                                    base64_data = (
+                                        base64_url.split(",")[1]
+                                        if "," in base64_url
+                                        else base64_url
+                                    )
                                 else:
                                     base64_data = base64_url
                             else:
                                 base64_data = file_data
-                            
+
                             # Add as image content (for vision-capable models)
                             content_type = attachment.get("content_type", "")
                             if content_type.startswith("image/"):
                                 # Use OpenAI format which providers will convert
-                                content_parts.append({
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:{content_type};base64,{base64_data}"
+                                content_parts.append(
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:{content_type};base64,{base64_data}"
+                                        },
                                     }
-                                })
+                                )
                             else:
                                 # For non-image files, add as text description
-                                content_parts.append({
-                                    "type": "text",
-                                    "text": f"[File: {attachment.get('filename', 'unknown')} ({content_type})]"
-                                })
-                    
+                                content_parts.append(
+                                    {
+                                        "type": "text",
+                                        "text": f"[File: {attachment.get('filename', 'unknown')} ({content_type})]",
+                                    }
+                                )
+
                     # Update message content with structured parts
                     msg["content"] = content_parts
-                
+
                 formatted_messages.append(Message(**msg))
             else:
                 formatted_messages.append(msg)
-        
+
         # Get available tools
         tools = await self._get_available_tools()
-        
+
         # Create LLM request
         request = LLMRequest(
             model=self.llm_model,
@@ -442,7 +463,7 @@ class EnhancedLLM:
             stream=stream,
             **kwargs,
         )
-        
+
         # Handle streaming
         if stream:
             if tools:
@@ -454,10 +475,10 @@ class EnhancedLLM:
             else:
                 # Streaming without tools - pass through directly
                 return await self.llmring.chat(request)
-        
+
         # Send to LLM (non-streaming)
         response = await self.llmring.chat(request)
-        
+
         # Handle tool calls if present
         if response.tool_calls:
             # Execute tool calls
@@ -468,26 +489,34 @@ class EnhancedLLM:
                     args = tool_call["function"]["arguments"]
                     if isinstance(args, str):
                         args = json.loads(args)
-                    
+
                     result = await self._execute_tool(
                         tool_call["function"]["name"],
                         args,
                     )
-                    tool_results.append({
-                        "tool_call_id": tool_call["id"],
-                        "content": json.dumps(result) if not isinstance(result, str) else result,
-                    })
+                    tool_results.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "content": json.dumps(result)
+                            if not isinstance(result, str)
+                            else result,
+                        }
+                    )
                 except (ToolExecutionError, MCPToolError) as e:
-                    tool_results.append({
-                        "tool_call_id": tool_call["id"],
-                        "content": f"Tool execution failed: {e}",
-                    })
+                    tool_results.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "content": f"Tool execution failed: {e}",
+                        }
+                    )
                 except Exception as e:
-                    tool_results.append({
-                        "tool_call_id": tool_call["id"],
-                        "content": f"Unexpected error executing tool: {e}",
-                    })
-            
+                    tool_results.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "content": f"Unexpected error executing tool: {e}",
+                        }
+                    )
+
             # Add tool results to messages and get final response
             # Ensure tool call arguments are strings for the message history
             parsed_tool_calls = []
@@ -499,20 +528,24 @@ class EnhancedLLM:
                     if not isinstance(args, str):
                         parsed_tc["function"]["arguments"] = json.dumps(args)
                 parsed_tool_calls.append(parsed_tc)
-            
-            formatted_messages.append(Message(
-                role="assistant",
-                content=response.content or "",
-                tool_calls=parsed_tool_calls,
-            ))
-            
+
+            formatted_messages.append(
+                Message(
+                    role="assistant",
+                    content=response.content or "",
+                    tool_calls=parsed_tool_calls,
+                )
+            )
+
             for tool_result in tool_results:
-                formatted_messages.append(Message(
-                    role="tool",
-                    content=tool_result["content"],
-                    tool_call_id=tool_result["tool_call_id"],
-                ))
-            
+                formatted_messages.append(
+                    Message(
+                        role="tool",
+                        content=tool_result["content"],
+                        tool_call_id=tool_result["tool_call_id"],
+                    )
+                )
+
             # Get final response after tool execution
             final_request = LLMRequest(
                 model=self.llm_model,
@@ -523,7 +556,7 @@ class EnhancedLLM:
                 **kwargs,
             )
             response = await self.llmring.chat(final_request)
-        
+
         # Store in conversation history if we have a conversation
         if self.current_conversation_id:
             try:
@@ -543,7 +576,7 @@ class EnhancedLLM:
             except Exception as e:
                 # Handle unexpected storage errors
                 logger.error(f"Unexpected error storing message: {e}")
-        
+
         return response
 
     async def create_conversation(
@@ -554,12 +587,12 @@ class EnhancedLLM:
     ) -> str:
         """
         Create a new conversation.
-        
+
         Args:
             title: Conversation title
             system_prompt: System prompt
             user_id: User ID
-            
+
         Returns:
             Conversation ID
         """
@@ -579,7 +612,7 @@ class EnhancedLLM:
     ) -> None:
         """
         Load an existing conversation.
-        
+
         Args:
             conversation_id: Conversation ID to load
             user_id: User ID for verification
@@ -588,7 +621,7 @@ class EnhancedLLM:
             conversation_id=conversation_id,
             user_id=user_id or self.default_user_id,
         )
-        
+
         if conversation:
             self.current_conversation_id = conversation_id
             self.conversation_history = conversation.messages
@@ -602,11 +635,11 @@ class EnhancedLLM:
     ) -> list[dict[str, Any]]:
         """
         List recent conversations.
-        
+
         Args:
             user_id: User ID
             limit: Maximum number of conversations
-            
+
         Returns:
             List of conversation summaries
         """
@@ -614,17 +647,17 @@ class EnhancedLLM:
             user_id=user_id or self.default_user_id,
             limit=limit,
         )
-    
+
     async def get_usage_stats(
         self,
         user_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Get usage statistics for the user.
-        
+
         Args:
             user_id: User ID (uses default if not provided)
-            
+
         Returns:
             Dictionary with usage statistics
         """
@@ -636,13 +669,13 @@ class EnhancedLLM:
             "total_cost": 0.0,
             "note": "Usage statistics not yet implemented - requires server endpoint",
         }
-    
+
     # File Processing Methods
-    
+
     def _guess_content_type_from_bytes(self, file_bytes: bytes) -> str:
         """Guess content type from file bytes using consolidated utility."""
         return guess_content_type_from_bytes(file_bytes)
-    
+
     async def _fetch_file_from_url(self, url: str) -> tuple[bytes, str]:
         """Fetch a file from a URL using consolidated utility."""
         try:
@@ -650,18 +683,20 @@ class EnhancedLLM:
             content_type = guess_content_type_from_bytes(file_bytes)
             return file_bytes, content_type
         except (NetworkError, FileProcessingError) as e:
-            raise FileProcessingError(f"Failed to fetch file from URL: {e}", details={"url": url})
+            raise FileProcessingError(
+                f"Failed to fetch file from URL: {e}", details={"url": url}
+            )
         except Exception as e:
-            raise FileProcessingError(f"Unexpected error fetching file: {e}", details={"url": url})
-    
+            raise FileProcessingError(
+                f"Unexpected error fetching file: {e}", details={"url": url}
+            )
+
     async def _decode_base64_file(
-        self,
-        base64_data: str,
-        content_type: str | None = None
+        self, base64_data: str, content_type: str | None = None
     ) -> tuple[bytes, str]:
         """Decode base64 file data using consolidated utility."""
         return decode_base64_file(base64_data)
-    
+
     async def process_file_from_source(
         self,
         source_type: str,
@@ -671,7 +706,7 @@ class EnhancedLLM:
     ) -> dict[str, Any]:
         """
         Process a file from different sources (upload, url, base64).
-        
+
         Args:
             source_type: Type of source ("upload", "url", "base64")
             source_data: Source-specific data:
@@ -680,7 +715,7 @@ class EnhancedLLM:
                 - "base64": base64 encoded file data
             filename: Original filename
             content_type: Optional content type hint
-            
+
         Returns:
             File attachment dictionary ready for LLM processing
         """
@@ -690,22 +725,24 @@ class EnhancedLLM:
                 result = process_file_util(source_data, source_type="path")
                 file_bytes = result["content"]
                 content_type = content_type or result["content_type"]
-            
+
             elif source_type == "url":
                 # Fetch file from URL
-                file_bytes, detected_content_type = await self._fetch_file_from_url(source_data)
+                file_bytes, detected_content_type = await self._fetch_file_from_url(
+                    source_data
+                )
                 content_type = content_type or detected_content_type
-            
+
             elif source_type == "base64":
                 # Decode base64 data
                 file_bytes, detected_content_type = await self._decode_base64_file(
                     source_data, content_type
                 )
                 content_type = content_type or detected_content_type
-            
+
             else:
                 raise ValueError(f"Unsupported source type: {source_type}")
-            
+
             return {
                 "type": "file",
                 "filename": filename,
@@ -714,21 +751,21 @@ class EnhancedLLM:
                 "source_type": source_type,
                 "source_data": source_data,
             }
-        
+
         except FileProcessingError:
             raise  # Re-raise file processing errors as-is
         except Exception as e:
             raise FileProcessingError(
-                f"Failed to process file from {source_type}: {e}", 
-                details={"source_type": source_type, "filename": filename}
+                f"Failed to process file from {source_type}: {e}",
+                details={"source_type": source_type, "filename": filename},
             )
-    
+
     # Information Service Methods
-    
+
     def get_available_providers(self) -> list[dict[str, Any]]:
         """
         Get information about all available LLM providers.
-        
+
         Returns:
             List of provider information dictionaries
         """
@@ -761,24 +798,24 @@ class EnhancedLLM:
                     "status": "available",
                 },
             ]
-    
+
     async def get_transparency_report(
-        self,
-        user_id: str | None = None
+        self, user_id: str | None = None
     ) -> dict[str, Any]:
         """
         Get a comprehensive transparency report for a user.
-        
+
         Args:
             user_id: User identifier (uses default if not provided)
-            
+
         Returns:
             Complete transparency report including all information
         """
         user_id = user_id or self.default_user_id
-        
+
         # Gather information for the report
         from datetime import datetime, UTC
+
         report = {
             "user_id": user_id,
             "llm_model": self.llm_model,
@@ -800,7 +837,7 @@ class EnhancedLLM:
             "data_storage": self.get_data_storage_info(),
             "user_data_summary": self.get_user_data_summary(user_id),
         }
-        
+
         # Add MCP server information if connected
         if self.mcp_client:
             try:
@@ -813,40 +850,53 @@ class EnhancedLLM:
                 logger.warning(f"Failed to get MCP tools for transparency report: {e}")
                 report["mcp_tools"] = []
             except Exception as e:
-                logger.error(f"Unexpected error getting MCP tools for transparency report: {e}")
+                logger.error(
+                    f"Unexpected error getting MCP tools for transparency report: {e}"
+                )
                 report["mcp_tools"] = []
-        
+
         return report
-    
+
     def get_data_storage_info(self) -> dict[str, Any]:
         """
         Get information about data storage and privacy.
-        
+
         Returns:
             Information about how data is stored and managed
         """
         return {
             "storage_type": "http_api",
             "database_connection": False,
-            "persistence_url": self.http_client.base_url if hasattr(self, 'http_client') and self.http_client else None,
+            "persistence_url": self.http_client.base_url
+            if hasattr(self, "http_client") and self.http_client
+            else None,
             "conversation_storage": "server" if self.conversation_manager else "none",
             "privacy_notes": "All data is stored via HTTP API endpoints. No local database access.",
-            "mcp_client_tables": ["conversations", "messages", "tool_calls", "usage"],  # Logical tables via API
-            "llm_service_tables": ["providers", "models", "usage_stats"],  # LLM service logical tables
+            "mcp_client_tables": [
+                "conversations",
+                "messages",
+                "tool_calls",
+                "usage",
+            ],  # Logical tables via API
+            "llm_service_tables": [
+                "providers",
+                "models",
+                "usage_stats",
+            ],  # LLM service logical tables
         }
-    
+
     def get_user_data_summary(self, user_id: str | None = None) -> dict[str, Any]:
         """
         Get a summary of user data stored in the system.
-        
+
         Args:
             user_id: User ID (uses default if not provided)
-            
+
         Returns:
             Summary of user data
         """
         user_id = user_id or self.default_user_id
-        
+
         return {
             "user_id": user_id,
             "origin": self.origin,

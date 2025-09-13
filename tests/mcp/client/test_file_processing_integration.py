@@ -31,7 +31,11 @@ import builtins
 import contextlib
 
 from llmring.mcp.client.enhanced_llm import create_enhanced_llm
-from llmring.exceptions import InvalidFileFormatError, FileProcessingError, FileAccessError
+from llmring.exceptions import (
+    InvalidFileFormatError,
+    FileProcessingError,
+    FileAccessError,
+)
 
 
 class FileCreator:
@@ -96,14 +100,16 @@ class FileCreator:
             draw.text((x + 10, y - 20), str(value), fill="black")
 
             # Draw x-axis label
-            draw.text((x + 15, start_y + 10), f"Q{i+1}", fill="black")
+            draw.text((x + 15, start_y + 10), f"Q{i + 1}", fill="black")
 
         # Draw title
         draw.text((150, 30), "Quarterly Sales Data", fill="black")
 
         # Draw y-axis
         draw.line(
-            [start_x - 10, start_y, start_x - 10, start_y - max_height], fill="black", width=2
+            [start_x - 10, start_y, start_x - 10, start_y - max_height],
+            fill="black",
+            width=2,
         )
 
         file_path = self.temp_dir / filename
@@ -244,7 +250,11 @@ class TestFileProcessingIntegration:
         assert len(response.content) > 0
         # The response should mention some of the text from the image
         content_lower = response.content.lower()
-        assert "hello" in content_lower or "world" in content_lower or "123" in content_lower
+        assert (
+            "hello" in content_lower
+            or "world" in content_lower
+            or "123" in content_lower
+        )
 
         print(f"✓ OCR Test Response: {response.content[:100]}...")
 
@@ -256,12 +266,17 @@ class TestFileProcessingIntegration:
 
         # Process and analyze
         attachment = await enhanced_llm.process_file_from_source(
-            source_type="upload", source_data=str(chart_path), filename="sales_chart.png"
+            source_type="upload",
+            source_data=str(chart_path),
+            filename="sales_chart.png",
         )
 
         response = await enhanced_llm.chat(
             [
-                {"role": "system", "content": "Analyze charts and extract data accurately."},
+                {
+                    "role": "system",
+                    "content": "Analyze charts and extract data accurately.",
+                },
                 {
                     "role": "user",
                     "content": "What data does this chart show? Describe the trends.",
@@ -273,7 +288,10 @@ class TestFileProcessingIntegration:
         assert response.content is not None
         content_lower = response.content.lower()
         # Should mention chart/data concepts
-        assert any(word in content_lower for word in ["chart", "data", "bar", "sales", "quarter"])
+        assert any(
+            word in content_lower
+            for word in ["chart", "data", "bar", "sales", "quarter"]
+        )
 
         print(f"✓ Chart Analysis Response: {response.content[:100]}...")
 
@@ -431,21 +449,33 @@ class TestFileProcessingIntegration:
     async def test_error_handling(self, enhanced_llm):
         """Test error handling for invalid file processing."""
         # Test invalid base64
-        with pytest.raises((InvalidFileFormatError, FileProcessingError), match="Invalid base64"):
+        with pytest.raises(
+            (InvalidFileFormatError, FileProcessingError), match="Invalid base64"
+        ):
             await enhanced_llm.process_file_from_source(
-                source_type="base64", source_data="invalid-base64-data", filename="test.png"
+                source_type="base64",
+                source_data="invalid-base64-data",
+                filename="test.png",
             )
 
         # Test invalid source type
-        with pytest.raises((ValueError, FileProcessingError), match="Unsupported source type"):
+        with pytest.raises(
+            (ValueError, FileProcessingError), match="Unsupported source type"
+        ):
             await enhanced_llm.process_file_from_source(
-                source_type="invalid_source", source_data="some_data", filename="test.txt"
+                source_type="invalid_source",
+                source_data="some_data",
+                filename="test.txt",
             )
 
         # Test non-existent file
-        with pytest.raises((FileAccessError, FileProcessingError), match="File not found"):
+        with pytest.raises(
+            (FileAccessError, FileProcessingError), match="File not found"
+        ):
             await enhanced_llm.process_file_from_source(
-                source_type="upload", source_data="/nonexistent/path/file.txt", filename="test.txt"
+                source_type="upload",
+                source_data="/nonexistent/path/file.txt",
+                filename="test.txt",
             )
 
         print("✓ Error handling tests passed")
@@ -454,7 +484,9 @@ class TestFileProcessingIntegration:
     async def test_content_type_detection(self, enhanced_llm, file_creator):
         """Test automatic content type detection."""
         # Create image without explicit content type
-        image_path = file_creator.create_test_image("detection_test.png", "DETECTION TEST")
+        image_path = file_creator.create_test_image(
+            "detection_test.png", "DETECTION TEST"
+        )
 
         attachment = await enhanced_llm.process_file_from_source(
             source_type="upload",
@@ -475,7 +507,9 @@ class TestFileProcessingIntegration:
         )
 
         attachment = await enhanced_llm.process_file_from_source(
-            source_type="upload", source_data=str(large_image_path), filename="large_test.png"
+            source_type="upload",
+            source_data=str(large_image_path),
+            filename="large_test.png",
         )
 
         # Should handle larger files correctly (adjust threshold based on actual compression)
@@ -483,12 +517,17 @@ class TestFileProcessingIntegration:
 
         # Test with LLM
         response = await enhanced_llm.chat(
-            [{"role": "user", "content": "What text do you see?", "attachments": [attachment]}]
+            [
+                {
+                    "role": "user",
+                    "content": "What text do you see?",
+                    "attachments": [attachment],
+                }
+            ]
         )
 
         assert response.content is not None
         print(f"✓ Large file handling: {len(attachment['data'])} bytes processed")
-
 
 
 if __name__ == "__main__":

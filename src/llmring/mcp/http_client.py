@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class MCPHttpClient(BaseHTTPClient):
     """HTTP client for llmring-server MCP endpoints."""
-    
+
     def __init__(
         self,
         base_url: Optional[str] = None,
@@ -24,23 +24,23 @@ class MCPHttpClient(BaseHTTPClient):
         timeout: float = 30.0,
     ):
         """Initialize the MCP HTTP client.
-        
+
         Args:
             base_url: Base URL of llmring-server (defaults to env or localhost)
-            api_key: Optional API key for authentication  
+            api_key: Optional API key for authentication
             timeout: Request timeout in seconds
         """
         base_url = base_url or os.getenv("LLMRING_SERVER_URL", "http://localhost:8000")
         api_key = api_key or os.getenv("LLMRING_API_KEY")
-        
+
         super().__init__(
             base_url=base_url,
             api_key=api_key,
             timeout=timeout,
         )
-    
+
     # ============= Server Management =============
-    
+
     async def register_server(
         self,
         name: str,
@@ -62,7 +62,7 @@ class MCPHttpClient(BaseHTTPClient):
                 "project_id": str(project_id) if project_id else None,
             },
         )
-    
+
     async def list_servers(
         self,
         project_id: Optional[UUID] = None,
@@ -72,13 +72,13 @@ class MCPHttpClient(BaseHTTPClient):
         params = {"is_active": is_active}
         if project_id:
             params["project_id"] = str(project_id)
-        
+
         return await self.get("/api/v1/mcp/servers", params=params)
-    
+
     async def get_server(self, server_id: UUID) -> Dict[str, Any]:
         """Get an MCP server by ID."""
         return await self.get(f"/api/v1/mcp/servers/{server_id}")
-    
+
     async def update_server(
         self,
         server_id: UUID,
@@ -100,14 +100,14 @@ class MCPHttpClient(BaseHTTPClient):
             update_data["capabilities"] = capabilities
         if is_active is not None:
             update_data["is_active"] = is_active
-        
+
         return await self.put(f"/api/v1/mcp/servers/{server_id}", json=update_data)
-    
+
     async def delete_server(self, server_id: UUID) -> bool:
         """Delete an MCP server."""
         await self.delete(f"/api/v1/mcp/servers/{server_id}")
         return True
-    
+
     async def refresh_server_capabilities(
         self,
         server_id: UUID,
@@ -124,9 +124,9 @@ class MCPHttpClient(BaseHTTPClient):
                 "prompts": prompts,
             },
         )
-    
+
     # ============= Tool Management =============
-    
+
     async def list_tools(
         self,
         server_id: Optional[UUID] = None,
@@ -139,13 +139,13 @@ class MCPHttpClient(BaseHTTPClient):
             params["server_id"] = str(server_id)
         if project_id:
             params["project_id"] = str(project_id)
-        
+
         return await self.get("/api/v1/mcp/tools", params=params)
-    
+
     async def get_tool(self, tool_id: UUID) -> Dict[str, Any]:
         """Get an MCP tool by ID."""
         return await self.get(f"/api/v1/mcp/tools/{tool_id}")
-    
+
     async def get_tool_by_name(
         self,
         name: str,
@@ -157,7 +157,7 @@ class MCPHttpClient(BaseHTTPClient):
             if tool["name"] == name:
                 return tool
         return None
-    
+
     async def execute_tool(
         self,
         tool_id: UUID,
@@ -173,7 +173,7 @@ class MCPHttpClient(BaseHTTPClient):
                 "conversation_id": str(conversation_id) if conversation_id else None,
             },
         )
-    
+
     async def get_tool_history(
         self,
         tool_id: UUID,
@@ -184,9 +184,9 @@ class MCPHttpClient(BaseHTTPClient):
             f"/api/v1/mcp/tools/{tool_id}/history",
             params={"limit": limit},
         )
-    
+
     # ============= Resource Management =============
-    
+
     async def list_resources(
         self,
         server_id: Optional[UUID] = None,
@@ -199,19 +199,19 @@ class MCPHttpClient(BaseHTTPClient):
             params["server_id"] = str(server_id)
         if project_id:
             params["project_id"] = str(project_id)
-        
+
         return await self.get("/api/v1/mcp/resources", params=params)
-    
+
     async def get_resource(self, resource_id: UUID) -> Dict[str, Any]:
         """Get an MCP resource by ID."""
         return await self.get(f"/api/v1/mcp/resources/{resource_id}")
-    
+
     async def get_resource_content(self, resource_id: UUID) -> Dict[str, Any]:
         """Get resource content."""
         return await self.get(f"/api/v1/mcp/resources/{resource_id}/content")
-    
+
     # ============= Prompt Management =============
-    
+
     async def list_prompts(
         self,
         server_id: Optional[UUID] = None,
@@ -224,13 +224,13 @@ class MCPHttpClient(BaseHTTPClient):
             params["server_id"] = str(server_id)
         if project_id:
             params["project_id"] = str(project_id)
-        
+
         return await self.get("/api/v1/mcp/prompts", params=params)
-    
+
     async def get_prompt(self, prompt_id: UUID) -> Dict[str, Any]:
         """Get an MCP prompt by ID."""
         return await self.get(f"/api/v1/mcp/prompts/{prompt_id}")
-    
+
     async def render_prompt(
         self,
         prompt_id: UUID,
@@ -241,9 +241,9 @@ class MCPHttpClient(BaseHTTPClient):
             f"/api/v1/mcp/prompts/{prompt_id}/render",
             json=arguments,
         )
-    
+
     # ============= Conversation Management =============
-    
+
     async def create_conversation(
         self,
         title: str,
@@ -262,7 +262,7 @@ class MCPHttpClient(BaseHTTPClient):
             },
         )
         return UUID(data["id"])
-    
+
     async def add_message(
         self,
         conversation_id: UUID,
@@ -279,7 +279,7 @@ class MCPHttpClient(BaseHTTPClient):
                 "metadata": metadata,
             },
         )
-    
+
     async def get_conversation_messages(
         self,
         conversation_id: UUID,

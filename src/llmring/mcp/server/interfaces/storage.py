@@ -42,7 +42,9 @@ class StorageProvider(ABC):
     """Abstract storage provider interface."""
 
     @abstractmethod
-    async def get_tools(self, user_id: str, project_id: Optional[str] = None) -> List[Tool]:
+    async def get_tools(
+        self, user_id: str, project_id: Optional[str] = None
+    ) -> List[Tool]:
         """
         Get tools available to a user.
 
@@ -56,7 +58,9 @@ class StorageProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_prompts(self, user_id: str, project_id: Optional[str] = None) -> List[Prompt]:
+    async def get_prompts(
+        self, user_id: str, project_id: Optional[str] = None
+    ) -> List[Prompt]:
         """
         Get prompts available to a user.
 
@@ -86,7 +90,9 @@ class StorageProvider(ABC):
         pass
 
     @abstractmethod
-    async def execute_tool(self, user_id: str, tool_name: str, arguments: Dict[str, Any]) -> Any:
+    async def execute_tool(
+        self, user_id: str, tool_name: str, arguments: Dict[str, Any]
+    ) -> Any:
         """
         Execute a tool with given arguments.
 

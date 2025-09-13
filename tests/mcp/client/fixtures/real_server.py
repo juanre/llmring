@@ -25,7 +25,11 @@ MCP_SERVER_PATH = Path(__file__).parent.parent.parent.parent / "mcp-server"
 # Define simple types for testing if mcp-server types aren't available
 class Tool:
     def __init__(
-        self, name: str, description: str = "", input_schema: dict | None = None, handler=None
+        self,
+        name: str,
+        description: str = "",
+        input_schema: dict | None = None,
+        handler=None,
     ):
         self.name = name
         self.description = description
@@ -54,7 +58,11 @@ class Resource:
 
 class Prompt:
     def __init__(
-        self, name: str, description: str = "", arguments: list | None = None, handler=None
+        self,
+        name: str,
+        description: str = "",
+        arguments: list | None = None,
+        handler=None,
     ):
         self.name = name
         self.description = description
@@ -176,7 +184,9 @@ async def basic_mcp_server(mcp_server_factory):
         description="Echo the input message",
         input_schema={
             "type": "object",
-            "properties": {"message": {"type": "string", "description": "Message to echo"}},
+            "properties": {
+                "message": {"type": "string", "description": "Message to echo"}
+            },
             "required": ["message"],
         },
         handler=echo_handler,
@@ -205,7 +215,10 @@ async def basic_mcp_server(mcp_server_factory):
         }
 
     test_resource = Resource(
-        uri="file:///test.txt", name="Test File", mimeType="text/plain", handler=test_file_handler
+        uri="file:///test.txt",
+        name="Test File",
+        mimeType="text/plain",
+        handler=test_file_handler,
     )
 
     # Define test prompts
@@ -303,7 +316,9 @@ def http_mcp_client(http_mcp_server) -> MCPClient:
 
 
 @pytest.fixture
-async def async_http_mcp_client(http_mcp_server) -> AsyncGenerator[AsyncMCPClient, None]:
+async def async_http_mcp_client(
+    http_mcp_server,
+) -> AsyncGenerator[AsyncMCPClient, None]:
     """
     Create an async HTTP MCP client connected to the test server.
 
@@ -400,9 +415,13 @@ def make_jsonrpc_request(
     return request
 
 
-def assert_jsonrpc_success(response: dict[str, Any], request_id: str | None = None) -> Any:
+def assert_jsonrpc_success(
+    response: dict[str, Any], request_id: str | None = None
+) -> Any:
     """Assert that a JSON-RPC response is successful and return the result."""
-    assert "error" not in response, f"Expected success but got error: {response.get('error')}"
+    assert "error" not in response, (
+        f"Expected success but got error: {response.get('error')}"
+    )
     assert "result" in response, "Missing result in response"
 
     if request_id is not None:
@@ -421,9 +440,9 @@ def assert_jsonrpc_error(
     error = response["error"]
 
     if expected_code is not None:
-        assert (
-            error.get("code") == expected_code
-        ), f"Expected error code {expected_code} but got {error.get('code')}"
+        assert error.get("code") == expected_code, (
+            f"Expected error code {expected_code} but got {error.get('code')}"
+        )
 
     return error
 

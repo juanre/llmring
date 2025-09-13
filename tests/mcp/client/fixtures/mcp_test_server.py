@@ -49,7 +49,7 @@ async def divide_numbers(a: float, b: float) -> dict[str, Any]:
     if b == 0:
         raise ValueError("Cannot divide by zero")
 
-    return {"result": a / b, "formatted": f"{a} ÷ {b} = {a/b:.4f}"}
+    return {"result": a / b, "formatted": f"{a} ÷ {b} = {a / b:.4f}"}
 
 
 async def greet_user(name: str = "World") -> str:
@@ -86,7 +86,11 @@ def create_server() -> MCPServer:
         input_schema={
             "type": "object",
             "properties": {
-                "arg1": {"type": "string", "description": "Test argument", "default": "default"}
+                "arg1": {
+                    "type": "string",
+                    "description": "Test argument",
+                    "default": "default",
+                }
             },
             "required": [],
             "additionalProperties": False,
@@ -99,7 +103,9 @@ def create_server() -> MCPServer:
         description="Echo the input message",
         input_schema={
             "type": "object",
-            "properties": {"message": {"type": "string", "description": "Message to echo"}},
+            "properties": {
+                "message": {"type": "string", "description": "Message to echo"}
+            },
             "required": ["message"],
             "additionalProperties": False,
         },
@@ -157,7 +163,11 @@ def create_server() -> MCPServer:
         input_schema={
             "type": "object",
             "properties": {
-                "name": {"type": "string", "description": "Name to greet", "default": "World"}
+                "name": {
+                    "type": "string",
+                    "description": "Name to greet",
+                    "default": "World",
+                }
             },
             "required": [],
             "additionalProperties": False,
@@ -194,13 +204,17 @@ def create_server() -> MCPServer:
         name="test_prompt",
         description="A simple test prompt",
         content="This is a test prompt with parameter: {name}",
-        arguments=[{"name": "name", "description": "Name parameter", "required": False}],
+        arguments=[
+            {"name": "name", "description": "Name parameter", "required": False}
+        ],
     )
 
     server.register_prompt(
         name="dynamic_test_prompt",
         description="A dynamic test prompt",
-        arguments=[{"name": "name", "description": "Name parameter", "required": False}],
+        arguments=[
+            {"name": "name", "description": "Name parameter", "required": False}
+        ],
         handler=generate_test_prompt,
     )
 

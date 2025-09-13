@@ -75,7 +75,10 @@ class StdioTransport(Transport):
         # Remove any existing handlers that might write to stdout
         root_logger = logging.getLogger()
         for handler in root_logger.handlers[:]:
-            if hasattr(handler, "stream") and handler.stream in (sys.stdout, sys.__stdout__):
+            if hasattr(handler, "stream") and handler.stream in (
+                sys.stdout,
+                sys.__stdout__,
+            ):
                 root_logger.removeHandler(handler)
 
         # Ensure we have a stderr handler
@@ -113,7 +116,9 @@ class StdioTransport(Transport):
                 # Try to get fileno - this will fail for StringIO
                 sys.stdin.fileno()
                 protocol = asyncio.StreamReaderProtocol(self._reader)
-                self._pipe_transport, _ = await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+                self._pipe_transport, _ = await loop.connect_read_pipe(
+                    lambda: protocol, sys.stdin
+                )
             except (AttributeError, io.UnsupportedOperation):
                 # For testing with StringIO
                 self._test_mode = True
@@ -186,7 +191,9 @@ class StdioTransport(Transport):
                 sys.stdout.write(json_str + "\n")
                 sys.stdout.flush()
 
-                self.logger.debug(f"Sent message: {message.get('method') or message.get('id')}")
+                self.logger.debug(
+                    f"Sent message: {message.get('method') or message.get('id')}"
+                )
                 return True
 
             except Exception as e:
@@ -261,7 +268,9 @@ class StdioTransport(Transport):
             if "jsonrpc" not in message or message["jsonrpc"] != "2.0":
                 raise ValueError("Invalid or missing JSON-RPC version")
 
-            self.logger.debug(f"Received message: {message.get('method') or message.get('id')}")
+            self.logger.debug(
+                f"Received message: {message.get('method') or message.get('id')}"
+            )
 
             # Deliver to handler (synchronously)
             self._handle_message(message)
@@ -272,7 +281,11 @@ class StdioTransport(Transport):
             error_response = {
                 "jsonrpc": "2.0",
                 "id": None,
-                "error": {"code": -32700, "message": "Parse error", "data": {"line": line[:100]}},
+                "error": {
+                    "code": -32700,
+                    "message": "Parse error",
+                    "data": {"line": line[:100]},
+                },
             }
             # Create agent to send response
             asyncio.create_task(self.send_message(error_response))

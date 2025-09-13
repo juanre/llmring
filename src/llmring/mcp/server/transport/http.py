@@ -92,7 +92,9 @@ class Session:
 
         active_connections = []
         for connection in self.connections.values():
-            if connection.is_active and await connection.send_event(event_type, data, event_id):
+            if connection.is_active and await connection.send_event(
+                event_type, data, event_id
+            ):
                 active_connections.append(connection)
             elif not connection.is_active:
                 # Clean up inactive connections
@@ -228,7 +230,9 @@ class HTTPTransport(Transport):
         # Broadcast to all sessions
         sent_count = 0
         for session_id in list(self.session_manager.sessions.keys()):
-            if await self.session_manager.broadcast_to_session(session_id, "message", message):
+            if await self.session_manager.broadcast_to_session(
+                session_id, "message", message
+            ):
                 sent_count += 1
 
         return sent_count > 0
@@ -247,7 +251,9 @@ class HTTPTransport(Transport):
         if not self._running:
             return False
 
-        return await self.session_manager.broadcast_to_session(session_id, "message", message)
+        return await self.session_manager.broadcast_to_session(
+            session_id, "message", message
+        )
 
     async def handle_http_request(self, request: Any) -> Dict[str, Any]:
         """
@@ -344,7 +350,9 @@ class HTTPTransport(Transport):
 
         # Add to session
         session.add_connection(connection)
-        logger.info(f"SSE connection {connection_id} established for session {session_id}")
+        logger.info(
+            f"SSE connection {connection_id} established for session {session_id}"
+        )
 
         try:
             # Send initial connection event

@@ -233,18 +233,19 @@ class LLMRing:
         if hasattr(provider, "validate_model"):
             # Check if it's a coroutine (async mock in tests)
             import inspect
+
             validate_result = provider.validate_model(model_name)
             if inspect.iscoroutine(validate_result):
                 # In tests with async mocks, we need to await
                 valid = await validate_result
             else:
                 valid = validate_result
-                
+
             if not valid:
                 raise ModelNotFoundError(
                     f"Model '{model_name}' not supported by {provider_type} provider",
                     model_name=model_name,
-                    provider=provider_type
+                    provider=provider_type,
                 )
 
         # If no model specified, use provider's default
@@ -271,7 +272,7 @@ class LLMRing:
                 request=adapted_request,
                 provider_type=provider_type,
                 original_alias=original_alias,
-                profile=profile
+                profile=profile,
             )
 
         # Send non-streaming request to provider
@@ -359,11 +360,11 @@ class LLMRing:
         request: LLMRequest,
         provider_type: str,
         original_alias: str,
-        profile: Optional[str] = None
+        profile: Optional[str] = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         Create a streaming wrapper that handles receipts and cost calculation.
-        
+
         Args:
             provider: The provider instance
             model_name: The model name
@@ -371,7 +372,7 @@ class LLMRing:
             provider_type: Type of provider (openai, anthropic, etc.)
             original_alias: Original alias used in request
             profile: Optional profile name
-            
+
         Yields:
             Stream chunks from the provider with receipt handling
         """
@@ -389,19 +390,19 @@ class LLMRing:
             stream=True,
             extra_params=request.extra_params,
         )
-        
+
         # Track usage for receipt generation
         accumulated_usage = None
-        
+
         # Stream chunks to client
         async for chunk in stream:
             # If this chunk has usage info, store it
             if chunk.usage:
                 accumulated_usage = chunk.usage
-                
+
             # Yield the chunk to client
             yield chunk
-        
+
         # After streaming completes, generate receipt if we have usage
         if accumulated_usage and self.lockfile:
             try:
@@ -413,24 +414,24 @@ class LLMRing:
                         content="",
                         model=f"{provider_type}:{model_name}",
                         usage=accumulated_usage,
-                        finish_reason="stop"
+                        finish_reason="stop",
                     )
                     cost_info = await self.calculate_cost(temp_response)
-                
+
                 # Initialize receipt generator if needed
                 if not self.receipt_generator:
                     self.receipt_generator = ReceiptGenerator()
-                
+
                 # Calculate lockfile digest
                 lock_digest = self.lockfile.calculate_digest()
-                
+
                 # Determine profile used
                 profile_name = (
                     profile
                     or os.getenv("LLMRING_PROFILE")
                     or self.lockfile.default_profile
                 )
-                
+
                 # Generate receipt
                 receipt = self.receipt_generator.generate_receipt(
                     alias=(
@@ -447,7 +448,7 @@ class LLMRing:
                         else {"input_cost": 0.0, "output_cost": 0.0, "total_cost": 0.0}
                     ),
                 )
-                
+
                 # Store receipt locally
                 self.receipts.append(receipt)
                 logger.debug(
@@ -529,6 +530,7 @@ class LLMRing:
         """
         if not self.lockfile:
             from llmring.exceptions import LockfileNotFoundError
+
             raise LockfileNotFoundError("No lockfile found")
 
         profile_config = self.lockfile.get_profile(profile)
@@ -630,10 +632,7 @@ class LLMRing:
         return model_info
 
     async def _apply_structured_output_adapter(
-        self,
-        request: LLMRequest,
-        provider_type: str,
-        provider: BaseLLMProvider
+        self, request: LLMRequest, provider_type: str, provider: BaseLLMProvider
     ) -> LLMRequest:
         """
         Apply structured output adapter for non-OpenAI providers.
@@ -641,9 +640,11 @@ class LLMRing:
         Converts json_schema requests to tool-based approaches for Anthropic/Google.
         """
         # Only adapt if we have a json_schema request and no existing tools
-        if (not request.response_format or
-            request.response_format.get("type") != "json_schema" or
-            request.tools):
+        if (
+            not request.response_format
+            or request.response_format.get("type") != "json_schema"
+            or request.tools
+        ):
             return request
 
         schema = request.response_format.get("json_schema", {}).get("schema", {})
@@ -652,6 +653,7 @@ class LLMRing:
 
         # Create a copy of the request to modify
         from copy import deepcopy
+
         adapted_request = deepcopy(request)
 
         # Import Message for use in adapter
@@ -663,9 +665,9 @@ class LLMRing:
                 "type": "function",
                 "function": {
                     "name": "respond_with_structure",
-                    "description": f"Respond with structured data matching the required schema",
-                    "parameters": schema
-                }
+                    "description": "Respond with structured data matching the required schema",
+                    "parameters": schema,
+                },
             }
             adapted_request.tools = [respond_tool]
             adapted_request.tool_choice = {"type": "any"}  # Force tool use
@@ -673,15 +675,17 @@ class LLMRing:
         elif provider_type == "google":
             # Google: Use function declaration approach
             # Clean schema for Google (doesn't support all JSON Schema features)
-            google_schema = {k: v for k, v in schema.items() if k != "additionalProperties"}
+            google_schema = {
+                k: v for k, v in schema.items() if k != "additionalProperties"
+            }
 
             respond_tool = {
                 "type": "function",
                 "function": {
                     "name": "respond_with_structure",
-                    "description": f"Respond with structured data matching the required schema",
-                    "parameters": google_schema
-                }
+                    "description": "Respond with structured data matching the required schema",
+                    "parameters": google_schema,
+                },
             }
             adapted_request.tools = [respond_tool]
             adapted_request.tool_choice = "any"  # Force function calling
@@ -699,13 +703,16 @@ class LLMRing:
                 messages[0] = Message(
                     role="system",
                     content=messages[0].content + schema_instruction,
-                    metadata=messages[0].metadata
+                    metadata=messages[0].metadata,
                 )
             else:
-                messages.insert(0, Message(
-                    role="system",
-                    content=f"You are a helpful assistant.{schema_instruction}"
-                ))
+                messages.insert(
+                    0,
+                    Message(
+                        role="system",
+                        content=f"You are a helpful assistant.{schema_instruction}",
+                    ),
+                )
             adapted_request.messages = messages
 
         # Mark request as adapted for post-processing
@@ -716,10 +723,7 @@ class LLMRing:
         return adapted_request
 
     async def _post_process_structured_output(
-        self,
-        response: LLMResponse,
-        request: LLMRequest,
-        provider_type: str
+        self, response: LLMResponse, request: LLMRequest, provider_type: str
     ) -> LLMResponse:
         """
         Post-process response from structured output adapter.
@@ -729,8 +733,9 @@ class LLMRing:
         import json
 
         # Only process if request was adapted
-        if (not request.metadata or
-            not request.metadata.get("_structured_output_adapted")):
+        if not request.metadata or not request.metadata.get(
+            "_structured_output_adapted"
+        ):
             return response
 
         original_schema = request.metadata.get("_original_schema", {})
@@ -743,7 +748,9 @@ class LLMRing:
                     response.parsed = parsed_data
 
                     # Validate against schema if strict mode
-                    if request.response_format and request.response_format.get("strict"):
+                    if request.response_format and request.response_format.get(
+                        "strict"
+                    ):
                         self._validate_json_schema(parsed_data, original_schema)
 
                 except json.JSONDecodeError:
@@ -765,7 +772,9 @@ class LLMRing:
                         response.parsed = parsed_data
 
                         # Validate against schema if strict mode
-                        if request.response_format and request.response_format.get("strict"):
+                        if request.response_format and request.response_format.get(
+                            "strict"
+                        ):
                             self._validate_json_schema(parsed_data, original_schema)
 
                         break
@@ -777,24 +786,32 @@ class LLMRing:
                     response.parsed = parsed_data
 
                     # Validate against schema if strict mode
-                    if request.response_format and request.response_format.get("strict"):
+                    if request.response_format and request.response_format.get(
+                        "strict"
+                    ):
                         self._validate_json_schema(parsed_data, original_schema)
 
                 except json.JSONDecodeError:
                     # If JSON parsing fails and strict mode, try one repair attempt
-                    if (request.response_format and
-                        request.response_format.get("strict") and
-                        request.extra_params.get("retry_on_json_failure", True)):
-
-                        logger.info(f"JSON parsing failed for {provider_type}, attempting repair")
+                    if (
+                        request.response_format
+                        and request.response_format.get("strict")
+                        and request.extra_params.get("retry_on_json_failure", True)
+                    ):
+                        logger.info(
+                            f"JSON parsing failed for {provider_type}, attempting repair"
+                        )
 
                         # Single retry with repair prompt
                         from copy import deepcopy
                         from llmring.schemas import Message
+
                         repair_request = deepcopy(request)
                         repair_prompt = f"The previous response was not valid JSON. Please provide ONLY valid JSON matching this schema:\n{json.dumps(original_schema, indent=2)}\n\nOriginal content to fix:\n{response.content}"
 
-                        repair_request.messages = [Message(role="user", content=repair_prompt)]
+                        repair_request.messages = [
+                            Message(role="user", content=repair_prompt)
+                        ]
                         repair_request.metadata["_retry_attempt"] = True
 
                         try:
@@ -803,31 +820,43 @@ class LLMRing:
                                 provider = self.get_provider(provider_type)
                                 repair_response = await provider.chat(
                                     messages=repair_request.messages,
-                                    model=repair_request.model.split(":", 1)[1] if ":" in repair_request.model else repair_request.model,
+                                    model=repair_request.model.split(":", 1)[1]
+                                    if ":" in repair_request.model
+                                    else repair_request.model,
                                     temperature=0.1,  # Lower temperature for better JSON
                                     max_tokens=repair_request.max_tokens,
                                     json_response=True,
-                                    extra_params=repair_request.extra_params
+                                    extra_params=repair_request.extra_params,
                                 )
 
                                 # Try parsing the repaired response
                                 repaired_data = json.loads(repair_response.content)
                                 response.content = repair_response.content
                                 response.parsed = repaired_data
-                                self._validate_json_schema(repaired_data, original_schema)
-                                logger.info(f"JSON repair successful for {provider_type}")
+                                self._validate_json_schema(
+                                    repaired_data, original_schema
+                                )
+                                logger.info(
+                                    f"JSON repair successful for {provider_type}"
+                                )
 
                         except Exception as repair_error:
-                            logger.warning(f"JSON repair attempt failed: {repair_error}")
+                            logger.warning(
+                                f"JSON repair attempt failed: {repair_error}"
+                            )
                     else:
-                        logger.warning(f"Failed to parse JSON from {provider_type} response")
+                        logger.warning(
+                            f"Failed to parse JSON from {provider_type} response"
+                        )
 
         except Exception as e:
             logger.warning(f"Structured output post-processing failed: {e}")
 
         return response
 
-    def _validate_json_schema(self, data: Dict[str, Any], schema: Dict[str, Any]) -> None:
+    def _validate_json_schema(
+        self, data: Dict[str, Any], schema: Dict[str, Any]
+    ) -> None:
         """
         Validate data against JSON schema.
 
@@ -835,16 +864,18 @@ class LLMRing:
         """
         try:
             import jsonschema
+
             jsonschema.validate(instance=data, schema=schema)
         except ImportError:
             # If jsonschema not available, skip validation
             logger.warning("jsonschema not installed, skipping schema validation")
         except jsonschema.ValidationError as e:
             from llmring.exceptions import ValidationError
+
             raise ValidationError(
                 f"Response does not match required schema: {e.message}",
                 field=e.absolute_path[-1] if e.absolute_path else None,
-                value=e.instance
+                value=e.instance,
             )
 
     async def get_model_from_registry(
@@ -899,17 +930,19 @@ class LLMRing:
         # Calculate token count for input using proper tokenization
         # First do a quick character-based check to avoid expensive tokenization for obviously too-large inputs
         total_chars = sum(
-            len(message.content) if isinstance(message.content, str) else 
-            len(str(message.content)) for message in request.messages
+            len(message.content)
+            if isinstance(message.content, str)
+            else len(str(message.content))
+            for message in request.messages
         )
-        
+
         # If we have way more characters than could possibly fit (assuming worst case 1 char = 1 token)
         # Skip expensive tokenization
         if total_chars > registry_model.max_input_tokens * 2:
             estimated_input_tokens = total_chars  # Use char count as rough estimate
         else:
             from llmring.token_counter import count_tokens
-            
+
             # Convert messages to dict format for token counting
             message_dicts = []
             for message in request.messages:
@@ -921,8 +954,10 @@ class LLMRing:
                 else:
                     msg_dict["content"] = str(message.content)
                 message_dicts.append(msg_dict)
-            
-            estimated_input_tokens = count_tokens(message_dicts, provider_type, model_name)
+
+            estimated_input_tokens = count_tokens(
+                message_dicts, provider_type, model_name
+            )
 
         # Check input limit
         if estimated_input_tokens > registry_model.max_input_tokens:

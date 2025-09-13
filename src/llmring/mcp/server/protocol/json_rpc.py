@@ -66,7 +66,10 @@ class JSONRPCError:
 
     @staticmethod
     def method_not_found(method: str) -> Dict[str, Any]:
-        return {"code": JSONRPCError.METHOD_NOT_FOUND, "message": f"Method not found: {method}"}
+        return {
+            "code": JSONRPCError.METHOD_NOT_FOUND,
+            "message": f"Method not found: {method}",
+        }
 
     @staticmethod
     def invalid_params(message: str = "Invalid parameters") -> Dict[str, Any]:
@@ -93,7 +96,10 @@ class JSONRPCError:
 
     @staticmethod
     def not_found(resource: str) -> Dict[str, Any]:
-        return {"code": JSONRPCError.NOT_FOUND, "message": f"Resource not found: {resource}"}
+        return {
+            "code": JSONRPCError.NOT_FOUND,
+            "message": f"Resource not found: {resource}",
+        }
 
     @staticmethod
     def not_initialized(method: str = None) -> Dict[str, Any]:

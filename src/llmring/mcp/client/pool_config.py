@@ -11,7 +11,7 @@ from dataclasses import dataclass
 @dataclass
 class PoolConfig:
     """Database connection pool configuration (placeholder)."""
-    
+
     min_connections: int
     max_connections: int
     description: str

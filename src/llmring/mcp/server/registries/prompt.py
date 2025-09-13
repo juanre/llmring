@@ -69,7 +69,10 @@ class PromptRegistry:
             return {
                 "description": description,
                 "messages": [
-                    {"role": "user", "content": {"type": "text", "text": formatted_content}}
+                    {
+                        "role": "user",
+                        "content": {"type": "text", "text": formatted_content},
+                    }
                 ],
             }
 
@@ -99,7 +102,9 @@ class PromptRegistry:
         """
         return self.handlers.get(name)
 
-    async def get_prompt(self, name: str, arguments: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def get_prompt(
+        self, name: str, arguments: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """
         Get a prompt with the given arguments.
 

@@ -131,8 +131,11 @@ class TestLockfileIntegration:
         # Need to create a message that actually exceeds 128k tokens
         # Repeating patterns compress well in tokenization, so we need varied content
         import string
+
         # Create a varied message that won't compress well
-        varied_text = ''.join([string.ascii_letters[i % 52] + str(i % 10) for i in range(550_000)])
+        varied_text = "".join(
+            [string.ascii_letters[i % 52] + str(i % 10) for i in range(550_000)]
+        )
         huge_message = varied_text  # This should tokenize to ~137k tokens
         request_huge = LLMRequest(
             model="openai:gpt-4o-mini",
@@ -431,9 +434,9 @@ class TestLiveRegistry:
             if any(model_name.startswith(m) for model_name in model_names)
         ]
 
-        assert (
-            len(found_models) > 0
-        ), f"Expected to find at least one common model, got: {model_names}"
+        assert len(found_models) > 0, (
+            f"Expected to find at least one common model, got: {model_names}"
+        )
 
         # Verify model structure
         for model in models:

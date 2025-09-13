@@ -45,16 +45,16 @@ class OllamaProvider(BaseLLMProvider):
         base_url = base_url or os.environ.get(
             "OLLAMA_BASE_URL", "http://localhost:11434"
         )
-        
+
         # Create config for base class (no API key needed for Ollama)
         config = ProviderConfig(
             api_key=None,
             base_url=base_url,
             default_model=model,
-            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60")),
         )
         super().__init__(config)
-        
+
         # Store for backward compatibility
         self.base_url = base_url
         self.default_model = model
@@ -145,11 +145,11 @@ class OllamaProvider(BaseLLMProvider):
             Default model name
         """
         return self.default_model
-    
+
     async def get_capabilities(self) -> ProviderCapabilities:
         """
         Get the capabilities of this provider.
-        
+
         Returns:
             Provider capabilities
         """
@@ -293,9 +293,7 @@ class OllamaProvider(BaseLLMProvider):
         # Validate model
         if not self.validate_model(model):
             raise ModelNotFoundError(
-                f"Unsupported model: {model}",
-                model_name=model,
-                provider="ollama"
+                f"Unsupported model: {model}", model_name=model, provider="ollama"
             )
 
         # Convert messages to Ollama format (includes tool handling)
@@ -304,15 +302,11 @@ class OllamaProvider(BaseLLMProvider):
             # Handle different message types
             if msg.role == "system":
                 # System messages become assistant messages in Ollama
-                ollama_messages.append({
-                    "role": "assistant",
-                    "content": f"System: {msg.content}"
-                })
+                ollama_messages.append(
+                    {"role": "assistant", "content": f"System: {msg.content}"}
+                )
             elif msg.role in ["user", "assistant"]:
-                ollama_messages.append({
-                    "role": msg.role,
-                    "content": str(msg.content)
-                })
+                ollama_messages.append({"role": msg.role, "content": str(msg.content)})
 
         # Handle tools through prompt engineering (Ollama doesn't have native function calling)
         if tools:
@@ -320,13 +314,14 @@ class OllamaProvider(BaseLLMProvider):
             if ollama_messages and ollama_messages[0]["role"] == "assistant":
                 ollama_messages[0]["content"] += f"\n\n{tools_prompt}"
             else:
-                ollama_messages.insert(0, {
-                    "role": "assistant",
-                    "content": tools_prompt
-                })
+                ollama_messages.insert(
+                    0, {"role": "assistant", "content": tools_prompt}
+                )
 
         # Handle JSON response format
-        if json_response or (response_format and response_format.get("type") in ["json_object", "json"]):
+        if json_response or (
+            response_format and response_format.get("type") in ["json_object", "json"]
+        ):
             json_instruction = "\n\nIMPORTANT: Respond only with valid JSON."
             if ollama_messages:
                 ollama_messages[-1]["content"] += json_instruction
@@ -364,7 +359,7 @@ class OllamaProvider(BaseLLMProvider):
             if not await self._breaker.allow(key):
                 raise CircuitBreakerError(
                     "Ollama circuit breaker is open - too many recent failures",
-                    provider="ollama"
+                    provider="ollama",
                 )
 
             # Use real streaming API (returns async generator directly)
@@ -374,8 +369,8 @@ class OllamaProvider(BaseLLMProvider):
             # Process the streaming response
             accumulated_content = ""
             async for chunk in stream_response:
-                if hasattr(chunk, 'message') and chunk.message:
-                    delta_content = chunk.message.get('content', '')
+                if hasattr(chunk, "message") and chunk.message:
+                    delta_content = chunk.message.get("content", "")
                     if delta_content:
                         accumulated_content += delta_content
                         yield StreamChunk(
@@ -385,7 +380,7 @@ class OllamaProvider(BaseLLMProvider):
                         )
 
                 # Check if this is the final chunk
-                if hasattr(chunk, 'done') and chunk.done:
+                if hasattr(chunk, "done") and chunk.done:
                     # Final chunk with usage estimation
                     yield StreamChunk(
                         delta="",
@@ -393,14 +388,18 @@ class OllamaProvider(BaseLLMProvider):
                         finish_reason="stop",
                         usage={
                             "prompt_tokens": self.get_token_count(str(ollama_messages)),
-                            "completion_tokens": self.get_token_count(accumulated_content),
-                            "total_tokens": self.get_token_count(str(ollama_messages)) + self.get_token_count(accumulated_content),
-                        }
+                            "completion_tokens": self.get_token_count(
+                                accumulated_content
+                            ),
+                            "total_tokens": self.get_token_count(str(ollama_messages))
+                            + self.get_token_count(accumulated_content),
+                        },
                     )
 
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
@@ -410,17 +409,15 @@ class OllamaProvider(BaseLLMProvider):
             if "connect" in error_msg.lower():
                 raise ProviderResponseError(
                     f"Failed to connect to Ollama at http://localhost:11434: {error_msg}",
-                    provider="ollama"
+                    provider="ollama",
                 ) from e
             elif "timeout" in error_msg.lower():
                 raise ProviderTimeoutError(
-                    f"Ollama request timed out: {error_msg}",
-                    provider="ollama"
+                    f"Ollama request timed out: {error_msg}", provider="ollama"
                 ) from e
             else:
                 raise ProviderResponseError(
-                    f"Ollama error: {error_msg}",
-                    provider="ollama"
+                    f"Ollama error: {error_msg}", provider="ollama"
                 ) from e
 
     async def _chat_non_streaming(
@@ -447,7 +444,7 @@ class OllamaProvider(BaseLLMProvider):
             raise ModelNotFoundError(
                 f"Invalid model name format: {model}",
                 provider="ollama",
-                model_name=model
+                model_name=model,
             )
 
         # Convert messages to Ollama format
@@ -550,7 +547,7 @@ class OllamaProvider(BaseLLMProvider):
             if not await self._breaker.allow(key):
                 raise CircuitBreakerError(
                     "Ollama circuit breaker is open - too many recent failures",
-                    provider="ollama"
+                    provider="ollama",
                 )
             response = await retry_async(_do_call)
             await self._breaker.record_success(key)
@@ -619,17 +616,16 @@ class OllamaProvider(BaseLLMProvider):
             error_msg = str(e.error)
             if "timeout" in error_msg.lower():
                 raise ProviderTimeoutError(
-                    f"Ollama API request timed out: {error_msg}",
-                    provider="ollama"
+                    f"Ollama API request timed out: {error_msg}", provider="ollama"
                 ) from e
             else:
                 raise ProviderResponseError(
-                    f"Ollama API error: {error_msg}",
-                    provider="ollama"
+                    f"Ollama API error: {error_msg}", provider="ollama"
                 ) from e
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
@@ -642,15 +638,14 @@ class OllamaProvider(BaseLLMProvider):
             if "timeout" in error_msg.lower():
                 raise ProviderTimeoutError(
                     f"Failed to connect to Ollama at {self.base_url}: {error_msg}",
-                    provider="ollama"
+                    provider="ollama",
                 ) from e
             elif "connection" in error_msg.lower() or "connect" in error_msg.lower():
                 raise ProviderResponseError(
                     f"Failed to connect to Ollama at {self.base_url}: {error_msg}",
-                    provider="ollama"
+                    provider="ollama",
                 ) from e
             else:
                 raise ProviderResponseError(
-                    f"Ollama error: {error_msg}",
-                    provider="ollama"
+                    f"Ollama error: {error_msg}", provider="ollama"
                 ) from e

@@ -11,7 +11,11 @@ import pytest
 
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.schemas import LLMResponse, Message
-from llmring.exceptions import ProviderAuthenticationError, ModelNotFoundError, ProviderResponseError
+from llmring.exceptions import (
+    ProviderAuthenticationError,
+    ModelNotFoundError,
+    ProviderResponseError,
+)
 
 
 @pytest.mark.llm
@@ -30,7 +34,9 @@ class TestOpenAIProviderUnit:
         # Temporarily unset environment variable
         old_key = os.environ.pop("OPENAI_API_KEY", None)
         try:
-            with pytest.raises(ProviderAuthenticationError, match="OpenAI API key must be provided"):
+            with pytest.raises(
+                ProviderAuthenticationError, match="OpenAI API key must be provided"
+            ):
                 OpenAIProvider()
         finally:
             if old_key:

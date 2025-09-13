@@ -7,7 +7,6 @@ Chat tests are skipped for large models to prevent long test times.
 
 import pytest
 import httpx
-import asyncio
 
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.schemas import LLMResponse, Message
@@ -19,14 +18,13 @@ def is_ollama_running():
         with httpx.Client() as client:
             response = client.get("http://localhost:11434/api/version", timeout=2.0)
             return response.status_code == 200
-    except:
+    except Exception:
         return False
 
 
 # Skip decorator that checks if Ollama is actually running
 skip_if_ollama_not_running = pytest.mark.skipif(
-    not is_ollama_running(),
-    reason="Ollama service not running at localhost:11434"
+    not is_ollama_running(), reason="Ollama service not running at localhost:11434"
 )
 
 
@@ -104,7 +102,9 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
+        is_small_model = any(
+            indicator in model_to_use for indicator in small_model_indicators
+        )
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)
@@ -154,7 +154,9 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
+        is_small_model = any(
+            indicator in model_to_use for indicator in small_model_indicators
+        )
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)
@@ -197,7 +199,9 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(indicator in base_model for indicator in small_model_indicators)
+        is_small_model = any(
+            indicator in base_model for indicator in small_model_indicators
+        )
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in base_model for pattern in large_model_patterns)
@@ -236,7 +240,9 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
+        is_small_model = any(
+            indicator in model_to_use for indicator in small_model_indicators
+        )
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)
@@ -270,6 +276,7 @@ class TestOllamaProviderUnit:
     ):
         """Test that using an invalid model format raises ModelNotFoundError."""
         from llmring.exceptions import ModelNotFoundError
+
         with pytest.raises(ModelNotFoundError, match="Invalid model name format"):
             await ollama_provider.chat(
                 messages=simple_user_message, model="invalid_model!@#"
@@ -334,7 +341,9 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
+        is_small_model = any(
+            indicator in model_to_use for indicator in small_model_indicators
+        )
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)
@@ -381,7 +390,9 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
+        is_small_model = any(
+            indicator in model_to_use for indicator in small_model_indicators
+        )
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)
@@ -425,7 +436,9 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
+        is_small_model = any(
+            indicator in model_to_use for indicator in small_model_indicators
+        )
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)

@@ -26,8 +26,7 @@ def is_ollama_running():
 
 # Skip decorator that checks if Ollama is actually running
 skip_if_ollama_not_running = pytest.mark.skipif(
-    not is_ollama_running(),
-    reason="Ollama service not running at localhost:11434"
+    not is_ollama_running(), reason="Ollama service not running at localhost:11434"
 )
 
 
@@ -71,7 +70,9 @@ class TestOllamaProviderIntegration:
 
             for model in models:
                 # Check if it's a small variant
-                is_small = any(indicator in model for indicator in small_model_indicators)
+                is_small = any(
+                    indicator in model for indicator in small_model_indicators
+                )
 
                 # Check if it's a large base model
                 large_patterns = ["llama3.3", "deepseek-r1:32b"]
@@ -190,6 +191,7 @@ class TestOllamaProviderIntegration:
         messages = [Message(role="user", content="Hello")]
 
         from llmring.exceptions import ModelNotFoundError
+
         with pytest.raises(ModelNotFoundError, match="Invalid model name format"):
             await provider.chat(messages=messages, model="invalid_model_name!@#")
 

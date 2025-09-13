@@ -1,12 +1,10 @@
 import asyncio
 import json
-import sys
 from io import StringIO
-from unittest.mock import MagicMock, patch, Mock, AsyncMock
+from unittest.mock import MagicMock, patch, Mock
 
 import pytest
 
-from typing import Dict, Any
 from llmring.mcp.server.transport.stdio import StdioTransport
 
 
@@ -25,7 +23,12 @@ class TestStdioTransport:
 
     async def test_send_message_valid(self, transport):
         """Test sending a valid JSON-RPC message."""
-        message = {"jsonrpc": "2.0", "method": "test", "params": {"key": "value"}, "id": 1}
+        message = {
+            "jsonrpc": "2.0",
+            "method": "test",
+            "params": {"key": "value"},
+            "id": 1,
+        }
 
         # Start transport first
         with patch("sys.stdin", StringIO("")):
@@ -47,7 +50,12 @@ class TestStdioTransport:
 
     async def test_send_message_with_embedded_newline(self, transport):
         """Test that messages with embedded newlines are rejected."""
-        message = {"jsonrpc": "2.0", "method": "test", "params": {"text": "line1\nline2"}, "id": 1}
+        message = {
+            "jsonrpc": "2.0",
+            "method": "test",
+            "params": {"text": "line1\nline2"},
+            "id": 1,
+        }
 
         # Start transport first
         with patch("sys.stdin", StringIO("")):
@@ -58,9 +66,7 @@ class TestStdioTransport:
             def encode(self, o):
                 if isinstance(o, dict) and "params" in o:
                     # Force an unescaped newline
-                    return (
-                        '{"jsonrpc":"2.0","method":"test","params":{"text":"line1\nline2"},"id":1}'
-                    )
+                    return '{"jsonrpc":"2.0","method":"test","params":{"text":"line1\nline2"},"id":1}'
                 return super().encode(o)
 
         with patch("json.dumps", BadEncoder().encode):
@@ -92,7 +98,11 @@ class TestStdioTransport:
 
     async def test_send_notification(self, transport):
         """Test sending a notification (no id field)."""
-        notification = {"jsonrpc": "2.0", "method": "notification", "params": {"data": "test"}}
+        notification = {
+            "jsonrpc": "2.0",
+            "method": "notification",
+            "params": {"data": "test"},
+        }
 
         # Start transport first
         with patch("sys.stdin", StringIO("")):
@@ -341,7 +351,12 @@ class TestStdioTransport:
         """Test sending and receiving large messages."""
         # Create a large message (1MB of data)
         large_data = "x" * (1024 * 1024)
-        message = {"jsonrpc": "2.0", "method": "test", "params": {"data": large_data}, "id": 1}
+        message = {
+            "jsonrpc": "2.0",
+            "method": "test",
+            "params": {"data": large_data},
+            "id": 1,
+        }
 
         # Start transport first
         with patch("sys.stdin", StringIO("")):

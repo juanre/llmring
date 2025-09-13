@@ -9,7 +9,7 @@ import pytest
 
 from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
-from llmring.exceptions import ProviderNotFoundError, ProviderAuthenticationError
+from llmring.exceptions import ProviderNotFoundError
 
 
 @pytest.mark.llm

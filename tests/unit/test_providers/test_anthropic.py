@@ -30,7 +30,9 @@ class TestAnthropicProviderUnit:
         # Temporarily unset environment variable
         old_key = os.environ.pop("ANTHROPIC_API_KEY", None)
         try:
-            with pytest.raises(ProviderAuthenticationError, match="Anthropic API key must be provided"):
+            with pytest.raises(
+                ProviderAuthenticationError, match="Anthropic API key must be provided"
+            ):
                 AnthropicProvider()
         finally:
             if old_key:

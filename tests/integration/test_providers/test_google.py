@@ -56,7 +56,9 @@ class TestGoogleProviderIntegration:
             or os.getenv("GOOGLE_GEMINI_API_KEY")
         )
         if not api_key:
-            pytest.skip("GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GEMINI_API_KEY not found in environment")
+            pytest.skip(
+                "GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GEMINI_API_KEY not found in environment"
+            )
 
         return GoogleProvider(api_key=api_key)
 
@@ -171,6 +173,7 @@ class TestGoogleProviderIntegration:
         messages = [Message(role="user", content="Hello")]
 
         from llmring.exceptions import ModelNotFoundError
+
         with pytest.raises(ModelNotFoundError, match="Unsupported model"):
             await provider.chat(messages=messages, model="invalid-model-name")
 

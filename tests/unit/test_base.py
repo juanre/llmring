@@ -37,6 +37,7 @@ class TestBaseLLMProvider:
 
             def __init__(self, api_key=None, base_url=None):
                 from llmring.base import ProviderConfig
+
                 config = ProviderConfig(api_key=api_key, base_url=base_url)
                 super().__init__(config)
 
@@ -58,13 +59,14 @@ class TestBaseLLMProvider:
 
             def get_default_model(self):
                 return "test-model"
-            
+
             async def get_capabilities(self):
                 from llmring.base import ProviderCapabilities
+
                 return ProviderCapabilities(
                     provider_name="test",
                     supported_models=["test-model"],
-                    supports_streaming=False
+                    supports_streaming=False,
                 )
 
         provider = CompleteProvider(api_key="test-key")
@@ -79,6 +81,7 @@ class TestBaseLLMProvider:
 
             def __init__(self):
                 from llmring.base import ProviderConfig
+
                 config = ProviderConfig(api_key="test")
                 super().__init__(config)
 
@@ -96,13 +99,14 @@ class TestBaseLLMProvider:
 
             def get_default_model(self):
                 return "model-1"
-            
+
             async def get_capabilities(self):
                 from llmring.base import ProviderCapabilities
+
                 return ProviderCapabilities(
                     provider_name="test",
                     supported_models=self.get_supported_models(),
-                    supports_streaming=False
+                    supports_streaming=False,
                 )
 
         provider = TestProvider()
@@ -116,6 +120,7 @@ class TestBaseLLMProvider:
 
             def __init__(self):
                 from llmring.base import ProviderConfig
+
                 config = ProviderConfig(api_key="test")
                 super().__init__(config)
 
@@ -133,13 +138,12 @@ class TestBaseLLMProvider:
 
             def get_default_model(self):
                 return "default"
-            
+
             async def get_capabilities(self):
                 from llmring.base import ProviderCapabilities
+
                 return ProviderCapabilities(
-                    provider_name="test",
-                    supported_models=[],
-                    supports_streaming=False
+                    provider_name="test", supported_models=[], supports_streaming=False
                 )
 
         provider = EmptyProvider()

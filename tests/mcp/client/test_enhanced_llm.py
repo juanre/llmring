@@ -43,7 +43,9 @@ def text_analyzer(text: str) -> dict:
         "character_count": len(text),
         "character_count_no_spaces": len(text.replace(" ", "")),
         "sentence_count": text.count(".") + text.count("!") + text.count("?"),
-        "average_word_length": sum(len(word) for word in words) / len(words) if words else 0,
+        "average_word_length": sum(len(word) for word in words) / len(words)
+        if words
+        else 0,
     }
 
 
@@ -108,7 +110,9 @@ def enhanced_llm_with_tools(enhanced_llm):
         description="Analyze text and provide statistics",
         parameters={
             "type": "object",
-            "properties": {"text": {"type": "string", "description": "Text to analyze"}},
+            "properties": {
+                "text": {"type": "string", "description": "Text to analyze"}
+            },
             "required": ["text"],
         },
         handler=text_analyzer,
@@ -133,7 +137,9 @@ class TestEnhancedLLMBasics:
 
     def test_create_enhanced_llm_function(self):
         """Test the create_enhanced_llm convenience function."""
-        enhanced_llm = create_enhanced_llm(llm_model="openai:gpt-4o-mini", origin="test-module")
+        enhanced_llm = create_enhanced_llm(
+            llm_model="openai:gpt-4o-mini", origin="test-module"
+        )
 
         assert enhanced_llm.llm_model == "openai:gpt-4o-mini"
         assert enhanced_llm.origin == "test-module"
@@ -247,7 +253,10 @@ class TestChatInterface:
                     "role": "system",
                     "content": "You are a helpful assistant with access to tools. Use them when appropriate.",
                 },
-                {"role": "user", "content": "What is 15 times 23? Please calculate this for me."},
+                {
+                    "role": "user",
+                    "content": "What is 15 times 23? Please calculate this for me.",
+                },
             ]
         )
 
@@ -299,7 +308,9 @@ class TestChatInterface:
     async def test_llm_parameters(self, enhanced_llm):
         """Test that LLM parameters are passed through correctly."""
         response = await enhanced_llm.chat(
-            [{"role": "user", "content": "Say exactly 'test'"}], temperature=0.0, max_tokens=10
+            [{"role": "user", "content": "Say exactly 'test'"}],
+            temperature=0.0,
+            max_tokens=10,
         )
 
         assert isinstance(response, LLMResponse)
@@ -361,43 +372,47 @@ class TestToolExecution:
         # The response should exist
         assert response is not None
         assert isinstance(response, LLMResponse)
-        
+
         # If content is empty, it might be because tools weren't called or there was an issue
         # This can happen with some models, so we'll be lenient
         if response.content:
             response_lower = response.content.lower()
-            
+
             # Check for evidence of tool usage or task completion
             # Note: We can't guarantee all tools will be used, but we can check for reasonable responses
-            
+
             # Look for calculation result (180) or other evidence
             calculation_evidence = (
-                "180" in response.content or 
-                "12" in response.content or
-                "15" in response.content or
-                "calculat" in response_lower
+                "180" in response.content
+                or "12" in response.content
+                or "15" in response.content
+                or "calculat" in response_lower
             )
             weather_evidence = (
-                "london" in response_lower or 
-                "weather" in response_lower or
-                "15°c" in response_lower or 
-                "cloudy" in response_lower or
-                "temperature" in response_lower
+                "london" in response_lower
+                or "weather" in response_lower
+                or "15°c" in response_lower
+                or "cloudy" in response_lower
+                or "temperature" in response_lower
             )
             text_evidence = (
-                "word" in response_lower or 
-                "character" in response_lower or
-                "text" in response_lower or
-                "analyz" in response_lower or
-                "hello" in response_lower
+                "word" in response_lower
+                or "character" in response_lower
+                or "text" in response_lower
+                or "analyz" in response_lower
+                or "hello" in response_lower
             )
-            
+
             # At least one task should show evidence of being addressed
-            assert calculation_evidence or weather_evidence or text_evidence, f"Response doesn't show evidence of addressing any task: {response.content[:200]}"
+            assert calculation_evidence or weather_evidence or text_evidence, (
+                f"Response doesn't show evidence of addressing any task: {response.content[:200]}"
+            )
         else:
             # If no content, check if tool_calls were made at least
             # This is still a valid test case - the LLM tried to use tools
-            assert response.usage is not None, "Response should have usage information even if content is empty"
+            assert response.usage is not None, (
+                "Response should have usage information even if content is empty"
+            )
 
 
 class TestErrorHandling:
@@ -424,7 +439,10 @@ class TestErrorHandling:
                     "role": "system",
                     "content": "You have access to a failing_tool. Try to use it if asked.",
                 },
-                {"role": "user", "content": "Please use the failing tool with input 'test'."},
+                {
+                    "role": "user",
+                    "content": "Please use the failing tool with input 'test'.",
+                },
             ]
         )
 
@@ -491,7 +509,9 @@ class TestModuleIntegrationPattern:
 
         class TestModule:
             def __init__(self):
-                self.llm = create_enhanced_llm(origin="test-module", user_id="module-user")
+                self.llm = create_enhanced_llm(
+                    origin="test-module", user_id="module-user"
+                )
                 self._register_tools()
 
             def _register_tools(self):
@@ -527,7 +547,10 @@ class TestModuleIntegrationPattern:
             async def process_user_request(self, user_input: str) -> str:
                 response = await self.llm.chat(
                     [
-                        {"role": "system", "content": "You are a data processing assistant."},
+                        {
+                            "role": "system",
+                            "content": "You are a data processing assistant.",
+                        },
                         {"role": "user", "content": user_input},
                     ]
                 )

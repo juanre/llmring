@@ -6,7 +6,6 @@ across OpenAI (native), Anthropic (tool injection), Google (function calling),
 and Ollama (best effort).
 """
 
-import json
 import pytest
 
 from llmring.service import LLMRing
@@ -28,33 +27,36 @@ class TestUnifiedStructuredOutput:
         """Simple person schema for testing."""
         return {
             "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "integer"}
-            },
-            "required": ["name", "age"]
+            "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+            "required": ["name", "age"],
         }
 
     @pytest.fixture
     def structured_request_template(self, person_schema):
         """Template for structured output requests."""
         return {
-            "messages": [Message(role="user", content="Generate a person with name Alice, age 30")],
+            "messages": [
+                Message(
+                    role="user", content="Generate a person with name Alice, age 30"
+                )
+            ],
             "max_tokens": 100,
             "temperature": 0.1,
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {
-                    "name": "person",
-                    "schema": person_schema
-                },
-                "strict": True
-            }
+                "json_schema": {"name": "person", "schema": person_schema},
+                "strict": True,
+            },
         }
 
-    @pytest.mark.skipif(not pytest.importorskip("openai", reason="OpenAI not available"), reason="OpenAI not available")
+    @pytest.mark.skipif(
+        not pytest.importorskip("openai", reason="OpenAI not available"),
+        reason="OpenAI not available",
+    )
     @pytest.mark.asyncio
-    async def test_openai_unified_structured_output(self, service, structured_request_template):
+    async def test_openai_unified_structured_output(
+        self, service, structured_request_template
+    ):
         """Test OpenAI native JSON schema support via unified interface."""
         request = LLMRequest(model="openai:gpt-4o-mini", **structured_request_template)
         response = await service.chat(request)
@@ -72,11 +74,18 @@ class TestUnifiedStructuredOutput:
 
         print(f"✓ OpenAI structured output: {response.parsed}")
 
-    @pytest.mark.skipif(not pytest.importorskip("anthropic", reason="Anthropic not available"), reason="Anthropic not available")
+    @pytest.mark.skipif(
+        not pytest.importorskip("anthropic", reason="Anthropic not available"),
+        reason="Anthropic not available",
+    )
     @pytest.mark.asyncio
-    async def test_anthropic_unified_structured_output(self, service, structured_request_template):
+    async def test_anthropic_unified_structured_output(
+        self, service, structured_request_template
+    ):
         """Test Anthropic tool injection approach via unified interface."""
-        request = LLMRequest(model="anthropic:claude-3-5-haiku", **structured_request_template)
+        request = LLMRequest(
+            model="anthropic:claude-3-5-haiku", **structured_request_template
+        )
         response = await service.chat(request)
 
         # Verify response structure
@@ -96,11 +105,18 @@ class TestUnifiedStructuredOutput:
 
         print(f"✓ Anthropic structured output: {response.parsed}")
 
-    @pytest.mark.skipif(not pytest.importorskip("google.genai", reason="Google GenAI not available"), reason="Google GenAI not available")
+    @pytest.mark.skipif(
+        not pytest.importorskip("google.genai", reason="Google GenAI not available"),
+        reason="Google GenAI not available",
+    )
     @pytest.mark.asyncio
-    async def test_google_unified_structured_output(self, service, structured_request_template):
+    async def test_google_unified_structured_output(
+        self, service, structured_request_template
+    ):
         """Test Google function calling approach via unified interface."""
-        request = LLMRequest(model="google:gemini-1.5-flash", **structured_request_template)
+        request = LLMRequest(
+            model="google:gemini-1.5-flash", **structured_request_template
+        )
         response = await service.chat(request)
 
         # Verify response structure
@@ -121,7 +137,9 @@ class TestUnifiedStructuredOutput:
         print(f"✓ Google structured output: {response.parsed}")
 
     @pytest.mark.asyncio
-    async def test_ollama_unified_structured_output(self, service, structured_request_template):
+    async def test_ollama_unified_structured_output(
+        self, service, structured_request_template
+    ):
         """Test Ollama best-effort approach via unified interface."""
         request = LLMRequest(model="ollama:llama3.2:1b", **structured_request_template)
 
@@ -153,12 +171,9 @@ class TestUnifiedStructuredOutput:
             "temperature": 0.0,  # Most deterministic
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {
-                    "name": "person",
-                    "schema": person_schema
-                },
-                "strict": True
-            }
+                "json_schema": {"name": "person", "schema": person_schema},
+                "strict": True,
+            },
         }
 
         results = {}
@@ -189,9 +204,13 @@ class TestUnifiedStructuredOutput:
             for provider_name, parsed_data in results.items():
                 assert "name" in parsed_data, f"{provider_name} missing name field"
                 assert "age" in parsed_data, f"{provider_name} missing age field"
-                assert isinstance(parsed_data["age"], int), f"{provider_name} age not integer"
+                assert isinstance(parsed_data["age"], int), (
+                    f"{provider_name} age not integer"
+                )
 
-            print(f"✓ Cross-provider consistency verified across {len(results)} providers")
+            print(
+                f"✓ Cross-provider consistency verified across {len(results)} providers"
+            )
             print(f"Results: {results}")
 
     def test_schema_adaptation_logic(self, service):
@@ -200,29 +219,40 @@ class TestUnifiedStructuredOutput:
         openai_request = LLMRequest(
             model="openai:gpt-4o",
             messages=[Message(role="user", content="test")],
-            response_format={"type": "json_schema", "json_schema": {"schema": {"type": "object"}}}
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"schema": {"type": "object"}},
+            },
         )
 
         # Mock the adapter to test logic
         from unittest.mock import Mock
+
         mock_provider = Mock()
 
         # Should NOT adapt OpenAI
-        adapted = asyncio.run(service._apply_structured_output_adapter(
-            openai_request, "openai", mock_provider
-        ))
+        adapted = asyncio.run(
+            service._apply_structured_output_adapter(
+                openai_request, "openai", mock_provider
+            )
+        )
         assert adapted.tools is None, "OpenAI should not have tools injected"
 
         # Should adapt Anthropic
         anthropic_request = LLMRequest(
             model="anthropic:claude-3-5-sonnet",
             messages=[Message(role="user", content="test")],
-            response_format={"type": "json_schema", "json_schema": {"schema": {"type": "object"}}}
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"schema": {"type": "object"}},
+            },
         )
 
-        adapted = asyncio.run(service._apply_structured_output_adapter(
-            anthropic_request, "anthropic", mock_provider
-        ))
+        adapted = asyncio.run(
+            service._apply_structured_output_adapter(
+                anthropic_request, "anthropic", mock_provider
+            )
+        )
         assert adapted.tools is not None, "Anthropic should have tools injected"
         assert len(adapted.tools) == 1
         assert adapted.tools[0]["function"]["name"] == "respond_with_structure"

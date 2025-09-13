@@ -336,11 +336,15 @@ class RegistryClient:
 
                 # Validate required fields
                 if "model_name" not in model_data:
-                    print(f"Warning: Model '{model_key}' missing required field 'model_name'")
+                    print(
+                        f"Warning: Model '{model_key}' missing required field 'model_name'"
+                    )
                     continue
-                    
+
                 if not model_data.get("display_name"):
-                    print(f"Warning: Model '{model_key}' missing required field 'display_name'")
+                    print(
+                        f"Warning: Model '{model_key}' missing required field 'display_name'"
+                    )
                     continue
 
                 model = RegistryModel(**model_data)

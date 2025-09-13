@@ -9,7 +9,6 @@ These tests validate that:
 5. All providers work with real APIs
 """
 
-import asyncio
 import os
 import pytest
 
@@ -28,8 +27,12 @@ class TestProviderEnhancements:
         return LLMRing()
 
     @pytest.mark.skipif(
-        not (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_GEMINI_API_KEY")),
-        reason="Google API key not available"
+        not (
+            os.getenv("GOOGLE_API_KEY")
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_GEMINI_API_KEY")
+        ),
+        reason="Google API key not available",
     )
     @pytest.mark.asyncio
     async def test_google_real_streaming_vs_faked(self, service):
@@ -37,11 +40,14 @@ class TestProviderEnhancements:
         request = LLMRequest(
             model="google:gemini-1.5-flash",
             messages=[
-                Message(role="user", content="Count from 1 to 5, one number per sentence, slowly.")
+                Message(
+                    role="user",
+                    content="Count from 1 to 5, one number per sentence, slowly.",
+                )
             ],
             max_tokens=50,
             temperature=0.7,
-            stream=True
+            stream=True,
         )
 
         chunks = []
@@ -51,16 +57,24 @@ class TestProviderEnhancements:
         # Real streaming should produce multiple chunks
         content_chunks = [c for c in chunks if c.delta and c.delta.strip()]
 
-        print(f"Google streaming: {len(chunks)} total chunks, {len(content_chunks)} content chunks")
+        print(
+            f"Google streaming: {len(chunks)} total chunks, {len(content_chunks)} content chunks"
+        )
         print(f"Deltas: {[c.delta for c in content_chunks]}")
 
         # If this was still faked, we'd get exactly 1 chunk with all content
         # Real streaming should give us multiple chunks
-        assert len(content_chunks) > 1, f"Expected real streaming (>1 chunk), got {len(content_chunks)} - may still be faked"
+        assert len(content_chunks) > 1, (
+            f"Expected real streaming (>1 chunk), got {len(content_chunks)} - may still be faked"
+        )
 
     @pytest.mark.skipif(
-        not (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_GEMINI_API_KEY")),
-        reason="Google API key not available"
+        not (
+            os.getenv("GOOGLE_API_KEY")
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_GEMINI_API_KEY")
+        ),
+        reason="Google API key not available",
     )
     @pytest.mark.asyncio
     async def test_google_model_version_honoring(self, service):
@@ -70,7 +84,7 @@ class TestProviderEnhancements:
             model="google:gemini-2.0-flash-lite",
             messages=[Message(role="user", content="What model are you?")],
             max_tokens=30,
-            temperature=0.1
+            temperature=0.1,
         )
 
         try:
@@ -93,35 +107,44 @@ class TestProviderEnhancements:
                 raise
 
     @pytest.mark.skipif(
-        not (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_GEMINI_API_KEY")),
-        reason="Google API key not available"
+        not (
+            os.getenv("GOOGLE_API_KEY")
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_GEMINI_API_KEY")
+        ),
+        reason="Google API key not available",
     )
     @pytest.mark.asyncio
     async def test_google_native_function_calling(self, service):
         """Test that Google uses native function calling (not prompt-based)."""
-        tools = [{
-            "type": "function",
-            "function": {
-                "name": "get_weather",
-                "description": "Get weather information for a location",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "location": {"type": "string", "description": "City name"}
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get weather information for a location",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string", "description": "City name"}
+                        },
+                        "required": ["location"],
                     },
-                    "required": ["location"]
-                }
+                },
             }
-        }]
+        ]
 
         request = LLMRequest(
             model="google:gemini-1.5-pro",  # Use Pro for better function calling
             messages=[
-                Message(role="user", content="What's the weather like in New York? Use the weather tool.")
+                Message(
+                    role="user",
+                    content="What's the weather like in New York? Use the weather tool.",
+                )
             ],
             tools=tools,
             max_tokens=100,
-            temperature=0.1
+            temperature=0.1,
         )
 
         try:
@@ -134,12 +157,21 @@ class TestProviderEnhancements:
 
             # If tools were properly integrated, response should be relevant to weather
             # and not contain the raw tool schema (which would indicate prompt-based approach)
-            tool_schema_indicators = ["parameters", "properties", "required", '"type": "object"']
+            tool_schema_indicators = [
+                "parameters",
+                "properties",
+                "required",
+                '"type": "object"',
+            ]
             response_lower = response.content.lower()
 
             # Should not contain raw tool schema (indicates prompt-based approach)
-            schema_count = sum(1 for indicator in tool_schema_indicators if indicator in response_lower)
-            assert schema_count <= 1, f"Response contains tool schema, may still be using prompt-based approach: {response.content[:200]}"
+            schema_count = sum(
+                1 for indicator in tool_schema_indicators if indicator in response_lower
+            )
+            assert schema_count <= 1, (
+                f"Response contains tool schema, may still be using prompt-based approach: {response.content[:200]}"
+            )
 
         except Exception as e:
             if "function calling" in str(e).lower() or "tool" in str(e).lower():
@@ -147,7 +179,9 @@ class TestProviderEnhancements:
             else:
                 raise
 
-    @pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OpenAI API key not available")
+    @pytest.mark.skipif(
+        not os.getenv("OPENAI_API_KEY"), reason="OpenAI API key not available"
+    )
     @pytest.mark.asyncio
     async def test_openai_json_schema_support(self, service):
         """Test OpenAI JSON schema support (new feature)."""
@@ -165,20 +199,21 @@ class TestProviderEnhancements:
                         "type": "object",
                         "properties": {
                             "name": {"type": "string"},
-                            "age": {"type": "integer"}
+                            "age": {"type": "integer"},
                         },
                         "required": ["name", "age"],
-                        "additionalProperties": False
-                    }
+                        "additionalProperties": False,
+                    },
                 },
-                "strict": True
-            }
+                "strict": True,
+            },
         )
 
         response = await service.chat(request)
 
         # Should return valid JSON matching the schema
         import json
+
         try:
             data = json.loads(response.content)
             assert "name" in data, "Response should have name field"
@@ -191,7 +226,9 @@ class TestProviderEnhancements:
         except json.JSONDecodeError:
             pytest.fail(f"Response should be valid JSON, got: {response.content}")
 
-    @pytest.mark.skipif(not os.getenv("ANTHROPIC_API_KEY"), reason="Anthropic API key not available")
+    @pytest.mark.skipif(
+        not os.getenv("ANTHROPIC_API_KEY"), reason="Anthropic API key not available"
+    )
     @pytest.mark.asyncio
     async def test_anthropic_prompt_caching_integration(self, service):
         """Test that Anthropic prompt caching works in the integrated system."""
@@ -204,12 +241,12 @@ class TestProviderEnhancements:
                 Message(
                     role="system",
                     content=long_system,
-                    metadata={"cache_control": {"type": "ephemeral"}}
+                    metadata={"cache_control": {"type": "ephemeral"}},
                 ),
-                Message(role="user", content="What is 2+2?")
+                Message(role="user", content="What is 2+2?"),
             ],
             max_tokens=20,
-            temperature=0.1
+            temperature=0.1,
         )
 
         response = await service.chat(request)
@@ -223,7 +260,9 @@ class TestProviderEnhancements:
             cache_keys = ["cache_creation_input_tokens", "cache_read_input_tokens"]
             has_cache_info = any(key in response.usage for key in cache_keys)
             if has_cache_info:
-                print(f"✓ Cache usage tracked: {[(k, v) for k, v in response.usage.items() if 'cache' in k]}")
+                print(
+                    f"✓ Cache usage tracked: {[(k, v) for k, v in response.usage.items() if 'cache' in k]}"
+                )
 
     def test_all_critical_providers_available(self, service):
         """Test that all critical providers with API keys are available."""
@@ -232,20 +271,28 @@ class TestProviderEnhancements:
 
         # Check each provider based on API key availability
         if os.getenv("OPENAI_API_KEY"):
-            assert "openai" in available, "OpenAI provider should be available with API key"
+            assert "openai" in available, (
+                "OpenAI provider should be available with API key"
+            )
 
         if os.getenv("ANTHROPIC_API_KEY"):
-            assert "anthropic" in available, "Anthropic provider should be available with API key"
+            assert "anthropic" in available, (
+                "Anthropic provider should be available with API key"
+            )
 
         google_keys = [
             os.getenv("GOOGLE_API_KEY"),
             os.getenv("GEMINI_API_KEY"),
-            os.getenv("GOOGLE_GEMINI_API_KEY")
+            os.getenv("GOOGLE_GEMINI_API_KEY"),
         ]
         if any(google_keys):
-            assert "google" in available, f"Google provider should be available with API key. Available: {available}"
+            assert "google" in available, (
+                f"Google provider should be available with API key. Available: {available}"
+            )
 
         # Ollama should always be available (no API key required)
         assert "ollama" in available, "Ollama provider should always be available"
 
-        assert len(available) >= 2, f"Should have multiple providers available, got: {available}"
+        assert len(available) >= 2, (
+            f"Should have multiple providers available, got: {available}"
+        )

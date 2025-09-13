@@ -46,19 +46,18 @@ class AnthropicProvider(BaseLLMProvider):
         api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
             raise ProviderAuthenticationError(
-                "Anthropic API key must be provided",
-                provider="anthropic"
+                "Anthropic API key must be provided", provider="anthropic"
             )
-            
+
         # Create config for base class
         config = ProviderConfig(
             api_key=api_key,
             base_url=base_url,
             default_model=model,
-            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60")),
         )
         super().__init__(config)
-        
+
         # Store for backward compatibility
         self.api_key = api_key
         self.default_model = model
@@ -68,7 +67,7 @@ class AnthropicProvider(BaseLLMProvider):
         self.client = AsyncAnthropic(
             api_key=api_key,
             base_url=base_url,
-            default_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
+            default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
         )
 
         # List of officially supported models
@@ -143,11 +142,11 @@ class AnthropicProvider(BaseLLMProvider):
             Default model name
         """
         return self.default_model
-    
+
     async def get_capabilities(self) -> ProviderCapabilities:
         """
         Get the capabilities of this provider.
-        
+
         Returns:
             Provider capabilities
         """
@@ -223,7 +222,7 @@ class AnthropicProvider(BaseLLMProvider):
             cache=cache,
             extra_params=extra_params,
         )
-    
+
     async def _stream_chat(
         self,
         messages: List[Message],
@@ -242,7 +241,7 @@ class AnthropicProvider(BaseLLMProvider):
         original_model = model
         if model.lower().startswith("anthropic:"):
             model = model.split(":", 1)[1]
-            
+
         # Find latest version for models without date
         if "-202" not in model:
             for supported_model in self.supported_models:
@@ -255,12 +254,14 @@ class AnthropicProvider(BaseLLMProvider):
             raise ModelNotFoundError(
                 f"Unsupported model: {original_model}",
                 provider="anthropic",
-                model_name=original_model
+                model_name=original_model,
             )
 
         # Prepare messages and system prompt
-        anthropic_messages, system_message, system_cache_control = self._prepare_messages(messages)
-        
+        anthropic_messages, system_message, system_cache_control = (
+            self._prepare_messages(messages)
+        )
+
         # Build request parameters
         request_params = {
             "model": model,
@@ -269,7 +270,7 @@ class AnthropicProvider(BaseLLMProvider):
             "max_tokens": max_tokens or 4096,
             "stream": True,
         }
-        
+
         if system_message:
             # Add system message with cache control if available
             if system_cache_control:
@@ -277,12 +278,12 @@ class AnthropicProvider(BaseLLMProvider):
                     {
                         "type": "text",
                         "text": system_message,
-                        "cache_control": system_cache_control
+                        "cache_control": system_cache_control,
                     }
                 ]
             else:
                 request_params["system"] = system_message
-            
+
         # Handle tools if provided
         if tools:
             request_params["tools"] = self._prepare_tools(tools)
@@ -292,9 +293,11 @@ class AnthropicProvider(BaseLLMProvider):
         # Apply extra parameters if provided
         if extra_params:
             request_params.update(extra_params)
-                
+
         # Handle JSON response format
-        if json_response or (response_format and response_format.get("type") in ["json_object", "json"]):
+        if json_response or (
+            response_format and response_format.get("type") in ["json_object", "json"]
+        ):
             json_instruction = "\n\nIMPORTANT: You must respond with valid JSON only."
             # Preserve cache control structure if present
             if isinstance(request_params.get("system"), list):
@@ -306,21 +309,20 @@ class AnthropicProvider(BaseLLMProvider):
             else:
                 # No system message yet
                 request_params["system"] = json_instruction.strip()
-            
+
         # Make streaming API call
         try:
             timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
-            
+
             stream = await asyncio.wait_for(
-                self.client.messages.create(**request_params),
-                timeout=timeout_s
+                self.client.messages.create(**request_params), timeout=timeout_s
             )
-            
+
             # Process the stream
             accumulated_content = ""
             async for event in stream:
                 if event.type == "content_block_delta":
-                    if hasattr(event.delta, 'text'):
+                    if hasattr(event.delta, "text"):
                         accumulated_content += event.delta.text
                         yield StreamChunk(
                             delta=event.delta.text,
@@ -329,97 +331,130 @@ class AnthropicProvider(BaseLLMProvider):
                         )
                 elif event.type == "message_delta":
                     # Final event with usage information
-                    if hasattr(event, 'usage'):
+                    if hasattr(event, "usage"):
                         usage_dict = {
                             "prompt_tokens": event.usage.input_tokens,
                             "completion_tokens": event.usage.output_tokens,
-                            "total_tokens": event.usage.input_tokens + event.usage.output_tokens,
+                            "total_tokens": event.usage.input_tokens
+                            + event.usage.output_tokens,
                         }
                         # Add cache-related usage if available
-                        if hasattr(event.usage, 'cache_creation_input_tokens'):
-                            usage_dict["cache_creation_input_tokens"] = event.usage.cache_creation_input_tokens
-                        if hasattr(event.usage, 'cache_read_input_tokens'):
-                            usage_dict["cache_read_input_tokens"] = event.usage.cache_read_input_tokens
-                        
+                        if hasattr(event.usage, "cache_creation_input_tokens"):
+                            usage_dict["cache_creation_input_tokens"] = (
+                                event.usage.cache_creation_input_tokens
+                            )
+                        if hasattr(event.usage, "cache_read_input_tokens"):
+                            usage_dict["cache_read_input_tokens"] = (
+                                event.usage.cache_read_input_tokens
+                            )
+
                         yield StreamChunk(
                             delta="",
                             model=model,
-                            finish_reason=event.stop_reason if hasattr(event, 'stop_reason') else "stop",
-                            usage=usage_dict if event.usage else None
+                            finish_reason=event.stop_reason
+                            if hasattr(event, "stop_reason")
+                            else "stop",
+                            usage=usage_dict if event.usage else None,
                         )
-                        
+
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
             error_msg = str(e)
-            if "api key" in error_msg.lower() or "authentication_error" in error_msg.lower() or "x-api-key" in error_msg.lower():
+            if (
+                "api key" in error_msg.lower()
+                or "authentication_error" in error_msg.lower()
+                or "x-api-key" in error_msg.lower()
+            ):
                 raise ProviderAuthenticationError(
                     f"Anthropic API authentication failed: {error_msg}",
-                    provider="anthropic"
+                    provider="anthropic",
                 ) from e
             elif "rate limit" in error_msg.lower():
                 raise ProviderRateLimitError(
                     f"Anthropic API rate limit exceeded: {error_msg}",
-                    provider="anthropic"
+                    provider="anthropic",
                 ) from e
             else:
                 raise ProviderResponseError(
-                    f"Anthropic API error: {error_msg}",
-                    provider="anthropic"
+                    f"Anthropic API error: {error_msg}", provider="anthropic"
                 ) from e
-    
-    def _prepare_messages(self, messages: List[Message]) -> tuple[List[Dict], Optional[str], Optional[Dict]]:
+
+    def _prepare_messages(
+        self, messages: List[Message]
+    ) -> tuple[List[Dict], Optional[str], Optional[Dict]]:
         """Convert messages to Anthropic format and extract system message with cache control."""
         anthropic_messages = []
         system_message = None
         system_cache_control = None
-        
+
         for msg in messages:
             if msg.role == "system":
-                system_message = msg.content if isinstance(msg.content, str) else str(msg.content)
+                system_message = (
+                    msg.content if isinstance(msg.content, str) else str(msg.content)
+                )
                 # Check for cache control in system message metadata
-                if hasattr(msg, 'metadata') and msg.metadata and 'cache_control' in msg.metadata:
-                    system_cache_control = msg.metadata['cache_control']
+                if (
+                    hasattr(msg, "metadata")
+                    and msg.metadata
+                    and "cache_control" in msg.metadata
+                ):
+                    system_cache_control = msg.metadata["cache_control"]
             else:
                 # Handle tool calls and responses
-                if msg.role == "assistant" and hasattr(msg, "tool_calls") and msg.tool_calls:
+                if (
+                    msg.role == "assistant"
+                    and hasattr(msg, "tool_calls")
+                    and msg.tool_calls
+                ):
                     content = []
                     if msg.content:
                         content.append({"type": "text", "text": msg.content})
                     for tool_call in msg.tool_calls:
-                        content.append({
-                            "type": "tool_use",
-                            "id": tool_call["id"],
-                            "name": tool_call["function"]["name"],
-                            "input": tool_call["function"]["arguments"],
-                        })
+                        content.append(
+                            {
+                                "type": "tool_use",
+                                "id": tool_call["id"],
+                                "name": tool_call["function"]["name"],
+                                "input": tool_call["function"]["arguments"],
+                            }
+                        )
                     anthropic_messages.append({"role": "assistant", "content": content})
                 elif hasattr(msg, "tool_call_id") and msg.tool_call_id:
-                    anthropic_messages.append({
-                        "role": "user",
-                        "content": [{
-                            "type": "tool_result",
-                            "tool_use_id": msg.tool_call_id,
-                            "content": msg.content,
-                        }],
-                    })
+                    anthropic_messages.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": msg.tool_call_id,
+                                    "content": msg.content,
+                                }
+                            ],
+                        }
+                    )
                 else:
                     # Regular messages
                     content = self._format_message_content(msg.content)
-                    
+
                     # Add cache control to the last content block if present in metadata
-                    if hasattr(msg, 'metadata') and msg.metadata and 'cache_control' in msg.metadata:
+                    if (
+                        hasattr(msg, "metadata")
+                        and msg.metadata
+                        and "cache_control" in msg.metadata
+                    ):
                         if content and isinstance(content, list) and len(content) > 0:
                             # Add cache_control to the last content block
-                            content[-1]['cache_control'] = msg.metadata['cache_control']
-                    
+                            content[-1]["cache_control"] = msg.metadata["cache_control"]
+
                     anthropic_messages.append({"role": msg.role, "content": content})
-                    
+
         return anthropic_messages, system_message, system_cache_control
-    
+
     def _format_message_content(self, content: Any) -> List[Dict]:
         """Format message content to Anthropic's expected format."""
         if isinstance(content, str):
@@ -438,19 +473,23 @@ class AnthropicProvider(BaseLLMProvider):
                                 image_data.split(";")[0].split(":")[1],
                                 image_data.split(",")[1],
                             )
-                            formatted.append({
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": media_type,
-                                    "data": base64_data,
-                                },
-                            })
+                            formatted.append(
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": media_type,
+                                        "data": base64_data,
+                                    },
+                                }
+                            )
                         else:
-                            formatted.append({
-                                "type": "image",
-                                "source": {"type": "url", "url": image_data},
-                            })
+                            formatted.append(
+                                {
+                                    "type": "image",
+                                    "source": {"type": "url", "url": image_data},
+                                }
+                            )
                     elif item.get("type") == "document":
                         # Anthropic supports documents directly
                         formatted.append(item)
@@ -459,7 +498,7 @@ class AnthropicProvider(BaseLLMProvider):
             return formatted
         else:
             return [{"type": "text", "text": str(content)}]
-    
+
     def _prepare_tools(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Convert tools to Anthropic format."""
         anthropic_tools = []
@@ -467,21 +506,34 @@ class AnthropicProvider(BaseLLMProvider):
             if "function" in tool:
                 # OpenAI format
                 func = tool["function"]
-                anthropic_tools.append({
-                    "name": func["name"],
-                    "description": func.get("description", ""),
-                    "input_schema": func.get("parameters", {"type": "object", "properties": {}}),
-                })
+                anthropic_tools.append(
+                    {
+                        "name": func["name"],
+                        "description": func.get("description", ""),
+                        "input_schema": func.get(
+                            "parameters", {"type": "object", "properties": {}}
+                        ),
+                    }
+                )
             else:
                 # Direct format
-                anthropic_tools.append({
-                    "name": tool["name"],
-                    "description": tool.get("description", ""),
-                    "input_schema": tool.get("input_schema", tool.get("parameters", {"type": "object", "properties": {}})),
-                })
+                anthropic_tools.append(
+                    {
+                        "name": tool["name"],
+                        "description": tool.get("description", ""),
+                        "input_schema": tool.get(
+                            "input_schema",
+                            tool.get(
+                                "parameters", {"type": "object", "properties": {}}
+                            ),
+                        ),
+                    }
+                )
         return anthropic_tools
-    
-    def _prepare_tool_choice(self, tool_choice: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
+
+    def _prepare_tool_choice(
+        self, tool_choice: Union[str, Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """Convert tool choice to Anthropic format."""
         if tool_choice == "auto":
             return {"type": "auto"}
@@ -525,11 +577,13 @@ class AnthropicProvider(BaseLLMProvider):
             raise ModelNotFoundError(
                 f"Unsupported model: {original_model}",
                 provider="anthropic",
-                model_name=original_model
+                model_name=original_model,
             )
 
         # Convert messages to Anthropic format using _prepare_messages
-        anthropic_messages, system_message, system_cache_control = self._prepare_messages(messages)
+        anthropic_messages, system_message, system_cache_control = (
+            self._prepare_messages(messages)
+        )
 
         # Build the request parameters
         request_params = {
@@ -546,7 +600,7 @@ class AnthropicProvider(BaseLLMProvider):
                     {
                         "type": "text",
                         "text": system_message,
-                        "cache_control": system_cache_control
+                        "cache_control": system_cache_control,
                     }
                 ]
             else:
@@ -563,7 +617,9 @@ class AnthropicProvider(BaseLLMProvider):
             request_params.update(extra_params)
 
         # Handle JSON response format
-        if json_response or (response_format and response_format.get("type") in ["json_object", "json"]):
+        if json_response or (
+            response_format and response_format.get("type") in ["json_object", "json"]
+        ):
             json_instruction = "\n\nIMPORTANT: You must respond with valid JSON only."
             # Preserve cache control structure if present
             if isinstance(request_params.get("system"), list):
@@ -575,7 +631,6 @@ class AnthropicProvider(BaseLLMProvider):
             else:
                 # No system message yet
                 request_params["system"] = json_instruction.strip()
-
 
         # Make the API call using the SDK
         try:
@@ -590,13 +645,14 @@ class AnthropicProvider(BaseLLMProvider):
             if not await self._breaker.allow(breaker_key):
                 raise CircuitBreakerError(
                     "Anthropic circuit breaker is open - too many recent failures",
-                    provider="anthropic"
+                    provider="anthropic",
                 )
             response: AnthropicMessage = await retry_async(_do_call)
             await self._breaker.record_success(breaker_key)
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
@@ -606,32 +662,35 @@ class AnthropicProvider(BaseLLMProvider):
                 pass
             # Handle specific Anthropic errors with more context
             error_msg = str(e)
-            if "api key" in error_msg.lower() or "authentication_error" in error_msg.lower() or "x-api-key" in error_msg.lower():
+            if (
+                "api key" in error_msg.lower()
+                or "authentication_error" in error_msg.lower()
+                or "x-api-key" in error_msg.lower()
+            ):
                 raise ProviderAuthenticationError(
                     f"Anthropic API authentication failed: {error_msg}",
-                    provider="anthropic"
+                    provider="anthropic",
                 ) from e
             elif "rate limit" in error_msg.lower():
                 raise ProviderRateLimitError(
                     f"Anthropic API rate limit exceeded: {error_msg}",
-                    provider="anthropic"
+                    provider="anthropic",
                 ) from e
             elif "model" in error_msg.lower() and "not found" in error_msg.lower():
                 raise ModelNotFoundError(
                     f"Anthropic model not available: {error_msg}",
                     provider="anthropic",
-                    model_name=model
+                    model_name=model,
                 ) from e
             elif "timeout" in error_msg.lower():
                 raise ProviderTimeoutError(
                     f"Anthropic API request timed out: {error_msg}",
-                    provider="anthropic"
+                    provider="anthropic",
                 ) from e
             else:
                 # Re-raise SDK exceptions with our standard format
                 raise ProviderResponseError(
-                    f"Anthropic API error: {error_msg}",
-                    provider="anthropic"
+                    f"Anthropic API error: {error_msg}", provider="anthropic"
                 ) from e
 
         # Extract the content from the response
@@ -664,22 +723,30 @@ class AnthropicProvider(BaseLLMProvider):
                 response.usage.input_tokens + response.usage.output_tokens
             ),
         }
-        
+
         # Add cache-related usage if available
         # The Anthropic SDK returns these as separate fields
-        if hasattr(response.usage, 'cache_creation_input_tokens'):
-            usage_dict["cache_creation_input_tokens"] = response.usage.cache_creation_input_tokens
-        if hasattr(response.usage, 'cache_read_input_tokens'):
-            usage_dict["cache_read_input_tokens"] = response.usage.cache_read_input_tokens
+        if hasattr(response.usage, "cache_creation_input_tokens"):
+            usage_dict["cache_creation_input_tokens"] = (
+                response.usage.cache_creation_input_tokens
+            )
+        if hasattr(response.usage, "cache_read_input_tokens"):
+            usage_dict["cache_read_input_tokens"] = (
+                response.usage.cache_read_input_tokens
+            )
 
         # Also check for cache_creation detail object which has ephemeral token info
-        if hasattr(response.usage, 'cache_creation') and response.usage.cache_creation:
+        if hasattr(response.usage, "cache_creation") and response.usage.cache_creation:
             cache_creation = response.usage.cache_creation
-            if hasattr(cache_creation, 'ephemeral_5m_input_tokens'):
-                usage_dict["cache_creation_5m_tokens"] = cache_creation.ephemeral_5m_input_tokens
-            if hasattr(cache_creation, 'ephemeral_1h_input_tokens'):
-                usage_dict["cache_creation_1h_tokens"] = cache_creation.ephemeral_1h_input_tokens
-            
+            if hasattr(cache_creation, "ephemeral_5m_input_tokens"):
+                usage_dict["cache_creation_5m_tokens"] = (
+                    cache_creation.ephemeral_5m_input_tokens
+                )
+            if hasattr(cache_creation, "ephemeral_1h_input_tokens"):
+                usage_dict["cache_creation_1h_tokens"] = (
+                    cache_creation.ephemeral_1h_input_tokens
+                )
+
         llm_response = LLMResponse(
             content=content.strip() if content else "",
             model=model,

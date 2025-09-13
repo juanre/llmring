@@ -27,69 +27,73 @@ def load_config(config_path: str) -> Dict[str, Any]:
         config_file = Path(config_path)
         if not config_file.exists():
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
-        
-        with open(config_file, 'r', encoding='utf-8') as f:
+
+        with open(config_file, "r", encoding="utf-8") as f:
             config = json.load(f)
-        
+
         # Validate basic structure
         if not isinstance(config, dict):
             raise ValueError("Configuration must be a JSON object")
-        
+
         return config
-        
+
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON in configuration file: {e}")
     except Exception as e:
         raise RuntimeError(f"Error loading configuration: {e}")
 
 
-def register_static_tools(server: MCPServer, tools_config: List[Dict[str, Any]]) -> None:
+def register_static_tools(
+    server: MCPServer, tools_config: List[Dict[str, Any]]
+) -> None:
     """Register static tools that return predefined content."""
     for tool in tools_config:
         name = tool.get("name")
         if not name:
             logger.warning("Skipping tool without name")
             continue
-            
+
         description = tool.get("description", f"Tool: {name}")
         input_schema = tool.get("input_schema", {"type": "object"})
         response_content = tool.get("response", "Tool executed successfully")
-        
+
         # Create static handler
         async def create_static_handler(content=response_content):
             return content
-        
+
         server.register_tool(
             name=name,
             handler=create_static_handler,
             description=description,
-            input_schema=input_schema
+            input_schema=input_schema,
         )
-        
+
         logger.info(f"Registered static tool: {name}")
 
 
-def register_resources(server: MCPServer, resources_config: List[Dict[str, Any]]) -> None:
+def register_resources(
+    server: MCPServer, resources_config: List[Dict[str, Any]]
+) -> None:
     """Register static resources."""
     for resource in resources_config:
         uri = resource.get("uri")
         if not uri:
             logger.warning("Skipping resource without URI")
             continue
-            
+
         name = resource.get("name", uri)
         description = resource.get("description", f"Resource: {name}")
         content = resource.get("content", "")
         mime_type = resource.get("mime_type", "text/plain")
-        
+
         server.register_static_resource(
             uri=uri,
             name=name,
             description=description,
             content=content,
-            mime_type=mime_type
+            mime_type=mime_type,
         )
-        
+
         logger.info(f"Registered resource: {uri}")
 
 
@@ -100,18 +104,15 @@ def register_prompts(server: MCPServer, prompts_config: List[Dict[str, Any]]) ->
         if not name:
             logger.warning("Skipping prompt without name")
             continue
-            
+
         description = prompt.get("description", f"Prompt: {name}")
         content = prompt.get("content", "")
         arguments = prompt.get("arguments", [])
-        
+
         server.register_static_prompt(
-            name=name,
-            description=description,
-            content=content,
-            arguments=arguments
+            name=name, description=description, content=content, arguments=arguments
         )
-        
+
         logger.info(f"Registered prompt: {name}")
 
 
@@ -120,25 +121,25 @@ def create_server_from_config(config: Dict[str, Any]) -> MCPServer:
     # Server metadata
     server_name = config.get("name", "MCP Server")
     server_version = config.get("version", "1.0.0")
-    
+
     # Create server
     server = MCPServer(name=server_name, version=server_version)
-    
+
     # Register tools
     tools = config.get("tools", [])
     if tools:
         register_static_tools(server, tools)
-    
-    # Register resources  
+
+    # Register resources
     resources = config.get("resources", [])
     if resources:
         register_resources(server, resources)
-    
+
     # Register prompts
     prompts = config.get("prompts", [])
     if prompts:
         register_prompts(server, prompts)
-    
+
     return server
 
 
@@ -147,18 +148,20 @@ async def run_server(config_path: str):
     try:
         # Load configuration
         config = load_config(config_path)
-        
+
         # Create server from config
         server = create_server_from_config(config)
-        
+
         # Create STDIO transport
         transport = StdioServerTransport()
-        
-        logger.info(f"Starting {config.get('name', 'MCP Server')} v{config.get('version', '1.0.0')}")
-        
+
+        logger.info(
+            f"Starting {config.get('name', 'MCP Server')} v{config.get('version', '1.0.0')}"
+        )
+
         # Run server
         await server.run(transport)
-        
+
     except Exception as e:
         logger.error(f"Server startup failed: {e}")
         raise
@@ -170,9 +173,9 @@ def main():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[logging.StreamHandler(sys.stderr)]
+        handlers=[logging.StreamHandler(sys.stderr)],
     )
-    
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description="MCP Server CLI - Run MCP servers from JSON configuration files",
@@ -223,12 +226,12 @@ Configuration file format:
 Note: For complex tools that need to execute code, use this library programmatically
 instead of the CLI. See examples/simple_server.py for guidance.
         """,
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--config", 
-        required=True, 
-        help="JSON configuration file defining tools, resources, and prompts"
+        "--config",
+        required=True,
+        help="JSON configuration file defining tools, resources, and prompts",
     )
 
     args = parser.parse_args()

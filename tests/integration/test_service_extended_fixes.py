@@ -19,10 +19,7 @@ class TestServiceExtendedFixes:
     @pytest.fixture
     def extended_service(self):
         """Create extended service with conversation support."""
-        return LLMRingExtended(
-            enable_conversations=True,
-            message_logging_level="full"
-        )
+        return LLMRingExtended(enable_conversations=True, message_logging_level="full")
 
     @pytest.mark.asyncio
     async def test_chat_with_conversation_openai(self, extended_service):
@@ -32,29 +29,36 @@ class TestServiceExtendedFixes:
         request = LLMRequest(
             model="openai:gpt-4o-mini",
             messages=[
-                Message(role="system", content="You are a helpful assistant. Respond with exactly: 'Test response'"),
-                Message(role="user", content="Hello")
+                Message(
+                    role="system",
+                    content="You are a helpful assistant. Respond with exactly: 'Test response'",
+                ),
+                Message(role="user", content="Hello"),
             ],
             max_tokens=10,
-            temperature=0.1
+            temperature=0.1,
         )
 
         # Mock the server client to avoid actual server calls
-        with patch.object(extended_service, 'server_client', new=None):
+        with patch.object(extended_service, "server_client", new=None):
             response = await extended_service.chat_with_conversation(
                 request=request,
                 conversation_id=conversation_id,
-                store_messages=False  # Don't try to store to avoid server dependency
+                store_messages=False,  # Don't try to store to avoid server dependency
             )
 
         # Verify the response structure - this validates response.content access works
-        assert hasattr(response, 'content'), "Response should have content attribute"
-        assert hasattr(response, 'model'), "Response should have model attribute"
-        assert hasattr(response, 'usage'), "Response should have usage attribute"
-        assert hasattr(response, 'finish_reason'), "Response should have finish_reason attribute"
+        assert hasattr(response, "content"), "Response should have content attribute"
+        assert hasattr(response, "model"), "Response should have model attribute"
+        assert hasattr(response, "usage"), "Response should have usage attribute"
+        assert hasattr(response, "finish_reason"), (
+            "Response should have finish_reason attribute"
+        )
 
         # Verify content is a string (not a choices array)
-        assert isinstance(response.content, str), "response.content should be string, not choices array"
+        assert isinstance(response.content, str), (
+            "response.content should be string, not choices array"
+        )
         assert len(response.content) > 0, "Response should have content"
 
         print(f"✓ OpenAI response.content access works: {response.content[:50]}...")
@@ -67,29 +71,36 @@ class TestServiceExtendedFixes:
         request = LLMRequest(
             model="anthropic:claude-3-5-haiku",
             messages=[
-                Message(role="system", content="You are a helpful assistant. Respond with exactly: 'Test response'"),
-                Message(role="user", content="Hello")
+                Message(
+                    role="system",
+                    content="You are a helpful assistant. Respond with exactly: 'Test response'",
+                ),
+                Message(role="user", content="Hello"),
             ],
             max_tokens=10,
-            temperature=0.1
+            temperature=0.1,
         )
 
         # Mock the server client to avoid actual server calls
-        with patch.object(extended_service, 'server_client', new=None):
+        with patch.object(extended_service, "server_client", new=None):
             response = await extended_service.chat_with_conversation(
                 request=request,
                 conversation_id=conversation_id,
-                store_messages=False  # Don't try to store to avoid server dependency
+                store_messages=False,  # Don't try to store to avoid server dependency
             )
 
         # Verify the response structure - this validates response.content access works
-        assert hasattr(response, 'content'), "Response should have content attribute"
-        assert hasattr(response, 'model'), "Response should have model attribute"
-        assert hasattr(response, 'usage'), "Response should have usage attribute"
-        assert hasattr(response, 'finish_reason'), "Response should have finish_reason attribute"
+        assert hasattr(response, "content"), "Response should have content attribute"
+        assert hasattr(response, "model"), "Response should have model attribute"
+        assert hasattr(response, "usage"), "Response should have usage attribute"
+        assert hasattr(response, "finish_reason"), (
+            "Response should have finish_reason attribute"
+        )
 
         # Verify content is a string (not a choices array)
-        assert isinstance(response.content, str), "response.content should be string, not choices array"
+        assert isinstance(response.content, str), (
+            "response.content should be string, not choices array"
+        )
         assert len(response.content) > 0, "Response should have content"
 
         print(f"✓ Anthropic response.content access works: {response.content[:50]}...")
@@ -101,21 +112,25 @@ class TestServiceExtendedFixes:
             model="openai:gpt-4o-mini",
             messages=[
                 Message(role="system", content="You are a helpful assistant."),
-                Message(role="user", content="Say hello")
+                Message(role="user", content="Say hello"),
             ],
             max_tokens=20,
-            temperature=0.1
+            temperature=0.1,
         )
 
         # Call chat method to verify response structure
         response = await extended_service.chat(request)
 
         # Verify response has correct structure (not the old choices format)
-        assert hasattr(response, 'content'), "Response should have content attribute"
-        assert hasattr(response, 'model'), "Response should have model attribute"
-        assert hasattr(response, 'usage'), "Response should have usage attribute"
-        assert hasattr(response, 'finish_reason'), "Response should have finish_reason attribute"
-        assert not hasattr(response, 'choices'), "Response should NOT have choices attribute"
+        assert hasattr(response, "content"), "Response should have content attribute"
+        assert hasattr(response, "model"), "Response should have model attribute"
+        assert hasattr(response, "usage"), "Response should have usage attribute"
+        assert hasattr(response, "finish_reason"), (
+            "Response should have finish_reason attribute"
+        )
+        assert not hasattr(response, "choices"), (
+            "Response should NOT have choices attribute"
+        )
 
         # Verify content is accessible and correct type
         assert isinstance(response.content, str), "Content should be string"
@@ -130,11 +145,9 @@ class TestServiceExtendedFixes:
 
         request = LLMRequest(
             model="openai:gpt-4o-mini",
-            messages=[
-                Message(role="user", content="Test message")
-            ],
+            messages=[Message(role="user", content="Test message")],
             max_tokens=10,
-            temperature=0.1
+            temperature=0.1,
         )
 
         # Mock server client to capture what would be sent
@@ -142,9 +155,7 @@ class TestServiceExtendedFixes:
         extended_service.server_client = mock_server_client
 
         await extended_service.chat_with_conversation(
-            request=request,
-            conversation_id=conversation_id,
-            store_messages=True
+            request=request, conversation_id=conversation_id, store_messages=True
         )
 
         # Verify server client was called with correct structure
@@ -180,30 +191,38 @@ class TestServiceExtendedFixes:
         request = LLMRequest(
             model="openai:gpt-4o",
             messages=[
-                Message(role="system", content="You are a helpful assistant with access to tools."),
-                Message(role="user", content="What's the weather like? Just say you'd need a weather tool.")
+                Message(
+                    role="system",
+                    content="You are a helpful assistant with access to tools.",
+                ),
+                Message(
+                    role="user",
+                    content="What's the weather like? Just say you'd need a weather tool.",
+                ),
             ],
-            tools=[{
-                "type": "function",
-                "function": {
-                    "name": "get_weather",
-                    "description": "Get weather information",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "location": {"type": "string"}
-                        }
-                    }
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "description": "Get weather information",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"location": {"type": "string"}},
+                        },
+                    },
                 }
-            }],
+            ],
             max_tokens=50,
-            temperature=0.1
+            temperature=0.1,
         )
 
         response = await extended_service.chat(request)
 
         # Verify response structure includes tool_calls if present
-        assert hasattr(response, 'tool_calls'), "Response should have tool_calls attribute"
+        assert hasattr(response, "tool_calls"), (
+            "Response should have tool_calls attribute"
+        )
 
         # Tool calls should be None or a list, never accessed as choices[0].message.tool_calls
         if response.tool_calls:

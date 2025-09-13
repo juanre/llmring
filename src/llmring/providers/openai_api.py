@@ -51,19 +51,18 @@ class OpenAIProvider(BaseLLMProvider):
         api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
         if not api_key:
             raise ProviderAuthenticationError(
-                "OpenAI API key must be provided",
-                provider="openai"
+                "OpenAI API key must be provided", provider="openai"
             )
-            
+
         # Create config for base class
         config = ProviderConfig(
             api_key=api_key,
             base_url=base_url,
             default_model=model,
-            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60")),
         )
         super().__init__(config)
-        
+
         # Store for backward compatibility
         self.api_key = api_key
         self.default_model = model
@@ -118,11 +117,11 @@ class OpenAIProvider(BaseLLMProvider):
             Default model name
         """
         return self.default_model
-    
+
     async def get_capabilities(self) -> ProviderCapabilities:
         """
         Get the capabilities of this provider.
-        
+
         Returns:
             Provider capabilities
         """
@@ -215,8 +214,7 @@ class OpenAIProvider(BaseLLMProvider):
         pdf_data_list, combined_text = self._extract_pdf_content_and_text(messages)
         if not pdf_data_list:
             raise ProviderResponseError(
-                "No PDF content found in messages",
-                provider="openai"
+                "No PDF content found in messages", provider="openai"
             )
         if not combined_text.strip():
             combined_text = "Please analyze this PDF document and provide a summary."
@@ -369,19 +367,18 @@ class OpenAIProvider(BaseLLMProvider):
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
             error_msg = str(e)
             if "api key" in error_msg.lower() or "unauthorized" in error_msg.lower():
                 raise ProviderAuthenticationError(
-                    f"OpenAI API authentication failed: {error_msg}",
-                    provider="openai"
+                    f"OpenAI API authentication failed: {error_msg}", provider="openai"
                 ) from e
             elif "rate limit" in error_msg.lower() or "quota" in error_msg.lower():
                 raise ProviderRateLimitError(
-                    f"OpenAI API rate limit exceeded: {error_msg}",
-                    provider="openai"
+                    f"OpenAI API rate limit exceeded: {error_msg}", provider="openai"
                 ) from e
             elif "model" in error_msg.lower() and (
                 "not found" in error_msg.lower()
@@ -390,12 +387,11 @@ class OpenAIProvider(BaseLLMProvider):
                 raise ModelNotFoundError(
                     f"OpenAI model not available: {error_msg}",
                     provider="openai",
-                    model_name=model
+                    model_name=model,
                 ) from e
             else:
                 raise ProviderResponseError(
-                    f"OpenAI API error: {error_msg}",
-                    provider="openai"
+                    f"OpenAI API error: {error_msg}", provider="openai"
                 ) from e
 
         # Try to get plain text; fallback to stringified output
@@ -435,7 +431,7 @@ class OpenAIProvider(BaseLLMProvider):
     ) -> AsyncIterator[StreamChunk]:
         """
         Stream a chat response from OpenAI.
-        
+
         Args:
             messages: List of messages
             model: Model to use
@@ -444,7 +440,7 @@ class OpenAIProvider(BaseLLMProvider):
             response_format: Optional response format
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
-            
+
         Yields:
             Stream chunks from the response
         """
@@ -455,9 +451,7 @@ class OpenAIProvider(BaseLLMProvider):
         # Verify model is supported
         if not self.validate_model(model):
             raise ModelNotFoundError(
-                f"Unsupported model: {model}",
-                provider="openai",
-                model_name=model
+                f"Unsupported model: {model}", provider="openai", model_name=model
             )
 
         # o1 models and PDF processing don't support streaming yet
@@ -481,10 +475,10 @@ class OpenAIProvider(BaseLLMProvider):
                 usage=response.usage,
             )
             return
-            
+
         # Convert messages to OpenAI format (reuse existing logic)
         openai_messages = await self._prepare_openai_messages(messages)
-        
+
         # Build request parameters
         request_params = {
             "model": model,
@@ -492,10 +486,10 @@ class OpenAIProvider(BaseLLMProvider):
             "temperature": temperature or 0.7,
             "stream": True,  # Enable streaming
         }
-        
+
         if max_tokens:
             request_params["max_tokens"] = max_tokens
-            
+
         # Handle response format
         if response_format:
             if response_format.get("type") == "json_object":
@@ -508,11 +502,13 @@ class OpenAIProvider(BaseLLMProvider):
                 if "json_schema" in response_format:
                     json_schema_format["json_schema"] = response_format["json_schema"]
                 if response_format.get("strict") is not None:
-                    json_schema_format["json_schema"]["strict"] = response_format["strict"]
+                    json_schema_format["json_schema"]["strict"] = response_format[
+                        "strict"
+                    ]
                 request_params["response_format"] = json_schema_format
             else:
                 request_params["response_format"] = response_format
-                
+
         # Handle tools if provided
         if tools:
             openai_tools = self._prepare_tools(tools)
@@ -524,24 +520,24 @@ class OpenAIProvider(BaseLLMProvider):
         # Apply extra parameters if provided
         if extra_params:
             request_params.update(extra_params)
-                
+
         # Make the streaming API call
         try:
             timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
-            
+
             stream = await asyncio.wait_for(
                 self.client.chat.completions.create(**request_params),
                 timeout=timeout_s,
             )
-            
+
             # Process the stream
             accumulated_content = ""
             accumulated_tool_calls = {}
-            
+
             async for chunk in stream:
                 if chunk.choices and len(chunk.choices) > 0:
                     choice = chunk.choices[0]
-                    
+
                     # Handle content streaming
                     if choice.delta and choice.delta.content:
                         accumulated_content += choice.delta.content
@@ -550,41 +546,45 @@ class OpenAIProvider(BaseLLMProvider):
                             model=model,
                             finish_reason=choice.finish_reason,
                         )
-                    
+
                     # Handle tool call streaming
                     if choice.delta and choice.delta.tool_calls:
                         for tool_call_delta in choice.delta.tool_calls:
                             idx = tool_call_delta.index
-                            
+
                             # Initialize tool call if new
                             if idx not in accumulated_tool_calls:
                                 accumulated_tool_calls[idx] = {
                                     "id": "",
                                     "type": "function",
-                                    "function": {"name": "", "arguments": ""}
+                                    "function": {"name": "", "arguments": ""},
                                 }
-                            
+
                             # Accumulate tool call deltas
                             if tool_call_delta.id:
                                 accumulated_tool_calls[idx]["id"] = tool_call_delta.id
-                            
+
                             if tool_call_delta.function:
                                 if tool_call_delta.function.name:
-                                    accumulated_tool_calls[idx]["function"]["name"] = tool_call_delta.function.name
-                                
+                                    accumulated_tool_calls[idx]["function"]["name"] = (
+                                        tool_call_delta.function.name
+                                    )
+
                                 if tool_call_delta.function.arguments:
-                                    accumulated_tool_calls[idx]["function"]["arguments"] += tool_call_delta.function.arguments
-                    
+                                    accumulated_tool_calls[idx]["function"][
+                                        "arguments"
+                                    ] += tool_call_delta.function.arguments
+
                     # Handle finish
                     if choice.finish_reason:
                         # Convert accumulated tool calls to list
                         tool_calls_list = None
                         if accumulated_tool_calls:
                             tool_calls_list = [
-                                accumulated_tool_calls[idx] 
+                                accumulated_tool_calls[idx]
                                 for idx in sorted(accumulated_tool_calls.keys())
                             ]
-                        
+
                         # Final chunk with usage information and tool calls
                         yield StreamChunk(
                             delta="",
@@ -592,36 +592,43 @@ class OpenAIProvider(BaseLLMProvider):
                             finish_reason=choice.finish_reason,
                             tool_calls=tool_calls_list,
                             usage={
-                                "prompt_tokens": self.get_token_count(str(openai_messages)),
-                                "completion_tokens": self.get_token_count(accumulated_content),
-                                "total_tokens": self.get_token_count(str(openai_messages)) + self.get_token_count(accumulated_content),
-                            }
+                                "prompt_tokens": self.get_token_count(
+                                    str(openai_messages)
+                                ),
+                                "completion_tokens": self.get_token_count(
+                                    accumulated_content
+                                ),
+                                "total_tokens": self.get_token_count(
+                                    str(openai_messages)
+                                )
+                                + self.get_token_count(accumulated_content),
+                            },
                         )
 
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
             error_msg = str(e)
             if "api key" in error_msg.lower() or "unauthorized" in error_msg.lower():
                 raise ProviderAuthenticationError(
-                    f"OpenAI API authentication failed: {error_msg}",
-                    provider="openai"
+                    f"OpenAI API authentication failed: {error_msg}", provider="openai"
                 ) from e
             elif "rate limit" in error_msg.lower() or "quota" in error_msg.lower():
                 raise ProviderRateLimitError(
-                    f"OpenAI API rate limit exceeded: {error_msg}",
-                    provider="openai"
+                    f"OpenAI API rate limit exceeded: {error_msg}", provider="openai"
                 ) from e
             else:
                 raise ProviderResponseError(
-                    f"OpenAI API error: {error_msg}",
-                    provider="openai"
+                    f"OpenAI API error: {error_msg}", provider="openai"
                 ) from e
 
-    async def _prepare_openai_messages(self, messages: List[Message]) -> List[Dict[str, Any]]:
+    async def _prepare_openai_messages(
+        self, messages: List[Message]
+    ) -> List[Dict[str, Any]]:
         """Convert messages to OpenAI format."""
         openai_messages = []
         for msg in messages:
@@ -695,7 +702,7 @@ class OpenAIProvider(BaseLLMProvider):
                             "content": str(msg.content),
                         }
                     )
-                    
+
         # Optional: inline remote images using safe fetcher if enabled
         if os.getenv("LLMRING_INLINE_REMOTE_IMAGES", "false").lower() in {
             "1",
@@ -720,15 +727,15 @@ class OpenAIProvider(BaseLLMProvider):
                                 try:
                                     data, mime = await safe_fetch_bytes(url)
                                     b64 = base64.b64encode(data).decode("utf-8")
-                                    part["image_url"][
-                                        "url"
-                                    ] = f"data:{mime};base64,{b64}"
+                                    part["image_url"]["url"] = (
+                                        f"data:{mime};base64,{b64}"
+                                    )
                                 except (SafeFetchError, Exception):
                                     # Leave URL as-is if fetch fails
                                     pass
-                                    
+
         return openai_messages
-    
+
     def _prepare_tools(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Convert tools to OpenAI format."""
         openai_tools = []
@@ -751,8 +758,10 @@ class OpenAIProvider(BaseLLMProvider):
                 }
                 openai_tools.append(openai_tool)
         return openai_tools
-    
-    def _prepare_tool_choice(self, tool_choice: Union[str, Dict[str, Any]]) -> Union[str, Dict[str, Any]]:
+
+    def _prepare_tool_choice(
+        self, tool_choice: Union[str, Dict[str, Any]]
+    ) -> Union[str, Dict[str, Any]]:
         """Convert tool choice to OpenAI format."""
         if isinstance(tool_choice, str):
             return tool_choice
@@ -783,7 +792,7 @@ class OpenAIProvider(BaseLLMProvider):
     ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the OpenAI API using the official SDK.
-        
+
         Args:
             messages: List of messages
             model: Model to use (e.g., "gpt-4o")
@@ -795,7 +804,7 @@ class OpenAIProvider(BaseLLMProvider):
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
             stream: Whether to stream the response
-            
+
         Returns:
             LLM response or async iterator of stream chunks if streaming
         """
@@ -859,9 +868,7 @@ class OpenAIProvider(BaseLLMProvider):
         # Verify model is supported
         if not self.validate_model(model):
             raise ModelNotFoundError(
-                f"Unsupported model: {model}",
-                provider="openai",
-                model_name=model
+                f"Unsupported model: {model}", provider="openai", model_name=model
             )
 
         # Route o1* models via Responses API
@@ -869,7 +876,7 @@ class OpenAIProvider(BaseLLMProvider):
             if tools or response_format or tool_choice is not None:
                 raise ProviderResponseError(
                     "OpenAI o1 models do not support tools or custom response formats",
-                    provider="openai"
+                    provider="openai",
                 )
             return await self._chat_via_responses(
                 messages=messages,
@@ -885,7 +892,7 @@ class OpenAIProvider(BaseLLMProvider):
             if tools or response_format:
                 raise ProviderResponseError(
                     "Tools and custom response formats are not supported when processing PDFs with OpenAI (Responses API + file_search).",
-                    provider="openai"
+                    provider="openai",
                 )
 
             return await self._process_with_responses_file_search(
@@ -922,7 +929,9 @@ class OpenAIProvider(BaseLLMProvider):
                 if "json_schema" in response_format:
                     json_schema_format["json_schema"] = response_format["json_schema"]
                 if response_format.get("strict") is not None:
-                    json_schema_format["json_schema"]["strict"] = response_format["strict"]
+                    json_schema_format["json_schema"]["strict"] = response_format[
+                        "strict"
+                    ]
                 request_params["response_format"] = json_schema_format
             else:
                 request_params["response_format"] = response_format
@@ -954,7 +963,7 @@ class OpenAIProvider(BaseLLMProvider):
             if not await self._breaker.allow(breaker_key):
                 raise CircuitBreakerError(
                     "OpenAI circuit breaker is open - too many recent failures",
-                    provider="openai"
+                    provider="openai",
                 )
 
             response: ChatCompletion = await retry_async(_do_call)
@@ -962,6 +971,7 @@ class OpenAIProvider(BaseLLMProvider):
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
@@ -975,13 +985,11 @@ class OpenAIProvider(BaseLLMProvider):
             error_msg = str(e)
             if "api key" in error_msg.lower() or "unauthorized" in error_msg.lower():
                 raise ProviderAuthenticationError(
-                    f"OpenAI API authentication failed: {error_msg}",
-                    provider="openai"
+                    f"OpenAI API authentication failed: {error_msg}", provider="openai"
                 ) from e
             elif "rate limit" in error_msg.lower() or "quota" in error_msg.lower():
                 raise ProviderRateLimitError(
-                    f"OpenAI API rate limit exceeded: {error_msg}",
-                    provider="openai"
+                    f"OpenAI API rate limit exceeded: {error_msg}", provider="openai"
                 ) from e
             elif "model" in error_msg.lower() and (
                 "not found" in error_msg.lower()
@@ -990,23 +998,20 @@ class OpenAIProvider(BaseLLMProvider):
                 raise ModelNotFoundError(
                     f"OpenAI model not available: {error_msg}",
                     provider="openai",
-                    model_name=model
+                    model_name=model,
                 ) from e
             elif "context length" in error_msg.lower() or "token" in error_msg.lower():
                 raise ProviderResponseError(
-                    f"OpenAI token limit exceeded: {error_msg}",
-                    provider="openai"
+                    f"OpenAI token limit exceeded: {error_msg}", provider="openai"
                 ) from e
             elif "timeout" in error_msg.lower():
                 raise ProviderTimeoutError(
-                    f"OpenAI API request timed out: {error_msg}",
-                    provider="openai"
+                    f"OpenAI API request timed out: {error_msg}", provider="openai"
                 ) from e
             else:
                 # Re-raise SDK exceptions with our standard format
                 raise ProviderResponseError(
-                    f"OpenAI API error: {error_msg}",
-                    provider="openai"
+                    f"OpenAI API error: {error_msg}", provider="openai"
                 ) from e
 
         # Extract the content from the response
@@ -1042,4 +1047,3 @@ class OpenAIProvider(BaseLLMProvider):
             llm_response.tool_calls = tool_calls
 
         return llm_response
-

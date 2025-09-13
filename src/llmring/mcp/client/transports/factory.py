@@ -25,7 +25,9 @@ def register_transport(transport_type: str, transport_class: type[Transport]) ->
         ValueError: If transport_class doesn't implement Transport interface
     """
     if not issubclass(transport_class, Transport):
-        raise ValueError(f"Transport class {transport_class} must inherit from Transport")
+        raise ValueError(
+            f"Transport class {transport_class} must inherit from Transport"
+        )
 
     _transport_registry[transport_type] = transport_class
 

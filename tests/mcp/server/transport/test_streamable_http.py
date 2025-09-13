@@ -12,8 +12,7 @@ These tests verify:
 import json
 import pytest
 import asyncio
-from typing import Dict, Any, List, Optional
-from unittest.mock import Mock, AsyncMock
+from typing import Dict, Any, Optional
 
 from llmring.mcp.server.transport.streamable_http import (
     StreamableHTTPTransport,
@@ -90,15 +89,28 @@ class TestStreamableHTTPTransport:
 
         # Notifications should return ACCEPTED
         notification = {"jsonrpc": "2.0", "method": "initialized"}
-        assert transport._default_response_mode_decider(notification) == ResponseMode.ACCEPTED
+        assert (
+            transport._default_response_mode_decider(notification)
+            == ResponseMode.ACCEPTED
+        )
 
         # Simple operations should return JSON
         simple_request = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
-        assert transport._default_response_mode_decider(simple_request) == ResponseMode.JSON
+        assert (
+            transport._default_response_mode_decider(simple_request)
+            == ResponseMode.JSON
+        )
 
         # Streaming operations should return SSE
-        streaming_request = {"jsonrpc": "2.0", "id": 2, "method": "sampling/createMessage"}
-        assert transport._default_response_mode_decider(streaming_request) == ResponseMode.SSE
+        streaming_request = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "sampling/createMessage",
+        }
+        assert (
+            transport._default_response_mode_decider(streaming_request)
+            == ResponseMode.SSE
+        )
 
         # Tool calls depend on tool name
         tool_request = {
@@ -107,7 +119,9 @@ class TestStreamableHTTPTransport:
             "method": "tools/call",
             "params": {"name": "analyze_data"},
         }
-        assert transport._default_response_mode_decider(tool_request) == ResponseMode.SSE
+        assert (
+            transport._default_response_mode_decider(tool_request) == ResponseMode.SSE
+        )
 
     # Test 2: Header Compliance
     @pytest.mark.asyncio
@@ -207,7 +221,10 @@ class TestStreamableHTTPTransport:
         batch = [
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
             {"jsonrpc": "2.0", "id": 2, "method": "prompts/list"},
-            {"jsonrpc": "2.0", "method": "notification"},  # This will be ignored in response
+            {
+                "jsonrpc": "2.0",
+                "method": "notification",
+            },  # This will be ignored in response
         ]
 
         request = MockRequest(
@@ -236,7 +253,12 @@ class TestStreamableHTTPTransport:
         # Batch with mixed operations
         batch = [
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-            {"jsonrpc": "2.0", "id": 2, "method": "sampling/createMessage", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "sampling/createMessage",
+                "params": {},
+            },
         ]
 
         request = MockRequest(
@@ -306,7 +328,8 @@ class TestStreamableHTTPTransport:
 
         # GET request with session ID
         request = MockRequest(
-            method="GET", headers={"accept": "text/event-stream", "mcp-session-id": session_id}
+            method="GET",
+            headers={"accept": "text/event-stream", "mcp-session-id": session_id},
         )
 
         result = await transport.handle_request(request)
@@ -436,9 +459,7 @@ class TestStreamableHTTPTransport:
             "message", {"jsonrpc": "2.0", "id": 1, "result": "test"}, event_id=42
         )
 
-        expected = (
-            'id: 42\nevent: message\ndata: {"jsonrpc": "2.0", "id": 1, "result": "test"}\n\n'
-        )
+        expected = 'id: 42\nevent: message\ndata: {"jsonrpc": "2.0", "id": 1, "result": "test"}\n\n'
         assert event == expected
 
         # Test without event ID

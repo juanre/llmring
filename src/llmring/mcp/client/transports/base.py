@@ -121,7 +121,9 @@ class Transport(abc.ABC):
         Default implementation raises NotImplementedError to preserve
         compatibility with tests that mock transports without this method.
         """
-        raise NotImplementedError("Transport does not support server-initiated responses")
+        raise NotImplementedError(
+            "Transport does not support server-initiated responses"
+        )
 
     def set_onclose(self, callback: Callable[[], None] | None) -> None:
         """

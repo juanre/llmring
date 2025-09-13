@@ -57,10 +57,14 @@ class MCPClientWithLLM(MCPClient):
             "allowed_models", None
         )  # None = all models allowed
 
-        logger.info(f"Initialized MCP client with LLM sampling (enabled: {self.enable_sampling})")
+        logger.info(
+            f"Initialized MCP client with LLM sampling (enabled: {self.enable_sampling})"
+        )
 
         # Register server-initiated sampling handler
-        self.register_method_handler("sampling/createMessage", self._sampling_create_message)
+        self.register_method_handler(
+            "sampling/createMessage", self._sampling_create_message
+        )
 
     def _sampling_create_message(self, params: dict[str, Any]) -> dict[str, Any]:
         # Adapter to use existing handle_sampling_request signature
@@ -134,7 +138,9 @@ class MCPClientWithLLM(MCPClient):
                             "data": "Each message must have 'role' and 'content' fields",
                         },
                     }
-                messages.append(Message(role=msg_data["role"], content=msg_data["content"]))
+                messages.append(
+                    Message(role=msg_data["role"], content=msg_data["content"])
+                )
 
             # Extract sampling parameters
             model = params.get("model", self.default_model)
@@ -165,7 +171,9 @@ class MCPClientWithLLM(MCPClient):
             # Validate max_tokens limit
             if max_tokens > self.max_sampling_tokens:
                 max_tokens = self.max_sampling_tokens
-                logger.warning(f"Requested max_tokens capped at {self.max_sampling_tokens}")
+                logger.warning(
+                    f"Requested max_tokens capped at {self.max_sampling_tokens}"
+                )
 
             # Create LLM request
             llm_request = LLMRequest(
@@ -318,7 +326,9 @@ class AsyncMCPClientWithLLM(AsyncMCPClient):
                             "data": "Each message must have 'role' and 'content' fields",
                         },
                     }
-                messages.append(Message(role=msg_data["role"], content=msg_data["content"]))
+                messages.append(
+                    Message(role=msg_data["role"], content=msg_data["content"])
+                )
 
             # Extract sampling parameters
             model = params.get("model", self.default_model)
@@ -349,7 +359,9 @@ class AsyncMCPClientWithLLM(AsyncMCPClient):
             # Validate max_tokens limit
             if max_tokens > self.max_sampling_tokens:
                 max_tokens = self.max_sampling_tokens
-                logger.warning(f"Requested max_tokens capped at {self.max_sampling_tokens}")
+                logger.warning(
+                    f"Requested max_tokens capped at {self.max_sampling_tokens}"
+                )
 
             # Create LLM request
             llm_request = LLMRequest(

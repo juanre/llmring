@@ -6,11 +6,9 @@ fixing the LSP violation identified in the code review.
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch
-from typing import AsyncIterator
 
 from llmring.base import BaseLLMProvider
-from llmring.schemas import LLMRequest, LLMResponse, Message, StreamChunk
+from llmring.schemas import LLMRequest, Message
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
@@ -25,7 +23,7 @@ class TestBaseInterfaceCompliance:
         """Sample messages for testing."""
         return [
             Message(role="system", content="You are a helpful assistant."),
-            Message(role="user", content="Hello!")
+            Message(role="user", content="Hello!"),
         ]
 
     @pytest.fixture
@@ -36,7 +34,7 @@ class TestBaseInterfaceCompliance:
             messages=sample_messages,
             temperature=0.7,
             max_tokens=100,
-            extra_params={"test_param": "test_value"}
+            extra_params={"test_param": "test_value"},
         )
 
     def test_base_interface_signature(self):
@@ -47,19 +45,28 @@ class TestBaseInterfaceCompliance:
         params = list(sig.parameters.keys())
 
         expected_params = [
-            'self', 'messages', 'model', 'temperature', 'max_tokens',
-            'response_format', 'tools', 'tool_choice', 'json_response',
-            'cache', 'stream', 'extra_params'
+            "self",
+            "messages",
+            "model",
+            "temperature",
+            "max_tokens",
+            "response_format",
+            "tools",
+            "tool_choice",
+            "json_response",
+            "cache",
+            "stream",
+            "extra_params",
         ]
 
-        assert params == expected_params, f"Base interface signature mismatch. Expected {expected_params}, got {params}"
+        assert params == expected_params, (
+            f"Base interface signature mismatch. Expected {expected_params}, got {params}"
+        )
 
-    @pytest.mark.parametrize("provider_class", [
-        OpenAIProvider,
-        AnthropicProvider,
-        GoogleProvider,
-        OllamaProvider
-    ])
+    @pytest.mark.parametrize(
+        "provider_class",
+        [OpenAIProvider, AnthropicProvider, GoogleProvider, OllamaProvider],
+    )
     def test_provider_signature_matches_base(self, provider_class):
         """Test that each provider's chat method matches the base signature."""
         import inspect
@@ -91,12 +98,12 @@ class TestBaseInterfaceCompliance:
 
         for provider_class in providers:
             sig = inspect.signature(provider_class.chat)
-            assert 'extra_params' in sig.parameters, (
+            assert "extra_params" in sig.parameters, (
                 f"{provider_class.__name__}.chat() missing extra_params parameter"
             )
 
             # Check it has correct type annotation
-            param = sig.parameters['extra_params']
+            param = sig.parameters["extra_params"]
             assert param.default is None, (
                 f"{provider_class.__name__} extra_params should default to None"
             )

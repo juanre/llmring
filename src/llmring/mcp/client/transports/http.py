@@ -9,7 +9,12 @@ import logging
 from typing import Any, Optional
 
 import httpx
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from llmring.mcp.client.transports.base import ConnectionState, Transport
 
@@ -152,7 +157,9 @@ class HTTPTransport(Transport):
             ValueError: If there's an error in the JSON-RPC response
         """
         # Log request details
-        logger.debug(f"Making HTTP JSON-RPC request to {self.base_url}: {message.get('method')}")
+        logger.debug(
+            f"Making HTTP JSON-RPC request to {self.base_url}: {message.get('method')}"
+        )
 
         try:
             # Ensure protocol header is present if negotiated
@@ -188,7 +195,9 @@ class HTTPTransport(Transport):
         """
         HTTP transport cannot receive server-initiated requests; responses are not applicable.
         """
-        raise NotImplementedError("HTTP transport does not support server-initiated responses")
+        raise NotImplementedError(
+            "HTTP transport does not support server-initiated responses"
+        )
 
     async def close(self) -> None:
         """Close the HTTP transport."""

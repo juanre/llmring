@@ -1,8 +1,5 @@
-import asyncio
 import os
-import signal
 import socket
-import subprocess
 import sys
 import tempfile
 import threading
@@ -12,7 +9,9 @@ from contextlib import closing
 import pytest
 
 from llmring.mcp.client.mcp_client import AsyncMCPClient, MCPClient
-from llmring.mcp.client.transports.streamable_http import StreamableHTTPTransport as ClientStreamHTTP
+from llmring.mcp.client.transports.streamable_http import (
+    StreamableHTTPTransport as ClientStreamHTTP,
+)
 
 
 def _find_free_port() -> int:
@@ -37,7 +36,9 @@ async def test_streamable_http_initialize_and_headers():
     # Build FastAPI app and MCP server/transport in-process
     mcp_transport = FastAPIStreamableTransport(enable_sessions=True)
     mcp_server = MCPServer(name="TestServer", version="1.0.0")
-    app = create_fastapi_app(mcp_transport, "/mcp", title="Test MCP Server", version="1.0.0")
+    app = create_fastapi_app(
+        mcp_transport, "/mcp", title="Test MCP Server", version="1.0.0"
+    )
     mcp_transport.set_message_callback(mcp_server._handle_message)
 
     # Start uvicorn server in background thread

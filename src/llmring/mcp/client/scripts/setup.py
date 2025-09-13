@@ -135,7 +135,9 @@ def check_env_variables():
             if value:
                 # Hide full values for API keys and auth tokens
                 if "API_KEY" in var or "TOKEN" in var or "PASSWORD" in var:
-                    shown_value = f"{value[:3]}...{value[-3:]}" if len(value) > 10 else "***"
+                    shown_value = (
+                        f"{value[:3]}...{value[-3:]}" if len(value) > 10 else "***"
+                    )
                     print(f"  ✅ {var}: {shown_value}")
                 else:
                     print(f"  ✅ {var}: {value}")
@@ -167,7 +169,8 @@ def test_mcp_connection():
 async def main():
     parser = argparse.ArgumentParser(description="MCP Client Setup Script")
     parser.add_argument(
-        "--db-path", help="Database connection string (uses DATABASE_URL env var if not specified)"
+        "--db-path",
+        help="Database connection string (uses DATABASE_URL env var if not specified)",
     )
     parser.add_argument("--env-file", help="Path to the .env file", default=".env")
     parser.add_argument("--skip-db", action="store_true", help="Skip database setup")
@@ -181,7 +184,9 @@ async def main():
         "--skip-mcp-test", action="store_true", help="Skip MCP server connection test"
     )
     parser.add_argument(
-        "--reset", action="store_true", help="Reset the database and recreate from scratch"
+        "--reset",
+        action="store_true",
+        help="Reset the database and recreate from scratch",
     )
 
     args = parser.parse_args()

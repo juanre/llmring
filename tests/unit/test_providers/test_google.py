@@ -61,7 +61,10 @@ class TestGoogleProviderUnit:
         old_google_gemini_key = os.environ.pop("GOOGLE_GEMINI_API_KEY", None)
         try:
             from llmring.exceptions import ProviderAuthenticationError
-            with pytest.raises(ProviderAuthenticationError, match="Google API key must be provided"):
+
+            with pytest.raises(
+                ProviderAuthenticationError, match="Google API key must be provided"
+            ):
                 GoogleProvider()
         finally:
             if old_gemini_key:
@@ -173,6 +176,7 @@ class TestGoogleProviderUnit:
     ):
         """Test that using an unsupported model raises ModelNotFoundError."""
         from llmring.exceptions import ModelNotFoundError
+
         with pytest.raises(ModelNotFoundError, match="Unsupported model"):
             await google_provider.chat(
                 messages=simple_user_message, model="definitely-not-a-real-model"

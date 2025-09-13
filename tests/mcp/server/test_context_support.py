@@ -4,7 +4,6 @@ Tests for context support in transport and server.
 
 import asyncio
 import pytest
-from typing import Dict, Any, Optional
 from types import SimpleNamespace
 
 from llmring.mcp.server import MCPServer
@@ -55,7 +54,9 @@ class TestContextSupport:
         def test_tool(**kwargs):
             return "Tool executed"
 
-        server.register_tool(name="test_tool", handler=test_tool, description="Test tool")
+        server.register_tool(
+            name="test_tool", handler=test_tool, description="Test tool"
+        )
 
         # Override _create_context to capture all contexts created
         original_create_context = server._create_context
@@ -164,7 +165,9 @@ class TestContextSupport:
 
         try:
             # Send invalid request (not initialized)
-            transport.simulate_message({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+            transport.simulate_message(
+                {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+            )
 
             await asyncio.sleep(0.1)
 

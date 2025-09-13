@@ -326,16 +326,20 @@ class TestSimpleFileProcessing:
 
         # Check if the URL is accessible
         import httpx
+
         try:
             with httpx.Client(timeout=5.0) as client:
                 response = client.head(test_url)
                 if response.status_code != 200:
-                    pytest.skip(f"Test URL {test_url} not accessible (status: {response.status_code})")
+                    pytest.skip(
+                        f"Test URL {test_url} not accessible (status: {response.status_code})"
+                    )
         except Exception as e:
             pytest.skip(f"Cannot access test URL {test_url}: {e}")
 
         # Enable remote URLs for this test
         import os
+
         old_value = os.environ.get("LLMRING_ALLOW_REMOTE_URLS")
         os.environ["LLMRING_ALLOW_REMOTE_URLS"] = "true"
         try:

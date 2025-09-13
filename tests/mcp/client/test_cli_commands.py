@@ -5,8 +5,6 @@ import os
 import subprocess
 import sys
 
-import pytest
-
 
 def run_command(cmd):
     """Run a command and return output."""
@@ -92,7 +90,9 @@ def main():
     print("=" * 50)
 
     # Set environment to avoid hitting real services
-    os.environ["DATABASE_URL"] = "postgresql://postgres:postgres@localhost/mcp_client_test"
+    os.environ["DATABASE_URL"] = (
+        "postgresql://postgres:postgres@localhost/mcp_client_test"
+    )
 
     try:
         test_help_commands()
@@ -103,7 +103,9 @@ def main():
         print("\n" + "=" * 50)
         print("All CLI command tests completed!")
         print("Note: Some commands failed due to missing services, which is expected.")
-        print("The important thing is that all commands are recognized and parsed correctly.")
+        print(
+            "The important thing is that all commands are recognized and parsed correctly."
+        )
 
     except AssertionError as e:
         print(f"\nTest failed: {e}")

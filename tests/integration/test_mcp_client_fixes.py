@@ -9,7 +9,6 @@ import pytest
 from unittest.mock import patch, AsyncMock
 
 from llmring.mcp.client.stateless_engine import StatelessChatEngine, ChatRequest
-from llmring.service import LLMRing
 
 
 class TestMCPClientFixes:
@@ -27,7 +26,7 @@ class TestMCPClientFixes:
             message="Hello, what is 2+2?",
             model="openai:gpt-4o-mini",
             auth_context={"user_id": "test-user-123"},
-            save_to_db=False  # Don't save to avoid DB dependency
+            save_to_db=False,  # Don't save to avoid DB dependency
         )
 
         # Patch the LLMRing.chat method to capture what's actually called
@@ -40,22 +39,28 @@ class TestMCPClientFixes:
             # Call the real method
             return await original_chat(request)
 
-        with patch.object(chat_engine.llmring, 'chat', side_effect=capture_chat):
+        with patch.object(chat_engine.llmring, "chat", side_effect=capture_chat):
             response = await chat_engine.process_request(request)
 
         # Verify the request was called correctly
         assert captured_request is not None, "chat() should have been called"
-        assert hasattr(captured_request, 'metadata'), "Request should have metadata"
+        assert hasattr(captured_request, "metadata"), "Request should have metadata"
         assert captured_request.metadata is not None, "Metadata should not be None"
-        assert "id_at_origin" in captured_request.metadata, "id_at_origin should be in metadata"
-        assert captured_request.metadata["id_at_origin"] == "test-user-123", "id_at_origin should match user_id"
+        assert "id_at_origin" in captured_request.metadata, (
+            "id_at_origin should be in metadata"
+        )
+        assert captured_request.metadata["id_at_origin"] == "test-user-123", (
+            "id_at_origin should match user_id"
+        )
 
         # Verify response structure
-        assert hasattr(response, 'message'), "Response should have message attribute"
-        assert hasattr(response.message, 'content'), "Message should have content"
+        assert hasattr(response, "message"), "Response should have message attribute"
+        assert hasattr(response.message, "content"), "Message should have content"
         assert isinstance(response.message.content, str), "Content should be string"
 
-        print(f"✓ id_at_origin properly stored in metadata: {captured_request.metadata}")
+        print(
+            f"✓ id_at_origin properly stored in metadata: {captured_request.metadata}"
+        )
 
     @pytest.mark.asyncio
     async def test_streaming_with_metadata(self, chat_engine):
@@ -64,7 +69,7 @@ class TestMCPClientFixes:
             message="Count to 3",
             model="openai:gpt-4o-mini",
             auth_context={"user_id": "stream-user-456"},
-            save_to_db=False
+            save_to_db=False,
         )
 
         # Patch the LLMRing.chat method to capture streaming request
@@ -77,17 +82,23 @@ class TestMCPClientFixes:
             # Call the real method
             return await original_chat(request)
 
-        with patch.object(chat_engine.llmring, 'chat', side_effect=capture_stream_chat):
+        with patch.object(chat_engine.llmring, "chat", side_effect=capture_stream_chat):
             chunks = []
             async for chunk in chat_engine.process_request_stream(request):
                 chunks.append(chunk)
 
         # Verify metadata was set correctly for streaming
-        assert captured_request is not None, "chat() should have been called for streaming"
-        assert hasattr(captured_request, 'metadata'), "Request should have metadata"
+        assert captured_request is not None, (
+            "chat() should have been called for streaming"
+        )
+        assert hasattr(captured_request, "metadata"), "Request should have metadata"
         assert captured_request.metadata is not None, "Metadata should not be None"
-        assert "id_at_origin" in captured_request.metadata, "id_at_origin should be in metadata"
-        assert captured_request.metadata["id_at_origin"] == "stream-user-456", "id_at_origin should match user_id"
+        assert "id_at_origin" in captured_request.metadata, (
+            "id_at_origin should be in metadata"
+        )
+        assert captured_request.metadata["id_at_origin"] == "stream-user-456", (
+            "id_at_origin should match user_id"
+        )
 
         # Verify streaming worked
         assert len(chunks) > 0, "Should have received streaming chunks"
@@ -101,7 +112,7 @@ class TestMCPClientFixes:
             message="Simple test",
             model="openai:gpt-4o-mini",
             auth_context=None,  # No auth context
-            save_to_db=False
+            save_to_db=False,
         )
 
         # Patch to capture the request
@@ -113,14 +124,17 @@ class TestMCPClientFixes:
             captured_request = request
             return await original_chat(request)
 
-        with patch.object(chat_engine.llmring, 'chat', side_effect=capture_chat):
+        with patch.object(chat_engine.llmring, "chat", side_effect=capture_chat):
             response = await chat_engine.process_request(request)
 
         # Should work without setting metadata
         assert captured_request is not None
         # Metadata might be None or empty - both should work
         if captured_request.metadata:
-            assert "id_at_origin" not in captured_request.metadata or captured_request.metadata["id_at_origin"] is None
+            assert (
+                "id_at_origin" not in captured_request.metadata
+                or captured_request.metadata["id_at_origin"] is None
+            )
 
         print("✓ Requests without auth_context work correctly")
 
@@ -139,16 +153,20 @@ class TestMCPClientFixes:
             message="Integration test",
             model="openai:gpt-4o-mini",
             auth_context={"user_id": "integration-user"},
-            save_to_db=True  # This should trigger conversation manager calls
+            save_to_db=True,  # This should trigger conversation manager calls
         )
 
         # Mock LLMRing.chat to avoid going to actual API for this integration test
-        with patch.object(chat_engine.llmring, 'chat') as mock_chat:
+        with patch.object(chat_engine.llmring, "chat") as mock_chat:
             # Mock LLMResponse
             mock_response = AsyncMock()
             mock_response.content = "Integration response"
             mock_response.model = "gpt-4o-mini"
-            mock_response.usage = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+            mock_response.usage = {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+            }
             mock_response.finish_reason = "stop"
             mock_response.tool_calls = None
             mock_chat.return_value = mock_response

@@ -56,18 +56,18 @@ class GoogleProvider(BaseLLMProvider):
         if not api_key:
             raise ProviderAuthenticationError(
                 "Google API key must be provided (GEMINI_API_KEY or GOOGLE_API_KEY)",
-                provider="google"
+                provider="google",
             )
-            
+
         # Create config for base class
         config = ProviderConfig(
             api_key=api_key,
             base_url=base_url,
             default_model=model,
-            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60")),
         )
         super().__init__(config)
-        
+
         # Store for backward compatibility
         self.api_key = api_key
         self.project_id = project_id or os.environ.get("GOOGLE_PROJECT_ID", "")
@@ -218,11 +218,11 @@ class GoogleProvider(BaseLLMProvider):
             Default model name
         """
         return self.default_model
-    
+
     async def get_capabilities(self) -> ProviderCapabilities:
         """
         Get the capabilities of this provider.
-        
+
         Returns:
             Provider capabilities
         """
@@ -371,7 +371,7 @@ class GoogleProvider(BaseLLMProvider):
             raise ModelNotFoundError(
                 f"Unsupported model: {original_model}",
                 model_name=model,
-                provider="google"
+                provider="google",
             )
 
         # Extract system message and build conversation
@@ -397,7 +397,9 @@ class GoogleProvider(BaseLLMProvider):
             config_params["max_output_tokens"] = max_tokens
 
         # Handle JSON response format
-        if json_response or (response_format and response_format.get("type") in ["json_object", "json"]):
+        if json_response or (
+            response_format and response_format.get("type") in ["json_object", "json"]
+        ):
             config_params["response_mime_type"] = "application/json"
 
         # Apply extra parameters
@@ -423,13 +425,17 @@ class GoogleProvider(BaseLLMProvider):
                     tool_parameters = tool.get("parameters", {})
 
                 # Create Google FunctionDeclaration
-                google_tools.append(types.Tool(
-                    function_declarations=[types.FunctionDeclaration(
-                        name=tool_name,
-                        description=tool_description,
-                        parameters=tool_parameters
-                    )]
-                ))
+                google_tools.append(
+                    types.Tool(
+                        function_declarations=[
+                            types.FunctionDeclaration(
+                                name=tool_name,
+                                description=tool_description,
+                                parameters=tool_parameters,
+                            )
+                        ]
+                    )
+                )
 
         # Add tools to config if present
         if google_tools:
@@ -443,24 +449,18 @@ class GoogleProvider(BaseLLMProvider):
                 elif tool_choice == "none":
                     # Disable function calling
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(
-                            mode="NONE"
-                        )
+                        function_calling_config=types.FunctionCallingConfig(mode="NONE")
                     )
                 elif tool_choice == "any" or tool_choice == "required":
                     # Force function calling
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(
-                            mode="ANY"
-                        )
+                        function_calling_config=types.FunctionCallingConfig(mode="ANY")
                     )
                 elif isinstance(tool_choice, dict) and "function" in tool_choice:
                     # Specific function choice - not directly supported by Google
                     # Fall back to ANY mode with the available tools
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(
-                            mode="ANY"
-                        )
+                        function_calling_config=types.FunctionCallingConfig(mode="ANY")
                     )
 
         config = types.GenerateContentConfig(**config_params)
@@ -471,10 +471,12 @@ class GoogleProvider(BaseLLMProvider):
             if msg.role in ["user", "assistant"]:
                 # Handle different content types
                 if isinstance(msg.content, str):
-                    google_messages.append(types.Content(
-                        role="user" if msg.role == "user" else "model",
-                        parts=[types.Part(text=msg.content)]
-                    ))
+                    google_messages.append(
+                        types.Content(
+                            role="user" if msg.role == "user" else "model",
+                            parts=[types.Part(text=msg.content)],
+                        )
+                    )
                 elif isinstance(msg.content, list):
                     # Handle multimodal content
                     parts = []
@@ -489,26 +491,33 @@ class GoogleProvider(BaseLLMProvider):
                                 image_data = item["image_url"]["url"]
                                 if image_data.startswith("data:"):
                                     # Extract base64 data
-                                    media_type, base64_data = image_data.split(";")[0].split(":")[1], image_data.split(",")[1]
-                                    parts.append(types.Part(
-                                        inline_data=types.Blob(
-                                            mime_type=media_type,
-                                            data=base64.b64decode(base64_data)
+                                    media_type, base64_data = (
+                                        image_data.split(";")[0].split(":")[1],
+                                        image_data.split(",")[1],
+                                    )
+                                    parts.append(
+                                        types.Part(
+                                            inline_data=types.Blob(
+                                                mime_type=media_type,
+                                                data=base64.b64decode(base64_data),
+                                            )
                                         )
-                                    ))
+                                    )
 
                     if parts:
-                        google_messages.append(types.Content(
-                            role="user" if msg.role == "user" else "model",
-                            parts=parts
-                        ))
+                        google_messages.append(
+                            types.Content(
+                                role="user" if msg.role == "user" else "model",
+                                parts=parts,
+                            )
+                        )
 
         try:
             key = f"google:{model}"
             if not await self._breaker.allow(key):
                 raise CircuitBreakerError(
                     "Google circuit breaker is open - too many recent failures",
-                    provider="google"
+                    provider="google",
                 )
 
             # Use real streaming API (Google SDK returns sync generator, need to wrap)
@@ -525,7 +534,6 @@ class GoogleProvider(BaseLLMProvider):
             tool_calls = []
 
             # Convert sync generator to async generator to avoid blocking event loop
-            import concurrent.futures
 
             def _iterate_chunks():
                 """Iterate over sync generator in thread."""
@@ -542,23 +550,27 @@ class GoogleProvider(BaseLLMProvider):
                 if chunk.candidates and len(chunk.candidates) > 0:
                     candidate = chunk.candidates[0]
 
-                    if hasattr(candidate, 'content') and candidate.content:
+                    if hasattr(candidate, "content") and candidate.content:
                         # Extract text and function calls from content parts
                         chunk_text = ""
                         for part in candidate.content.parts:
-                            if hasattr(part, 'text') and part.text:
+                            if hasattr(part, "text") and part.text:
                                 chunk_text += part.text
-                            elif hasattr(part, 'function_call') and part.function_call:
+                            elif hasattr(part, "function_call") and part.function_call:
                                 # Handle native function calls
                                 function_call = part.function_call
-                                tool_calls.append({
-                                    "id": f"call_{len(tool_calls)}",  # Google doesn't provide IDs
-                                    "type": "function",
-                                    "function": {
-                                        "name": function_call.name,
-                                        "arguments": json.dumps(function_call.args) if function_call.args else "{}"
+                                tool_calls.append(
+                                    {
+                                        "id": f"call_{len(tool_calls)}",  # Google doesn't provide IDs
+                                        "type": "function",
+                                        "function": {
+                                            "name": function_call.name,
+                                            "arguments": json.dumps(function_call.args)
+                                            if function_call.args
+                                            else "{}",
+                                        },
                                     }
-                                })
+                                )
 
                         if chunk_text:
                             accumulated_content += chunk_text
@@ -569,7 +581,7 @@ class GoogleProvider(BaseLLMProvider):
                             )
 
                     # Check for finish
-                    if hasattr(candidate, 'finish_reason') and candidate.finish_reason:
+                    if hasattr(candidate, "finish_reason") and candidate.finish_reason:
                         finish_reason = str(candidate.finish_reason).lower()
 
                         # Final chunk with usage estimation and tool calls
@@ -579,15 +591,23 @@ class GoogleProvider(BaseLLMProvider):
                             finish_reason=finish_reason,
                             tool_calls=tool_calls if tool_calls else None,
                             usage={
-                                "prompt_tokens": self.get_token_count(str(google_messages)),
-                                "completion_tokens": self.get_token_count(accumulated_content),
-                                "total_tokens": self.get_token_count(str(google_messages)) + self.get_token_count(accumulated_content),
-                            }
+                                "prompt_tokens": self.get_token_count(
+                                    str(google_messages)
+                                ),
+                                "completion_tokens": self.get_token_count(
+                                    accumulated_content
+                                ),
+                                "total_tokens": self.get_token_count(
+                                    str(google_messages)
+                                )
+                                + self.get_token_count(accumulated_content),
+                            },
                         )
 
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
@@ -596,23 +616,19 @@ class GoogleProvider(BaseLLMProvider):
 
             if "api_key" in error_msg.lower() or "unauthorized" in error_msg.lower():
                 raise ProviderAuthenticationError(
-                    f"Google API authentication failed: {error_msg}",
-                    provider="google"
+                    f"Google API authentication failed: {error_msg}", provider="google"
                 ) from e
             elif "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
                 raise ProviderRateLimitError(
-                    f"Google API rate limit exceeded: {error_msg}",
-                    provider="google"
+                    f"Google API rate limit exceeded: {error_msg}", provider="google"
                 ) from e
             elif "timeout" in error_msg.lower():
                 raise ProviderTimeoutError(
-                    f"Google API timeout: {error_msg}",
-                    provider="google"
+                    f"Google API timeout: {error_msg}", provider="google"
                 ) from e
             else:
                 raise ProviderResponseError(
-                    f"Google API error: {error_msg}",
-                    provider="google"
+                    f"Google API error: {error_msg}", provider="google"
                 ) from e
 
     async def _chat_non_streaming(
@@ -636,9 +652,7 @@ class GoogleProvider(BaseLLMProvider):
         # Verify model is supported
         if not self.validate_model(model):
             raise ModelNotFoundError(
-                f"Unsupported model: {model}",
-                provider="google",
-                model_name=model
+                f"Unsupported model: {model}", provider="google", model_name=model
             )
 
         # Get the actual API model name
@@ -686,13 +700,17 @@ class GoogleProvider(BaseLLMProvider):
                     tool_parameters = tool.get("parameters", {})
 
                 # Create Google FunctionDeclaration
-                google_tools.append(types.Tool(
-                    function_declarations=[types.FunctionDeclaration(
-                        name=tool_name,
-                        description=tool_description,
-                        parameters=tool_parameters
-                    )]
-                ))
+                google_tools.append(
+                    types.Tool(
+                        function_declarations=[
+                            types.FunctionDeclaration(
+                                name=tool_name,
+                                description=tool_description,
+                                parameters=tool_parameters,
+                            )
+                        ]
+                    )
+                )
 
         # Handle JSON response format
         if response_format:
@@ -726,24 +744,18 @@ class GoogleProvider(BaseLLMProvider):
                 elif tool_choice == "none":
                     # Disable function calling
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(
-                            mode="NONE"
-                        )
+                        function_calling_config=types.FunctionCallingConfig(mode="NONE")
                     )
                 elif tool_choice == "any" or tool_choice == "required":
                     # Force function calling
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(
-                            mode="ANY"
-                        )
+                        function_calling_config=types.FunctionCallingConfig(mode="ANY")
                     )
                 elif isinstance(tool_choice, dict) and "function" in tool_choice:
                     # Specific function choice - not directly supported by Google
                     # Fall back to ANY mode with the available tools
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(
-                            mode="ANY"
-                        )
+                        function_calling_config=types.FunctionCallingConfig(mode="ANY")
                     )
 
         config = types.GenerateContentConfig(**config_params) if config_params else None
@@ -782,7 +794,7 @@ class GoogleProvider(BaseLLMProvider):
                 if not await self._breaker.allow(key):
                     raise CircuitBreakerError(
                         "Google circuit breaker is open - too many recent failures",
-                        provider="google"
+                        provider="google",
                     )
                 response = await retry_async(_do_call)
                 await self._breaker.record_success(key)
@@ -849,7 +861,7 @@ class GoogleProvider(BaseLLMProvider):
                     if not await self._breaker.allow(key):
                         raise CircuitBreakerError(
                             "Google circuit breaker is open - too many recent failures",
-                            provider="google"
+                            provider="google",
                         )
                     response = await retry_async(_do_chat)
                     await self._breaker.record_success(key)
@@ -857,12 +869,12 @@ class GoogleProvider(BaseLLMProvider):
                 else:
                     # No messages? This shouldn't happen but handle gracefully
                     raise ProviderResponseError(
-                        "No messages provided for chat",
-                        provider="google"
+                        "No messages provided for chat", provider="google"
                     )
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
@@ -873,43 +885,44 @@ class GoogleProvider(BaseLLMProvider):
                 await asyncio.sleep(1)
                 raise ProviderRateLimitError(
                     f"Google Gemini API rate limit exceeded: {error_msg}",
-                    provider="google"
+                    provider="google",
                 ) from e
             elif "api key" in error_msg.lower():
                 raise ProviderAuthenticationError(
-                    f"Google API authentication failed: {error_msg}",
-                    provider="google"
+                    f"Google API authentication failed: {error_msg}", provider="google"
                 ) from e
             elif "timeout" in error_msg.lower():
                 raise ProviderTimeoutError(
-                    f"Google API request timed out: {error_msg}",
-                    provider="google"
+                    f"Google API request timed out: {error_msg}", provider="google"
                 ) from e
             else:
                 # Re-raise SDK exceptions with our standard format
                 raise ProviderResponseError(
-                    f"Google Gemini API error: {error_msg}",
-                    provider="google"
+                    f"Google Gemini API error: {error_msg}", provider="google"
                 ) from e
 
         # Parse for native function calls from Google response
         tool_calls = None
-        if tools and hasattr(response, 'candidates') and response.candidates:
+        if tools and hasattr(response, "candidates") and response.candidates:
             candidate = response.candidates[0]
-            if hasattr(candidate, 'content') and candidate.content:
+            if hasattr(candidate, "content") and candidate.content:
                 tool_calls = []
                 for part in candidate.content.parts:
-                    if hasattr(part, 'function_call') and part.function_call:
+                    if hasattr(part, "function_call") and part.function_call:
                         # Handle native function calls
                         function_call = part.function_call
-                        tool_calls.append({
-                            "id": f"call_{len(tool_calls)}",  # Google doesn't provide IDs
-                            "type": "function",
-                            "function": {
-                                "name": function_call.name,
-                                "arguments": json.dumps(function_call.args) if function_call.args else "{}"
+                        tool_calls.append(
+                            {
+                                "id": f"call_{len(tool_calls)}",  # Google doesn't provide IDs
+                                "type": "function",
+                                "function": {
+                                    "name": function_call.name,
+                                    "arguments": json.dumps(function_call.args)
+                                    if function_call.args
+                                    else "{}",
+                                },
                             }
-                        })
+                        )
 
                 # If no tool calls found, reset to None
                 if not tool_calls:

@@ -16,7 +16,7 @@ from llmring.exceptions import (
     ModelNotFoundError,
     ProviderResponseError,
     ProviderTimeoutError,
-    CircuitBreakerError
+    CircuitBreakerError,
 )
 
 
@@ -34,7 +34,7 @@ class TestTypedExceptions:
         return LLMRequest(
             model="openai:gpt-4o-mini",
             messages=[Message(role="user", content="test")],
-            max_tokens=10
+            max_tokens=10,
         )
 
     @pytest.mark.asyncio
@@ -47,17 +47,19 @@ class TestTypedExceptions:
 
         with pytest.raises(ProviderAuthenticationError) as exc_info:
             await provider.chat(
-                messages=sample_request.messages,
-                model="gpt-4o-mini",
-                max_tokens=10
+                messages=sample_request.messages, model="gpt-4o-mini", max_tokens=10
             )
 
         assert exc_info.value.provider == "openai"
         assert "authentication" in str(exc_info.value).lower()
-        print(f"✓ OpenAI auth error raises ProviderAuthenticationError: {exc_info.value}")
+        print(
+            f"✓ OpenAI auth error raises ProviderAuthenticationError: {exc_info.value}"
+        )
 
     @pytest.mark.asyncio
-    async def test_invalid_anthropic_api_key_raises_typed_exception(self, sample_request):
+    async def test_invalid_anthropic_api_key_raises_typed_exception(
+        self, sample_request
+    ):
         """Test that invalid Anthropic API key raises ProviderAuthenticationError."""
         from llmring.providers.anthropic_api import AnthropicProvider
 
@@ -68,12 +70,14 @@ class TestTypedExceptions:
             await provider.chat(
                 messages=sample_request.messages,
                 model="claude-3-5-haiku",
-                max_tokens=10
+                max_tokens=10,
             )
 
         assert exc_info.value.provider == "anthropic"
         assert "authentication" in str(exc_info.value).lower()
-        print(f"✓ Anthropic auth error raises ProviderAuthenticationError: {exc_info.value}")
+        print(
+            f"✓ Anthropic auth error raises ProviderAuthenticationError: {exc_info.value}"
+        )
 
     @pytest.mark.asyncio
     async def test_invalid_model_raises_typed_exception(self, service, sample_request):
@@ -93,7 +97,7 @@ class TestTypedExceptions:
         request = LLMRequest(
             model="anthropic:claude-totally-fake-model",
             messages=[Message(role="user", content="test")],
-            max_tokens=10
+            max_tokens=10,
         )
 
         with pytest.raises(ModelNotFoundError) as exc_info:
@@ -113,12 +117,12 @@ class TestTypedExceptions:
         provider = OpenAIProvider(api_key="sk-invalid-key-for-timeout-test")
 
         # Use extremely short timeout to force timeout error
-        with patch.dict('os.environ', {'LLMRING_PROVIDER_TIMEOUT_S': '0.001'}):
-            with pytest.raises((ProviderTimeoutError, ProviderResponseError)) as exc_info:
+        with patch.dict("os.environ", {"LLMRING_PROVIDER_TIMEOUT_S": "0.001"}):
+            with pytest.raises(
+                (ProviderTimeoutError, ProviderResponseError)
+            ) as exc_info:
                 await provider.chat(
-                    messages=sample_request.messages,
-                    model="gpt-4o-mini",
-                    max_tokens=10
+                    messages=sample_request.messages, model="gpt-4o-mini", max_tokens=10
                 )
 
         # Either timeout or auth error is acceptable for this test
@@ -136,12 +140,10 @@ class TestTypedExceptions:
         provider = OpenAIProvider(api_key="sk-test-key")
 
         # Mock the circuit breaker to return False (circuit open)
-        with patch.object(provider._breaker, 'allow', return_value=False):
+        with patch.object(provider._breaker, "allow", return_value=False):
             with pytest.raises(CircuitBreakerError) as exc_info:
                 await provider.chat(
-                    messages=sample_request.messages,
-                    model="gpt-4o-mini",
-                    max_tokens=10
+                    messages=sample_request.messages, model="gpt-4o-mini", max_tokens=10
                 )
 
         assert exc_info.value.provider == "openai"

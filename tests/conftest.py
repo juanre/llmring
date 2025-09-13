@@ -28,7 +28,7 @@ try:
     from llmring_server.main import app as _server_app
     from pgdbm.fixtures.conftest import test_db_factory  # noqa: F401
     from pgdbm.migrations import AsyncMigrationManager
-    
+
     LLMRING_SERVER_AVAILABLE = True
 except ImportError:
     LLMRING_SERVER_AVAILABLE = False
@@ -37,39 +37,38 @@ except ImportError:
 @pytest_asyncio.fixture
 async def llmring_server_client(test_db_factory) -> AsyncGenerator[AsyncClient, None]:
     """Run the llmring-server FastAPI app in-process with isolated test database.
-    
+
     This fixture creates a fresh database for each test, applies migrations,
     and provides an HTTP client to interact with the server.
     """
     if not LLMRING_SERVER_AVAILABLE:
         pytest.skip("llmring-server not installed, skipping integration tests")
-    
+
     # Import inside fixture to avoid import errors when server not available
     from llmring_server.main import app as server_app
     from pathlib import Path
-    
+
     # Create isolated test database with schema
     db = await test_db_factory.create_db(suffix="llmring", schema="llmring_test")
-    
+
     # Apply llmring-server migrations
     # We locate the migrations relative to the llmring_server module
     import llmring_server
+
     server_path = Path(llmring_server.__file__).parent
     migrations_path = server_path / "migrations"
-    
+
     if not migrations_path.exists():
         pytest.fail(f"Migrations not found at {migrations_path}")
-    
+
     migrations = AsyncMigrationManager(
-        db, 
-        migrations_path=str(migrations_path), 
-        module_name="llmring_test"
+        db, migrations_path=str(migrations_path), module_name="llmring_test"
     )
     await migrations.apply_pending_migrations()
-    
+
     # Inject the test database into the app
     server_app.state.db = db
-    
+
     # Create ASGI transport and client
     transport = ASGITransport(app=server_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -153,7 +152,9 @@ def google_provider():
         or os.getenv("GOOGLE_GEMINI_API_KEY")
     )
     if not api_key:
-        pytest.skip("GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GEMINI_API_KEY not found in environment")
+        pytest.skip(
+            "GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GEMINI_API_KEY not found in environment"
+        )
     return GoogleProvider(api_key=api_key)
 
 

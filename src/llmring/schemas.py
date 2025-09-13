@@ -12,7 +12,9 @@ class Message(BaseModel):
     tool_calls: Optional[List[Dict[str, Any]]] = None
     tool_call_id: Optional[str] = None
     timestamp: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None  # For cache_control and other provider-specific metadata
+    metadata: Optional[Dict[str, Any]] = (
+        None  # For cache_control and other provider-specific metadata
+    )
 
 
 class LLMRequest(BaseModel):
@@ -30,7 +32,9 @@ class LLMRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     json_response: Optional[bool] = None
     stream: Optional[bool] = False  # Support for streaming responses
-    extra_params: Dict[str, Any] = Field(default_factory=dict)  # Provider-specific parameters
+    extra_params: Dict[str, Any] = Field(
+        default_factory=dict
+    )  # Provider-specific parameters
 
 
 class LLMResponse(BaseModel):
@@ -55,7 +59,7 @@ class LLMResponse(BaseModel):
 
 class StreamChunk(BaseModel):
     """A chunk of a streaming response."""
-    
+
     delta: str  # The text delta in this chunk
     model: Optional[str] = None
     finish_reason: Optional[str] = None

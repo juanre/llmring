@@ -29,6 +29,7 @@ from llmring.service import LLMRing
 
 from llmring.mcp.client import MCPClient
 from llmring.mcp.client.chat.styles import PROMPT_STYLE, RICH_THEME
+
 # Database model removed - now using HTTP-based architecture
 from llmring.mcp.client.pool_config import CHAT_APP_POOL
 
@@ -68,7 +69,9 @@ class CommandCompleter(Completer):
                     display = HTML(
                         f"<b>{command}</b> - <style fg='#888888'>{self.commands[command]}</style>"
                     )
-                    yield Completion(command, start_position=-len(word), display=display)
+                    yield Completion(
+                        command, start_position=-len(word), display=display
+                    )
 
             # For /model command, offer model suggestions
             if text.startswith("/model "):
@@ -251,9 +254,13 @@ class MCPChatApp:
                     # Show count of remaining tools
                     remaining = len(self.available_tools) - max_display
                     if remaining > 0:
-                        self.console.print(f"  [info]... and {remaining} more tools[/info]")
+                        self.console.print(
+                            f"  [info]... and {remaining} more tools[/info]"
+                        )
             except Exception as e:
-                self.console.print(f"[error]Failed to connect to MCP server:[/error] {e!s}")
+                self.console.print(
+                    f"[error]Failed to connect to MCP server:[/error] {e!s}"
+                )
 
         # Display available models
         models = self.get_available_models()
@@ -286,7 +293,9 @@ class MCPChatApp:
             self.shared_pool = await AsyncDatabaseManager.create_shared_pool(config)
 
             # Create schema-isolated manager for mcp_client and run migrations
-            self.db_manager = AsyncDatabaseManager(pool=self.shared_pool, schema="mcp_client")
+            self.db_manager = AsyncDatabaseManager(
+                pool=self.shared_pool, schema="mcp_client"
+            )
             mcp_db = MCPClientDB.from_manager(self.db_manager)
             await mcp_db.initialize()
             await mcp_db.run_migrations()
@@ -297,7 +306,9 @@ class MCPChatApp:
         # Create schema-isolated manager for llmring
         if self.shared_pool:
             # We created our own pool
-            llm_db_manager = AsyncDatabaseManager(pool=self.shared_pool, schema="llmring")
+            llm_db_manager = AsyncDatabaseManager(
+                pool=self.shared_pool, schema="llmring"
+            )
         elif self._external_db and self.db_manager is not None:
             # We're using an external db_manager - need to share its pool
             # This assumes the external db_manager was created with a pool
@@ -380,7 +391,9 @@ class MCPChatApp:
             System message content
         """
         if not self.available_tools:
-            return "You are a helpful assistant. Respond directly to the user's questions."
+            return (
+                "You are a helpful assistant. Respond directly to the user's questions."
+            )
 
         # Prepare tool descriptions
         tool_descriptions = []
@@ -477,13 +490,19 @@ Otherwise, respond directly to help the user.
 
         # No MCP client means no tool calls
         if not self.mcp_client:
-            self.console.print("[error]Cannot execute tools: No MCP server connected[/error]")
+            self.console.print(
+                "[error]Cannot execute tools: No MCP server connected[/error]"
+            )
             # Add to conversation
-            self.conversation.append(Message(role="assistant", content=json.dumps(response_json)))
+            self.conversation.append(
+                Message(role="assistant", content=json.dumps(response_json))
+            )
             return
 
         # Add assistant message to conversation
-        self.conversation.append(Message(role="assistant", content=json.dumps(response_json)))
+        self.conversation.append(
+            Message(role="assistant", content=json.dumps(response_json))
+        )
 
         # Process each tool call
         tool_results = []
@@ -521,12 +540,16 @@ Otherwise, respond directly to help the user.
                     self.console.print(result)
 
                 # Add to results
-                tool_results.append({"tool": tool_name, "result": result, "success": True})
+                tool_results.append(
+                    {"tool": tool_name, "result": result, "success": True}
+                )
 
             except Exception as e:
                 # Handle error
                 self.console.print(f"[error]Tool error:[/error] {e!s}")
-                tool_results.append({"tool": tool_name, "error": str(e), "success": False})
+                tool_results.append(
+                    {"tool": tool_name, "error": str(e), "success": False}
+                )
 
         # Add tool results to conversation
         self.conversation.append(
@@ -551,7 +574,9 @@ Otherwise, respond directly to help the user.
         self.console.print(Markdown(follow_up_response.content))
 
         # Add final response to conversation
-        self.conversation.append(Message(role="assistant", content=follow_up_response.content))
+        self.conversation.append(
+            Message(role="assistant", content=follow_up_response.content)
+        )
 
     async def handle_command(self, command: str) -> None:
         """
@@ -794,7 +819,10 @@ def main():
         return
 
     # Use shared pool if requested or by default
-    if args.use_shared_pool or os.getenv("MCP_USE_SHARED_POOL", "true").lower() == "true":
+    if (
+        args.use_shared_pool
+        or os.getenv("MCP_USE_SHARED_POOL", "true").lower() == "true"
+    ):
         # Run with shared pool
         try:
             asyncio.run(run_with_shared_pool(args))

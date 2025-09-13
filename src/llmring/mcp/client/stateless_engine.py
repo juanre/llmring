@@ -52,14 +52,18 @@ class ChatResponse:
                 "role": self.message.role,
                 "content": self.message.content,
                 "timestamp": (
-                    self.message.timestamp.isoformat() if self.message.timestamp else None
+                    self.message.timestamp.isoformat()
+                    if self.message.timestamp
+                    else None
                 ),
             },
             "usage": self.usage,
             "model": self.model,
             "created_at": self.created_at.isoformat(),
             "processing_time_ms": self.processing_time_ms,
-            "tool_calls": [tc.dict() for tc in self.tool_calls] if self.tool_calls else None,
+            "tool_calls": [tc.dict() for tc in self.tool_calls]
+            if self.tool_calls
+            else None,
         }
 
     def to_json(self) -> str:
@@ -150,13 +154,18 @@ class StatelessChatEngine:
                 # Save user message to DB
                 if request.save_to_db:
                     await self.conversation_manager.add_message(
-                        context.conversation_id, user_message, auth_context=context.auth_context
+                        context.conversation_id,
+                        user_message,
+                        auth_context=context.auth_context,
                     )
 
             # Process with LLM
-            response_message, tool_calls, tool_results, llm_response = (
-                await self._process_with_llm(context)
-            )
+            (
+                response_message,
+                tool_calls,
+                tool_results,
+                llm_response,
+            ) = await self._process_with_llm(context)
 
             # Use actual usage from LLM response if available, otherwise calculate
             if llm_response and llm_response.usage:
@@ -165,7 +174,9 @@ class StatelessChatEngine:
                 usage = self._calculate_usage(context.messages, response_message)
 
             # Calculate processing time
-            processing_time_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
+            processing_time_ms = int(
+                (datetime.now(UTC) - start_time).total_seconds() * 1000
+            )
 
             # Save to database if requested
             if request.save_to_db:
@@ -210,7 +221,9 @@ class StatelessChatEngine:
             # Save user message to DB
             if request.save_to_db:
                 await self.conversation_manager.add_message(
-                    context.conversation_id, user_message, auth_context=context.auth_context
+                    context.conversation_id,
+                    user_message,
+                    auth_context=context.auth_context,
                 )
 
         # Stream from LLM
@@ -221,7 +234,9 @@ class StatelessChatEngine:
             if chunk.get("type") == "text":
                 full_response += chunk["text"]
                 yield StreamChatChunk(
-                    conversation_id=context.conversation_id, delta=chunk["text"], finished=False
+                    conversation_id=context.conversation_id,
+                    delta=chunk["text"],
+                    finished=False,
                 )
             elif chunk.get("type") == "tool_call":
                 tool_call = chunk["tool_call"]
@@ -252,7 +267,10 @@ class StatelessChatEngine:
 
             # Send final chunk with usage
             yield StreamChatChunk(
-                conversation_id=context.conversation_id, delta="", usage=usage, finished=True
+                conversation_id=context.conversation_id,
+                delta="",
+                usage=usage,
+                finished=True,
             )
 
     async def execute_tool(
@@ -279,7 +297,9 @@ class StatelessChatEngine:
         )
 
         # Save tool result
-        await self.conversation_manager.add_tool_result(conversation_id, tool_result, auth_context)
+        await self.conversation_manager.add_tool_result(
+            conversation_id, tool_result, auth_context
+        )
 
         return tool_result
 
@@ -294,7 +314,9 @@ class StatelessChatEngine:
             return ProcessingContext(
                 conversation_id=request.conversation_id,
                 messages=(
-                    request.messages if request.messages is not None else conversation.messages
+                    request.messages
+                    if request.messages is not None
+                    else conversation.messages
                 ),
                 system_prompt=request.system_prompt or conversation.system_prompt,
                 model=request.model or conversation.model,
@@ -361,7 +383,9 @@ class StatelessChatEngine:
         content = response.content
 
         # Create response message
-        response_message = Message(role="assistant", content=content, timestamp=datetime.now(UTC))
+        response_message = Message(
+            role="assistant", content=content, timestamp=datetime.now(UTC)
+        )
 
         # Handle tool calls if present
         tool_calls = None
@@ -375,7 +399,9 @@ class StatelessChatEngine:
                 tool_call = ToolCall(
                     id=tc.get("id", str(uuid.uuid4())),
                     tool_name=tc.get("function", {}).get("name", tc.get("name", "")),
-                    arguments=tc.get("function", {}).get("arguments", tc.get("arguments", {})),
+                    arguments=tc.get("function", {}).get(
+                        "arguments", tc.get("arguments", {})
+                    ),
                 )
                 tool_calls.append(tool_call)
 
@@ -402,7 +428,12 @@ class StatelessChatEngine:
                             )
                         )
 
-        return response_message, tool_calls, tool_results if tool_results else None, response
+        return (
+            response_message,
+            tool_calls,
+            tool_results if tool_results else None,
+            response,
+        )
 
     async def _stream_from_llm(
         self, context: ProcessingContext
@@ -442,8 +473,12 @@ class StatelessChatEngine:
                     "type": "tool_call",
                     "tool_call": ToolCall(
                         id=tc.get("id", str(uuid.uuid4())),
-                        tool_name=tc.get("function", {}).get("name", tc.get("name", "")),
-                        arguments=tc.get("function", {}).get("arguments", tc.get("arguments", {})),
+                        tool_name=tc.get("function", {}).get(
+                            "name", tc.get("name", "")
+                        ),
+                        arguments=tc.get("function", {}).get(
+                            "arguments", tc.get("arguments", {})
+                        ),
                     ),
                 }
 
@@ -461,7 +496,9 @@ class StatelessChatEngine:
 
         return messages
 
-    def _calculate_usage(self, messages: list[Message], response: Message) -> dict[str, int]:
+    def _calculate_usage(
+        self, messages: list[Message], response: Message
+    ) -> dict[str, int]:
         """Calculate token usage."""
         # This is a simplified version
         # In production, use proper tokenizer for the model

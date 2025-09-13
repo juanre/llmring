@@ -31,7 +31,10 @@ def simple_messages():
 @pytest.fixture
 def test_auth_context():
     """Test authentication context."""
-    return {"user_id": "test-user-123", "user_info": {"type": "test", "name": "Test User"}}
+    return {
+        "user_id": "test-user-123",
+        "user_info": {"type": "test", "name": "Test User"},
+    }
 
 
 @pytest.fixture

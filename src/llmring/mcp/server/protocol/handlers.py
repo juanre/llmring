@@ -68,7 +68,9 @@ class ProtocolHandlers:
     ) -> Dict[str, Any]:
         """Handle the initialize method."""
         if self.initialized:
-            raise ProtocolError(JSONRPCError.INVALID_REQUEST, "Server already initialized")
+            raise ProtocolError(
+                JSONRPCError.INVALID_REQUEST, "Server already initialized"
+            )
 
         # Extract client info
         self.client_info = params.get("clientInfo", {})
@@ -94,7 +96,9 @@ class ProtocolHandlers:
             },
         }
 
-    async def handle_initialized(self, params: Dict[str, Any], context: SimpleNamespace) -> None:
+    async def handle_initialized(
+        self, params: Dict[str, Any], context: SimpleNamespace
+    ) -> None:
         """Handle initialized notification."""
         logger.info("Client completed initialization")
         return None  # No response for notifications
@@ -179,7 +183,9 @@ class ProtocolHandlers:
         # Get storage provider from context
         storage = getattr(context, "storage_provider", None)
         if not storage:
-            raise ProtocolError(JSONRPCError.INTERNAL_ERROR, "Storage provider not available")
+            raise ProtocolError(
+                JSONRPCError.INTERNAL_ERROR, "Storage provider not available"
+            )
 
         # Get user ID from context (anonymous if no auth)
         user_id = getattr(context, "user_id", "anonymous")
@@ -191,12 +197,18 @@ class ProtocolHandlers:
             # Convert result to MCP-compliant format
             content_text = self._format_tool_result(result)
 
-            return {"content": [{"type": "text", "text": content_text}], "isError": False}
+            return {
+                "content": [{"type": "text", "text": content_text}],
+                "isError": False,
+            }
 
         except Exception as e:
             logger.error(f"Tool execution error: {e}", exc_info=True)
             # Return error in MCP-compliant format
-            return {"content": [{"type": "text", "text": f"Error: {str(e)}"}], "isError": True}
+            return {
+                "content": [{"type": "text", "text": f"Error: {str(e)}"}],
+                "isError": True,
+            }
 
     async def handle_resources_list(
         self, params: Dict[str, Any], context: SimpleNamespace
@@ -237,7 +249,9 @@ class ProtocolHandlers:
         # Get storage provider from context
         storage = getattr(context, "storage_provider", None)
         if not storage:
-            raise ProtocolError(JSONRPCError.INTERNAL_ERROR, "Storage provider not available")
+            raise ProtocolError(
+                JSONRPCError.INTERNAL_ERROR, "Storage provider not available"
+            )
 
         # Get user ID from context (anonymous if no auth)
         user_id = getattr(context, "user_id", "anonymous")
@@ -251,7 +265,9 @@ class ProtocolHandlers:
             resource = next((r for r in resources if r.uri == uri), None)
 
             if not resource:
-                raise ProtocolError(JSONRPCError.INVALID_PARAMS, f"Resource not found: {uri}")
+                raise ProtocolError(
+                    JSONRPCError.INVALID_PARAMS, f"Resource not found: {uri}"
+                )
 
             mime_type = resource.mime_type
 
@@ -269,13 +285,19 @@ class ProtocolHandlers:
                 }
             else:
                 # Text content
-                return {"contents": [{"uri": uri, "mimeType": mime_type, "text": str(content)}]}
+                return {
+                    "contents": [
+                        {"uri": uri, "mimeType": mime_type, "text": str(content)}
+                    ]
+                }
 
         except ProtocolError:
             raise
         except Exception as e:
             logger.error(f"Resource read error: {e}", exc_info=True)
-            raise ProtocolError(JSONRPCError.INTERNAL_ERROR, f"Failed to read resource: {str(e)}")
+            raise ProtocolError(
+                JSONRPCError.INTERNAL_ERROR, f"Failed to read resource: {str(e)}"
+            )
 
     async def handle_prompts_list(
         self, params: Dict[str, Any], context: SimpleNamespace
@@ -317,7 +339,9 @@ class ProtocolHandlers:
         # Get storage provider from context
         storage = getattr(context, "storage_provider", None)
         if not storage:
-            raise ProtocolError(JSONRPCError.INTERNAL_ERROR, "Storage provider not available")
+            raise ProtocolError(
+                JSONRPCError.INTERNAL_ERROR, "Storage provider not available"
+            )
 
         # Get user ID from context (anonymous if no auth)
         user_id = getattr(context, "user_id", "anonymous")
@@ -331,9 +355,14 @@ class ProtocolHandlers:
             prompt = next((p for p in prompts if p.name == name), None)
 
             if not prompt:
-                raise ProtocolError(JSONRPCError.INVALID_PARAMS, f"Prompt not found: {name}")
+                raise ProtocolError(
+                    JSONRPCError.INVALID_PARAMS, f"Prompt not found: {name}"
+                )
 
-            return {"description": prompt.description, "messages": result.get("messages", [])}
+            return {
+                "description": prompt.description,
+                "messages": result.get("messages", []),
+            }
 
         except ProtocolError:
             raise

@@ -213,7 +213,7 @@ async def cmd_chat(args):
         model=args.model,
         temperature=args.temperature,
         max_tokens=args.max_tokens,
-        stream=args.stream if hasattr(args, 'stream') else False,
+        stream=args.stream if hasattr(args, "stream") else False,
     )
 
     try:
@@ -221,12 +221,13 @@ async def cmd_chat(args):
         response = await ring.chat(request)
 
         # Handle streaming response
-        if args.stream if hasattr(args, 'stream') else False:
+        if args.stream if hasattr(args, "stream") else False:
             # Stream response chunks
             import sys
+
             full_content = ""
             accumulated_usage = None
-            
+
             async for chunk in response:
                 if chunk.delta:
                     if not args.json:
@@ -234,18 +235,20 @@ async def cmd_chat(args):
                         sys.stdout.write(chunk.delta)
                         sys.stdout.flush()
                     full_content += chunk.delta
-                
+
                 # Capture final usage stats
                 if chunk.usage:
                     accumulated_usage = chunk.usage
-            
+
             if args.json:
                 # For JSON output, collect all chunks first
                 print(
                     json.dumps(
                         {
                             "content": full_content,
-                            "model": chunk.model if chunk and chunk.model else args.model,
+                            "model": chunk.model
+                            if chunk and chunk.model
+                            else args.model,
                             "usage": accumulated_usage,
                             "finish_reason": chunk.finish_reason if chunk else None,
                         },
@@ -255,9 +258,11 @@ async def cmd_chat(args):
             else:
                 # Print newline after streaming
                 print()
-                
+
                 if args.verbose and accumulated_usage:
-                    print(f"\n[Model: {chunk.model if chunk and chunk.model else args.model}]")
+                    print(
+                        f"\n[Model: {chunk.model if chunk and chunk.model else args.model}]"
+                    )
                     print(
                         f"[Tokens: {accumulated_usage.get('prompt_tokens', 0)} in, {accumulated_usage.get('completion_tokens', 0)} out]"
                     )

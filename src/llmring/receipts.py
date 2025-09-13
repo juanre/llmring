@@ -30,7 +30,8 @@ class Receipt(BaseModel):
     # Identity
     receipt_id: str = Field(..., description="Unique receipt identifier")
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="Receipt timestamp"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Receipt timestamp",
     )
 
     # Request info

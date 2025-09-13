@@ -47,7 +47,12 @@ class ResourceRegistry:
             self.handlers[uri] = handler
 
     def register_static_resource(
-        self, uri: str, name: str, description: str, content: str, mime_type: str = "text/plain"
+        self,
+        uri: str,
+        name: str,
+        description: str,
+        content: str,
+        mime_type: str = "text/plain",
     ) -> None:
         """
         Register a static resource with fixed content.
