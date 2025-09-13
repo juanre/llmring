@@ -58,14 +58,18 @@ class TestGoogleProviderUnit:
         # Temporarily unset environment variables
         old_gemini_key = os.environ.pop("GEMINI_API_KEY", None)
         old_google_key = os.environ.pop("GOOGLE_API_KEY", None)
+        old_google_gemini_key = os.environ.pop("GOOGLE_GEMINI_API_KEY", None)
         try:
-            with pytest.raises(ValueError, match="Google API key must be provided"):
+            from llmring.exceptions import ProviderAuthenticationError
+            with pytest.raises(ProviderAuthenticationError, match="Google API key must be provided"):
                 GoogleProvider()
         finally:
             if old_gemini_key:
                 os.environ["GEMINI_API_KEY"] = old_gemini_key
             if old_google_key:
                 os.environ["GOOGLE_API_KEY"] = old_google_key
+            if old_google_gemini_key:
+                os.environ["GOOGLE_GEMINI_API_KEY"] = old_google_gemini_key
 
     def test_initialization_with_env_var(self, monkeypatch):
         """Test provider initialization with environment variable."""
