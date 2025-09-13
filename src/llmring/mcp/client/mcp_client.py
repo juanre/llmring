@@ -31,8 +31,6 @@ from llmring.exceptions import (
     MCPError,
     MCPTransportError,
     MCPProtocolError,
-    MCPInitializationError,
-    ServerConnectionError,
     NetworkError,
     TimeoutError,
 )

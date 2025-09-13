@@ -13,6 +13,14 @@ from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
+from llmring.exceptions import (
+    CircuitBreakerError,
+    ModelNotFoundError,
+    ProviderAuthenticationError,
+    ProviderRateLimitError,
+    ProviderResponseError,
+    ProviderTimeoutError,
+)
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 
@@ -42,7 +50,10 @@ class OpenAIProvider(BaseLLMProvider):
         # Get API key from parameter or environment
         api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
         if not api_key:
-            raise ValueError("OpenAI API key must be provided")
+            raise ProviderAuthenticationError(
+                "OpenAI API key must be provided",
+                provider="openai"
+            )
             
         # Create config for base class
         config = ProviderConfig(
@@ -192,6 +203,7 @@ class OpenAIProvider(BaseLLMProvider):
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """
         Process messages containing PDFs using OpenAI's Responses API with file_search vector stores.
@@ -199,7 +211,10 @@ class OpenAIProvider(BaseLLMProvider):
         # Extract PDF data and text from messages
         pdf_data_list, combined_text = self._extract_pdf_content_and_text(messages)
         if not pdf_data_list:
-            raise ValueError("No PDF content found in messages")
+            raise ProviderResponseError(
+                "No PDF content found in messages",
+                provider="openai"
+            )
         if not combined_text.strip():
             combined_text = "Please analyze this PDF document and provide a summary."
 
@@ -228,17 +243,23 @@ class OpenAIProvider(BaseLLMProvider):
                 content_items.append({"type": "input_file", "file_id": info["file_id"]})
 
             timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+
+            request_params = {
+                "model": model,
+                "input": [{"role": "user", "content": content_items}],
+            }
+
+            if temperature is not None:
+                request_params["temperature"] = temperature
+            if max_tokens is not None:
+                request_params["max_output_tokens"] = max_tokens
+
+            # Apply extra parameters if provided
+            if extra_params:
+                request_params.update(extra_params)
+
             resp = await asyncio.wait_for(
-                self.client.responses.create(
-                    model=model,
-                    input=[{"role": "user", "content": content_items}],
-                    **({"temperature": temperature} if temperature is not None else {}),
-                    **(
-                        {"max_output_tokens": max_tokens}
-                        if max_tokens is not None
-                        else {}
-                    ),
-                ),
+                self.client.responses.create(**request_params),
                 timeout=timeout_s,
             )
 
@@ -298,6 +319,7 @@ class OpenAIProvider(BaseLLMProvider):
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """
         Handle o1* models using the Responses API.
@@ -325,28 +347,48 @@ class OpenAIProvider(BaseLLMProvider):
         input_text = "\n".join(parts)
 
         try:
-            resp = await self.client.responses.create(
-                model=model,
-                input=input_text,
-                # temperature and max tokens support may vary; pass only if provided
-                **({"temperature": temperature} if temperature is not None else {}),
-                **({"max_output_tokens": max_tokens} if max_tokens is not None else {}),
-            )
+            request_params = {
+                "model": model,
+                "input": input_text,
+            }
+
+            # temperature and max tokens support may vary; pass only if provided
+            if temperature is not None:
+                request_params["temperature"] = temperature
+            if max_tokens is not None:
+                request_params["max_output_tokens"] = max_tokens
+
+            # Apply extra parameters if provided
+            if extra_params:
+                request_params.update(extra_params)
+
+            resp = await self.client.responses.create(**request_params)
         except Exception as e:
             error_msg = str(e)
             if "API key" in error_msg.lower() or "unauthorized" in error_msg.lower():
-                raise ValueError(
-                    f"OpenAI API authentication failed: {error_msg}"
+                raise ProviderAuthenticationError(
+                    f"OpenAI API authentication failed: {error_msg}",
+                    provider="openai"
                 ) from e
             elif "rate limit" in error_msg.lower() or "quota" in error_msg.lower():
-                raise ValueError(f"OpenAI API rate limit exceeded: {error_msg}") from e
+                raise ProviderRateLimitError(
+                    f"OpenAI API rate limit exceeded: {error_msg}",
+                    provider="openai"
+                ) from e
             elif "model" in error_msg.lower() and (
                 "not found" in error_msg.lower()
                 or "does not exist" in error_msg.lower()
             ):
-                raise ValueError(f"OpenAI model not available: {error_msg}") from e
+                raise ModelNotFoundError(
+                    f"OpenAI model not available: {error_msg}",
+                    provider="openai",
+                    model_name=model
+                ) from e
             else:
-                raise Exception(f"OpenAI API error: {error_msg}") from e
+                raise ProviderResponseError(
+                    f"OpenAI API error: {error_msg}",
+                    provider="openai"
+                ) from e
 
         # Try to get plain text; fallback to stringified output
         content_text: str
@@ -381,6 +423,7 @@ class OpenAIProvider(BaseLLMProvider):
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         Stream a chat response from OpenAI.
@@ -400,11 +443,15 @@ class OpenAIProvider(BaseLLMProvider):
         # Strip provider prefix if present
         if model.lower().startswith("openai:"):
             model = model.split(":", 1)[1]
-            
+
         # Verify model is supported
         if not self.validate_model(model):
-            raise ValueError(f"Unsupported model: {model}")
-            
+            raise ModelNotFoundError(
+                f"Unsupported model: {model}",
+                provider="openai",
+                model_name=model
+            )
+
         # o1 models and PDF processing don't support streaming yet
         if model.startswith("o1") or self._contains_pdf_content(messages):
             # Fall back to non-streaming for these cases
@@ -416,6 +463,7 @@ class OpenAIProvider(BaseLLMProvider):
                 response_format=response_format,
                 tools=tools,
                 tool_choice=tool_choice,
+                extra_params=extra_params,
             )
             # Return the full response as a single chunk
             yield StreamChunk(
@@ -453,9 +501,13 @@ class OpenAIProvider(BaseLLMProvider):
         if tools:
             openai_tools = self._prepare_tools(tools)
             request_params["tools"] = openai_tools
-            
+
             if tool_choice is not None:
                 request_params["tool_choice"] = self._prepare_tool_choice(tool_choice)
+
+        # Apply extra parameters if provided
+        if extra_params:
+            request_params.update(extra_params)
                 
         # Make the streaming API call
         try:
@@ -533,11 +585,20 @@ class OpenAIProvider(BaseLLMProvider):
         except Exception as e:
             error_msg = str(e)
             if "API key" in error_msg.lower() or "unauthorized" in error_msg.lower():
-                raise ValueError(f"OpenAI API authentication failed: {error_msg}") from e
+                raise ProviderAuthenticationError(
+                    f"OpenAI API authentication failed: {error_msg}",
+                    provider="openai"
+                ) from e
             elif "rate limit" in error_msg.lower() or "quota" in error_msg.lower():
-                raise ValueError(f"OpenAI API rate limit exceeded: {error_msg}") from e
+                raise ProviderRateLimitError(
+                    f"OpenAI API rate limit exceeded: {error_msg}",
+                    provider="openai"
+                ) from e
             else:
-                raise Exception(f"OpenAI API error: {error_msg}") from e
+                raise ProviderResponseError(
+                    f"OpenAI API error: {error_msg}",
+                    provider="openai"
+                ) from e
 
     async def _prepare_openai_messages(self, messages: List[Message]) -> List[Dict[str, Any]]:
         """Convert messages to OpenAI format."""
@@ -697,6 +758,7 @@ class OpenAIProvider(BaseLLMProvider):
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         stream: Optional[bool] = False,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the OpenAI API using the official SDK.
@@ -725,6 +787,7 @@ class OpenAIProvider(BaseLLMProvider):
                 response_format=response_format,
                 tools=tools,
                 tool_choice=tool_choice,
+                extra_params=extra_params,
             )
         else:
             return await self._chat_non_streaming(
@@ -737,6 +800,7 @@ class OpenAIProvider(BaseLLMProvider):
                 tool_choice=tool_choice,
                 json_response=json_response,
                 cache=cache,
+                extra_params=extra_params,
             )
 
     async def _chat_non_streaming(
@@ -750,6 +814,7 @@ class OpenAIProvider(BaseLLMProvider):
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """
         Send a non-streaming chat request to the OpenAI API.
@@ -772,27 +837,34 @@ class OpenAIProvider(BaseLLMProvider):
 
         # Verify model is supported
         if not self.validate_model(model):
-            raise ValueError(f"Unsupported model: {model}")
+            raise ModelNotFoundError(
+                f"Unsupported model: {model}",
+                provider="openai",
+                model_name=model
+            )
 
         # Route o1* models via Responses API
         if model.startswith("o1"):
             if tools or response_format or tool_choice is not None:
-                raise ValueError(
-                    "OpenAI o1 models do not support tools or custom response formats"
+                raise ProviderResponseError(
+                    "OpenAI o1 models do not support tools or custom response formats",
+                    provider="openai"
                 )
             return await self._chat_via_responses(
                 messages=messages,
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                extra_params=extra_params,
             )
 
         # Check if messages contain PDF content - if so, route to Assistants API
         if self._contains_pdf_content(messages):
             # Tools and response_format are not supported in the Responses+file_search PDF path
             if tools or response_format:
-                raise ValueError(
-                    "Tools and custom response formats are not supported when processing PDFs with OpenAI (Responses API + file_search)."
+                raise ProviderResponseError(
+                    "Tools and custom response formats are not supported when processing PDFs with OpenAI (Responses API + file_search).",
+                    provider="openai"
                 )
 
             return await self._process_with_responses_file_search(
@@ -800,6 +872,7 @@ class OpenAIProvider(BaseLLMProvider):
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                extra_params=extra_params,
             )
 
         # Convert messages to OpenAI format using helper method
@@ -828,10 +901,14 @@ class OpenAIProvider(BaseLLMProvider):
         # Handle tools if provided
         if tools:
             request_params["tools"] = self._prepare_tools(tools)
-            
+
             # Handle tool choice
             if tool_choice is not None:
                 request_params["tool_choice"] = self._prepare_tool_choice(tool_choice)
+
+        # Apply extra parameters if provided
+        if extra_params:
+            request_params.update(extra_params)
 
         # Make the API call using the SDK
         try:
@@ -846,7 +923,10 @@ class OpenAIProvider(BaseLLMProvider):
             # Circuit breaker key per model
             breaker_key = f"openai:{model}"
             if not await self._breaker.allow(breaker_key):
-                raise Exception("OpenAI circuit open for model")
+                raise CircuitBreakerError(
+                    "OpenAI circuit breaker is open - too many recent failures",
+                    provider="openai"
+                )
 
             response: ChatCompletion = await retry_async(_do_call)
             await self._breaker.record_success(breaker_key)
@@ -860,21 +940,40 @@ class OpenAIProvider(BaseLLMProvider):
             # Handle specific OpenAI errors with more context
             error_msg = str(e)
             if "API key" in error_msg.lower() or "unauthorized" in error_msg.lower():
-                raise ValueError(
-                    f"OpenAI API authentication failed: {error_msg}"
+                raise ProviderAuthenticationError(
+                    f"OpenAI API authentication failed: {error_msg}",
+                    provider="openai"
                 ) from e
             elif "rate limit" in error_msg.lower() or "quota" in error_msg.lower():
-                raise ValueError(f"OpenAI API rate limit exceeded: {error_msg}") from e
+                raise ProviderRateLimitError(
+                    f"OpenAI API rate limit exceeded: {error_msg}",
+                    provider="openai"
+                ) from e
             elif "model" in error_msg.lower() and (
                 "not found" in error_msg.lower()
                 or "does not exist" in error_msg.lower()
             ):
-                raise ValueError(f"OpenAI model not available: {error_msg}") from e
+                raise ModelNotFoundError(
+                    f"OpenAI model not available: {error_msg}",
+                    provider="openai",
+                    model_name=model
+                ) from e
             elif "context length" in error_msg.lower() or "token" in error_msg.lower():
-                raise ValueError(f"OpenAI token limit exceeded: {error_msg}") from e
+                raise ProviderResponseError(
+                    f"OpenAI token limit exceeded: {error_msg}",
+                    provider="openai"
+                ) from e
+            elif "timeout" in error_msg.lower():
+                raise ProviderTimeoutError(
+                    f"OpenAI API request timed out: {error_msg}",
+                    provider="openai"
+                ) from e
             else:
                 # Re-raise SDK exceptions with our standard format
-                raise Exception(f"OpenAI API error: {error_msg}") from e
+                raise ProviderResponseError(
+                    f"OpenAI API error: {error_msg}",
+                    provider="openai"
+                ) from e
 
         # Extract the content from the response
         choice = response.choices[0]
@@ -910,8 +1009,3 @@ class OpenAIProvider(BaseLLMProvider):
 
         return llm_response
 
-    def _is_chat_model(self, model_id: str) -> bool:
-        """Check if a model is a chat/completion model."""
-        # Filter out non-chat models
-        # Patterns to exclude: whisper, tts, dall-e, embedding, text-embedding,
-        # text-davinci, text-curie, text-babbage, text-ada, code-davinci, moderation

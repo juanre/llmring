@@ -6,7 +6,7 @@ Falls back to tiktoken for OpenAI-compatible models and character-based estimati
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 

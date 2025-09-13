@@ -3,11 +3,11 @@ Base class for LLM providers.
 """
 
 from abc import ABC, abstractmethod
-from typing import AsyncIterator, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from llmring.schemas import LLMRequest, LLMResponse, Message, StreamChunk
+from llmring.schemas import LLMResponse, Message, StreamChunk
 
 
 class ProviderConfig(BaseModel):
@@ -34,13 +34,33 @@ class BaseLLMProvider(ABC):
     @abstractmethod
     async def chat(
         self,
-        request: LLMRequest
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+        stream: Optional[bool] = False,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the LLM provider.
 
         Args:
-            request: The LLM request containing all parameters
+            messages: List of messages in the conversation
+            model: Model identifier to use
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            response_format: Optional response format specification
+            tools: Optional list of tools/functions available
+            tool_choice: Optional tool choice parameter
+            json_response: Optional flag to request JSON response
+            cache: Optional cache configuration
+            stream: Whether to stream the response
+            extra_params: Provider-specific parameters to pass through
 
         Returns:
             LLM response or async iterator of stream chunks if streaming

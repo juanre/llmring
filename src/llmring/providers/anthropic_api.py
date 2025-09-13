@@ -12,6 +12,14 @@ from anthropic.types import Message as AnthropicMessage
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
+from llmring.exceptions import (
+    CircuitBreakerError,
+    ModelNotFoundError,
+    ProviderAuthenticationError,
+    ProviderRateLimitError,
+    ProviderResponseError,
+    ProviderTimeoutError,
+)
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.schemas import LLMResponse, Message, StreamChunk
@@ -37,7 +45,10 @@ class AnthropicProvider(BaseLLMProvider):
         # Get API key from parameter or environment
         api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
-            raise ValueError("Anthropic API key must be provided")
+            raise ProviderAuthenticationError(
+                "Anthropic API key must be provided",
+                provider="anthropic"
+            )
             
         # Create config for base class
         config = ProviderConfig(
@@ -166,6 +177,7 @@ class AnthropicProvider(BaseLLMProvider):
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         stream: Optional[bool] = False,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the Anthropic Claude API using the official SDK.
@@ -196,8 +208,9 @@ class AnthropicProvider(BaseLLMProvider):
                 tool_choice=tool_choice,
                 json_response=json_response,
                 cache=cache,
+                extra_params=extra_params,
             )
-        
+
         return await self._chat_non_streaming(
             messages=messages,
             model=model,
@@ -208,6 +221,7 @@ class AnthropicProvider(BaseLLMProvider):
             tool_choice=tool_choice,
             json_response=json_response,
             cache=cache,
+            extra_params=extra_params,
         )
     
     async def _stream_chat(
@@ -221,6 +235,7 @@ class AnthropicProvider(BaseLLMProvider):
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """Stream a chat response from Anthropic."""
         # Process model name
@@ -234,11 +249,15 @@ class AnthropicProvider(BaseLLMProvider):
                 if supported_model.startswith(model + "-"):
                     model = supported_model
                     break
-                    
+
         # Verify model is supported
         if not self.validate_model(model):
-            raise ValueError(f"Unsupported model: {original_model}")
-            
+            raise ModelNotFoundError(
+                f"Unsupported model: {original_model}",
+                provider="anthropic",
+                model_name=original_model
+            )
+
         # Prepare messages and system prompt
         anthropic_messages, system_message, system_cache_control = self._prepare_messages(messages)
         
@@ -269,6 +288,10 @@ class AnthropicProvider(BaseLLMProvider):
             request_params["tools"] = self._prepare_tools(tools)
             if tool_choice:
                 request_params["tool_choice"] = self._prepare_tool_choice(tool_choice)
+
+        # Apply extra parameters if provided
+        if extra_params:
+            request_params.update(extra_params)
                 
         # Handle JSON response format
         if json_response or (response_format and response_format.get("type") in ["json_object", "json"]):
@@ -328,11 +351,20 @@ class AnthropicProvider(BaseLLMProvider):
         except Exception as e:
             error_msg = str(e)
             if "API key" in error_msg.lower():
-                raise ValueError(f"Anthropic API authentication failed: {error_msg}") from e
+                raise ProviderAuthenticationError(
+                    f"Anthropic API authentication failed: {error_msg}",
+                    provider="anthropic"
+                ) from e
             elif "rate limit" in error_msg.lower():
-                raise ValueError(f"Anthropic API rate limit exceeded: {error_msg}") from e
+                raise ProviderRateLimitError(
+                    f"Anthropic API rate limit exceeded: {error_msg}",
+                    provider="anthropic"
+                ) from e
             else:
-                raise Exception(f"Anthropic API error: {error_msg}") from e
+                raise ProviderResponseError(
+                    f"Anthropic API error: {error_msg}",
+                    provider="anthropic"
+                ) from e
     
     def _prepare_messages(self, messages: List[Message]) -> tuple[List[Dict], Optional[str], Optional[Dict]]:
         """Convert messages to Anthropic format and extract system message with cache control."""
@@ -468,6 +500,7 @@ class AnthropicProvider(BaseLLMProvider):
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
         # Process model name
@@ -484,7 +517,11 @@ class AnthropicProvider(BaseLLMProvider):
 
         # Verify model is supported
         if not self.validate_model(model):
-            raise ValueError(f"Unsupported model: {original_model}")
+            raise ModelNotFoundError(
+                f"Unsupported model: {original_model}",
+                provider="anthropic",
+                model_name=original_model
+            )
 
         # Convert messages to Anthropic format using _prepare_messages
         anthropic_messages, system_message, system_cache_control = self._prepare_messages(messages)
@@ -516,6 +553,10 @@ class AnthropicProvider(BaseLLMProvider):
             if tool_choice:
                 request_params["tool_choice"] = self._prepare_tool_choice(tool_choice)
 
+        # Apply extra parameters if provided
+        if extra_params:
+            request_params.update(extra_params)
+
         # Handle JSON response format
         if json_response or (response_format and response_format.get("type") in ["json_object", "json"]):
             json_instruction = "\n\nIMPORTANT: You must respond with valid JSON only."
@@ -542,7 +583,10 @@ class AnthropicProvider(BaseLLMProvider):
 
             breaker_key = f"anthropic:{model}"
             if not await self._breaker.allow(breaker_key):
-                raise Exception("Anthropic circuit open for model")
+                raise CircuitBreakerError(
+                    "Anthropic circuit breaker is open - too many recent failures",
+                    provider="anthropic"
+                )
             response: AnthropicMessage = await retry_async(_do_call)
             await self._breaker.record_success(breaker_key)
         except Exception as e:
@@ -553,18 +597,32 @@ class AnthropicProvider(BaseLLMProvider):
             # Handle specific Anthropic errors with more context
             error_msg = str(e)
             if "API key" in error_msg.lower():
-                raise ValueError(
-                    f"Anthropic API authentication failed: {error_msg}"
+                raise ProviderAuthenticationError(
+                    f"Anthropic API authentication failed: {error_msg}",
+                    provider="anthropic"
                 ) from e
             elif "rate limit" in error_msg.lower():
-                raise ValueError(
-                    f"Anthropic API rate limit exceeded: {error_msg}"
+                raise ProviderRateLimitError(
+                    f"Anthropic API rate limit exceeded: {error_msg}",
+                    provider="anthropic"
                 ) from e
             elif "model" in error_msg.lower() and "not found" in error_msg.lower():
-                raise ValueError(f"Anthropic model not available: {error_msg}") from e
+                raise ModelNotFoundError(
+                    f"Anthropic model not available: {error_msg}",
+                    provider="anthropic",
+                    model_name=model
+                ) from e
+            elif "timeout" in error_msg.lower():
+                raise ProviderTimeoutError(
+                    f"Anthropic API request timed out: {error_msg}",
+                    provider="anthropic"
+                ) from e
             else:
                 # Re-raise SDK exceptions with our standard format
-                raise Exception(f"Anthropic API error: {error_msg}") from e
+                raise ProviderResponseError(
+                    f"Anthropic API error: {error_msg}",
+                    provider="anthropic"
+                ) from e
 
         # Extract the content from the response
         content = ""

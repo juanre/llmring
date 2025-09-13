@@ -11,6 +11,12 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from ollama import AsyncClient, ResponseError
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
+from llmring.exceptions import (
+    CircuitBreakerError,
+    ModelNotFoundError,
+    ProviderResponseError,
+    ProviderTimeoutError,
+)
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.schemas import LLMResponse, Message, StreamChunk
@@ -221,6 +227,7 @@ class OllamaProvider(BaseLLMProvider):
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         stream: Optional[bool] = False,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the Ollama API using the official SDK.
@@ -250,6 +257,7 @@ class OllamaProvider(BaseLLMProvider):
                     tool_choice=tool_choice,
                     json_response=json_response,
                     cache=cache,
+                    extra_params=extra_params,
                 )
                 yield StreamChunk(
                     delta=response.content,
@@ -258,7 +266,7 @@ class OllamaProvider(BaseLLMProvider):
                     usage=response.usage,
                 )
             return _single_chunk_stream()
-        
+
         return await self._chat_non_streaming(
             messages=messages,
             model=model,
@@ -269,6 +277,7 @@ class OllamaProvider(BaseLLMProvider):
             tool_choice=tool_choice,
             json_response=json_response,
             cache=cache,
+            extra_params=extra_params,
         )
     
     async def _chat_non_streaming(
@@ -282,6 +291,7 @@ class OllamaProvider(BaseLLMProvider):
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
         # Strip provider prefix if present
@@ -291,7 +301,11 @@ class OllamaProvider(BaseLLMProvider):
         # Note: We're more lenient with model validation for Ollama
         # since models are user-installed locally
         if not self.validate_model(model):
-            raise ValueError(f"Invalid model name format: {model}")
+            raise ModelNotFoundError(
+                f"Invalid model name format: {model}",
+                provider="ollama",
+                model_name=model
+            )
 
         # Convert messages to Ollama format
         ollama_messages = []
@@ -368,21 +382,33 @@ class OllamaProvider(BaseLLMProvider):
             # Use the Ollama SDK's chat method with a total deadline and retries
             timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
 
+            # Build request parameters
+            request_params = {
+                "model": model,
+                "messages": ollama_messages,
+                "stream": False,
+                "options": options,
+            }
+
+            if format_param:
+                request_params["format"] = format_param
+
+            # Apply extra parameters if provided
+            if extra_params:
+                request_params.update(extra_params)
+
             async def _do_call():
                 return await asyncio.wait_for(
-                    self.client.chat(
-                        model=model,
-                        messages=ollama_messages,
-                        stream=False,
-                        options=options,
-                        format=format_param,
-                    ),
+                    self.client.chat(**request_params),
                     timeout=timeout_s,
                 )
 
             key = f"ollama:{model}"
             if not await self._breaker.allow(key):
-                raise Exception("Ollama circuit open for model")
+                raise CircuitBreakerError(
+                    "Ollama circuit breaker is open - too many recent failures",
+                    provider="ollama"
+                )
             response = await retry_async(_do_call)
             await self._breaker.record_success(key)
 
@@ -447,11 +473,36 @@ class OllamaProvider(BaseLLMProvider):
 
         except ResponseError as e:
             # Handle Ollama-specific errors
-            raise Exception(f"Ollama API error: {e.error}")
+            error_msg = str(e.error)
+            if "timeout" in error_msg.lower():
+                raise ProviderTimeoutError(
+                    f"Ollama API request timed out: {error_msg}",
+                    provider="ollama"
+                ) from e
+            else:
+                raise ProviderResponseError(
+                    f"Ollama API error: {error_msg}",
+                    provider="ollama"
+                ) from e
         except Exception as e:
             try:
                 await self._breaker.record_failure(f"ollama:{model}")
             except Exception:
                 pass
             # Handle general errors
-            raise Exception(f"Failed to connect to Ollama at {self.base_url}: {str(e)}")
+            error_msg = str(e)
+            if "timeout" in error_msg.lower():
+                raise ProviderTimeoutError(
+                    f"Failed to connect to Ollama at {self.base_url}: {error_msg}",
+                    provider="ollama"
+                ) from e
+            elif "connection" in error_msg.lower() or "connect" in error_msg.lower():
+                raise ProviderResponseError(
+                    f"Failed to connect to Ollama at {self.base_url}: {error_msg}",
+                    provider="ollama"
+                ) from e
+            else:
+                raise ProviderResponseError(
+                    f"Ollama error: {error_msg}",
+                    provider="ollama"
+                ) from e

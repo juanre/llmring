@@ -15,7 +15,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
-import httpx
 
 from llmring.schemas import LLMRequest, LLMResponse, Message, StreamChunk
 from llmring.service import LLMRing

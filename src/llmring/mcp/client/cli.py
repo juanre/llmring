@@ -12,7 +12,6 @@ import json
 import os
 import sys
 from datetime import datetime, UTC
-from typing import Any, Optional
 
 from dotenv import load_dotenv
 from rich.console import Console

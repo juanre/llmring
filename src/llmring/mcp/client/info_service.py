@@ -18,7 +18,6 @@ from llmring.exceptions import (
     ServerConnectionError,
     ProviderError,
     ModelError,
-    ValidationError,
     ConfigurationError,
 )
 

@@ -11,7 +11,7 @@ This module consolidates all file handling logic including:
 import base64
 import mimetypes
 import os
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Tuple, Union
 from urllib.parse import urlparse
 
 import httpx
@@ -19,9 +19,7 @@ import httpx
 from llmring.exceptions import (
     FileProcessingError,
     InvalidFileFormatError,
-    FileSizeError,
     FileAccessError,
-    NetworkError,
     ValidationError,
 )
 
@@ -49,10 +47,10 @@ def guess_content_type_from_bytes(data: bytes) -> str:
             mime = magic.Magic(mime=True)
             content_type = mime.from_buffer(data)
             return content_type
-        except (ImportError, OSError, RuntimeError) as e:
+        except (ImportError, OSError, RuntimeError):
             # Magic library issues - fall back to basic detection
             pass
-        except Exception as e:
+        except Exception:
             # Unexpected error with magic library - log and fall back
             pass
     

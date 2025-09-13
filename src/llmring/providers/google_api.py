@@ -12,6 +12,14 @@ from google import genai
 from google.genai import types
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
+from llmring.exceptions import (
+    CircuitBreakerError,
+    ModelNotFoundError,
+    ProviderAuthenticationError,
+    ProviderRateLimitError,
+    ProviderResponseError,
+    ProviderTimeoutError,
+)
 from llmring.net.circuit_breaker import CircuitBreaker
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
@@ -45,8 +53,9 @@ class GoogleProvider(BaseLLMProvider):
             or os.environ.get("GOOGLE_API_KEY", "")
         )
         if not api_key:
-            raise ValueError(
-                "Google API key must be provided (GEMINI_API_KEY or GOOGLE_API_KEY)"
+            raise ProviderAuthenticationError(
+                "Google API key must be provided (GEMINI_API_KEY or GOOGLE_API_KEY)",
+                provider="google"
             )
             
         # Create config for base class
@@ -276,6 +285,7 @@ class GoogleProvider(BaseLLMProvider):
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         stream: Optional[bool] = False,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the Google Gemini API using the official SDK.
@@ -308,6 +318,7 @@ class GoogleProvider(BaseLLMProvider):
                     tool_choice=tool_choice,
                     json_response=json_response,
                     cache=cache,
+                    extra_params=extra_params,
                 )
                 yield StreamChunk(
                     delta=response.content,
@@ -316,7 +327,7 @@ class GoogleProvider(BaseLLMProvider):
                     usage=response.usage,
                 )
             return _single_chunk_stream()
-        
+
         return await self._chat_non_streaming(
             messages=messages,
             model=model,
@@ -327,6 +338,7 @@ class GoogleProvider(BaseLLMProvider):
             tool_choice=tool_choice,
             json_response=json_response,
             cache=cache,
+            extra_params=extra_params,
         )
     
     async def _chat_non_streaming(
@@ -340,6 +352,7 @@ class GoogleProvider(BaseLLMProvider):
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
         # Strip provider prefix if present
@@ -348,7 +361,11 @@ class GoogleProvider(BaseLLMProvider):
 
         # Verify model is supported
         if not self.validate_model(model):
-            raise ValueError(f"Unsupported model: {model}")
+            raise ModelNotFoundError(
+                f"Unsupported model: {model}",
+                provider="google",
+                model_name=model
+            )
 
         # Get the actual API model name
         api_model = self.model_mapping.get(model, model)
@@ -414,6 +431,10 @@ class GoogleProvider(BaseLLMProvider):
                         f"{existing_instruction}\n\nResponse must follow this JSON schema:\n{schema_str}".strip()
                     )
 
+        # Apply extra parameters if provided
+        if extra_params:
+            config_params.update(extra_params)
+
         config = types.GenerateContentConfig(**config_params) if config_params else None
 
         # Execute in thread pool since google-genai is synchronous
@@ -448,7 +469,10 @@ class GoogleProvider(BaseLLMProvider):
 
                 key = f"google:{api_model}"
                 if not await self._breaker.allow(key):
-                    raise Exception("Google circuit open for model")
+                    raise CircuitBreakerError(
+                        "Google circuit breaker is open - too many recent failures",
+                        provider="google"
+                    )
                 response = await retry_async(_do_call)
                 await self._breaker.record_success(key)
 
@@ -512,29 +536,45 @@ class GoogleProvider(BaseLLMProvider):
 
                     key = f"google:{api_model}"
                     if not await self._breaker.allow(key):
-                        raise Exception("Google circuit open for model")
+                        raise CircuitBreakerError(
+                            "Google circuit breaker is open - too many recent failures",
+                            provider="google"
+                        )
                     response = await retry_async(_do_chat)
                     await self._breaker.record_success(key)
                     response_text = response.text
                 else:
                     # No messages? This shouldn't happen but handle gracefully
-                    raise ValueError("No messages provided for chat")
+                    raise ProviderResponseError(
+                        "No messages provided for chat",
+                        provider="google"
+                    )
         except Exception as e:
             error_msg = str(e)
             # Handle rate limiting with exponential backoff
             if "rate limit" in error_msg.lower() or "quota" in error_msg.lower():
                 # Wait a bit before re-raising to allow for retry at higher level
                 await asyncio.sleep(1)
-                raise ValueError(
-                    f"Google Gemini API rate limit exceeded: {error_msg}"
+                raise ProviderRateLimitError(
+                    f"Google Gemini API rate limit exceeded: {error_msg}",
+                    provider="google"
                 ) from e
             elif "api key" in error_msg.lower():
-                raise ValueError(
-                    f"Google API authentication failed: {error_msg}"
+                raise ProviderAuthenticationError(
+                    f"Google API authentication failed: {error_msg}",
+                    provider="google"
+                ) from e
+            elif "timeout" in error_msg.lower():
+                raise ProviderTimeoutError(
+                    f"Google API request timed out: {error_msg}",
+                    provider="google"
                 ) from e
             else:
                 # Re-raise SDK exceptions with our standard format
-                raise Exception(f"Google Gemini API error: {error_msg}") from e
+                raise ProviderResponseError(
+                    f"Google Gemini API error: {error_msg}",
+                    provider="google"
+                ) from e
 
         # Parse for function calls (basic handling since Gemini doesn't have native function calling yet)
         tool_calls = None

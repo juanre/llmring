@@ -350,10 +350,12 @@ class StatelessChatEngine:
         )
 
         # Call LLM
-        response = await self.llmring.chat(
-            llm_request,
-            id_at_origin=context.auth_context.get("user_id") if context.auth_context else None,
-        )
+        # Store id_at_origin in metadata if needed for tracking
+        if context.auth_context and "user_id" in context.auth_context:
+            llm_request.metadata = llm_request.metadata or {}
+            llm_request.metadata["id_at_origin"] = context.auth_context["user_id"]
+
+        response = await self.llmring.chat(llm_request)
 
         # Extract response content
         content = response.content
@@ -419,10 +421,12 @@ class StatelessChatEngine:
 
         # For now, simulate streaming by calling regular completion
         # In production, this would use actual streaming API
-        response = await self.llmring.chat(
-            llm_request,
-            id_at_origin=context.auth_context.get("user_id") if context.auth_context else None,
-        )
+        # Store id_at_origin in metadata if needed for tracking
+        if context.auth_context and "user_id" in context.auth_context:
+            llm_request.metadata = llm_request.metadata or {}
+            llm_request.metadata["id_at_origin"] = context.auth_context["user_id"]
+
+        response = await self.llmring.chat(llm_request)
 
         # Simulate streaming chunks
         content = response.content

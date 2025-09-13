@@ -138,18 +138,18 @@ class LLMRingExtended(LLMRing):
                     })
                 
                 # Add assistant response
-                if response.choices:
-                    for choice in response.choices:
-                        messages_to_store.append({
-                            "role": "assistant",
-                            "content": choice.get("message", {}).get("content"),
-                            "input_tokens": response.usage.get("prompt_tokens"),
-                            "output_tokens": response.usage.get("completion_tokens"),
-                            "metadata": {
-                                "model_used": response.model,
-                                "finish_reason": choice.get("finish_reason"),
-                            }
-                        })
+                # LLMResponse has content and tool_calls, not choices
+                messages_to_store.append({
+                    "role": "assistant",
+                    "content": response.content,
+                    "input_tokens": response.usage.get("prompt_tokens"),
+                    "output_tokens": response.usage.get("completion_tokens"),
+                    "metadata": {
+                        "model_used": response.model,
+                        "finish_reason": response.finish_reason,
+                        "tool_calls": response.tool_calls if hasattr(response, 'tool_calls') else None,
+                    }
+                })
                 
                 # Send to server
                 await self.server_client.post(
@@ -302,11 +302,11 @@ class ConversationManager:
         )
         
         # Add assistant response to history
-        if response.choices:
-            self.message_history.append({
-                "role": "assistant",
-                "content": response.choices[0].get("message", {}).get("content"),
-            })
+        # LLMResponse has content, not choices
+        self.message_history.append({
+            "role": "assistant",
+            "content": response.content,
+        })
         
         return response
     

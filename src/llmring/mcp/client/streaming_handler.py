@@ -6,9 +6,9 @@ Handles streaming responses with tool execution support.
 
 import json
 import logging
-from typing import Any, AsyncIterator, Optional
+from typing import AsyncIterator
 
-from llmring.schemas import LLMRequest, LLMResponse, Message, StreamChunk
+from llmring.schemas import LLMRequest, Message, StreamChunk
 from llmring.exceptions import MCPToolError, ToolExecutionError
 
 logger = logging.getLogger(__name__)
@@ -67,9 +67,7 @@ class StreamingToolHandler:
             if chunk.tool_calls:
                 accumulated_tool_calls = chunk.tool_calls
             
-            # Store usage information
-            if chunk.usage:
-                accumulated_usage = chunk.usage
+            # Usage information is already in the chunk, no need to accumulate
             
             # If we've finished and have tool calls, handle them
             if chunk.finish_reason == "tool_calls" and accumulated_tool_calls:
