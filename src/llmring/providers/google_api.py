@@ -444,14 +444,14 @@ class GoogleProvider(BaseLLMProvider):
                     # Disable function calling
                     config_params["tool_config"] = types.ToolConfig(
                         function_calling_config=types.FunctionCallingConfig(
-                            mode=types.FunctionCallingConfig.Mode.NONE
+                            mode="NONE"
                         )
                     )
                 elif tool_choice == "any" or tool_choice == "required":
                     # Force function calling
                     config_params["tool_config"] = types.ToolConfig(
                         function_calling_config=types.FunctionCallingConfig(
-                            mode=types.FunctionCallingConfig.Mode.ANY
+                            mode="ANY"
                         )
                     )
                 elif isinstance(tool_choice, dict) and "function" in tool_choice:
@@ -459,7 +459,7 @@ class GoogleProvider(BaseLLMProvider):
                     # Fall back to ANY mode with the available tools
                     config_params["tool_config"] = types.ToolConfig(
                         function_calling_config=types.FunctionCallingConfig(
-                            mode=types.FunctionCallingConfig.Mode.ANY
+                            mode="ANY"
                         )
                     )
 
@@ -727,14 +727,14 @@ class GoogleProvider(BaseLLMProvider):
                     # Disable function calling
                     config_params["tool_config"] = types.ToolConfig(
                         function_calling_config=types.FunctionCallingConfig(
-                            mode=types.FunctionCallingConfig.Mode.NONE
+                            mode="NONE"
                         )
                     )
                 elif tool_choice == "any" or tool_choice == "required":
                     # Force function calling
                     config_params["tool_config"] = types.ToolConfig(
                         function_calling_config=types.FunctionCallingConfig(
-                            mode=types.FunctionCallingConfig.Mode.ANY
+                            mode="ANY"
                         )
                     )
                 elif isinstance(tool_choice, dict) and "function" in tool_choice:
@@ -742,7 +742,7 @@ class GoogleProvider(BaseLLMProvider):
                     # Fall back to ANY mode with the available tools
                     config_params["tool_config"] = types.ToolConfig(
                         function_calling_config=types.FunctionCallingConfig(
-                            mode=types.FunctionCallingConfig.Mode.ANY
+                            mode="ANY"
                         )
                     )
 

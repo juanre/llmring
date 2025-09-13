@@ -41,6 +41,7 @@ class LLMResponse(BaseModel):
     usage: Optional[Dict[str, Any]] = None
     finish_reason: Optional[str] = None
     tool_calls: Optional[List[Dict[str, Any]]] = None
+    parsed: Optional[Dict[str, Any]] = None  # Parsed JSON when response_format used
 
     @property
     def total_tokens(self) -> Optional[int]:

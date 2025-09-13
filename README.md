@@ -7,6 +7,7 @@ A comprehensive Python library for LLM integration with unified interface, advan
 - **🔄 Unified Interface**: Single API for all major LLM providers
 - **⚡ Streaming Support**: Real streaming for all providers (not simulated)
 - **🛠️ Native Tool Calling**: Provider-native function calling with consistent interface
+- **📋 Unified Structured Output**: JSON schema works across all providers with automatic adaptation
 - **📋 Alias Management**: Semantic model aliases via lockfile (`deep`, `fast`, `balanced`)
 - **💰 Cost Tracking**: Automatic cost calculation and receipt generation
 - **🎯 Registry Integration**: Centralized model capabilities and pricing
@@ -237,6 +238,7 @@ response = await llm.chat([
 
 - **[Provider Usage Guide](docs/provider-usage.md)** - Provider-specific features and examples
 - **[API Reference](docs/api-reference.md)** - Detailed API documentation
+- **[Structured Output](docs/structured-output.md)** - Unified JSON schema across all providers
 - **[MCP Integration](docs/mcp-integration.md)** - Model Context Protocol guide
 - **[Examples](examples/)** - Working code examples
 

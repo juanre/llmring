@@ -6,6 +6,7 @@ import logging
 import os
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
+import json
 from llmring.base import BaseLLMProvider
 from llmring.exceptions import ModelNotFoundError, ProviderNotFoundError
 from llmring.lockfile import Lockfile
@@ -256,31 +257,41 @@ class LLMRing:
             logger.warning(f"Context validation warning: {validation_error}")
             # We log but don't block - let the provider handle it
 
+        # Apply structured output adapter for non-OpenAI providers
+        adapted_request = await self._apply_structured_output_adapter(
+            request, provider_type, provider
+        )
+
         # Check if streaming is requested
-        if request.stream:
+        if adapted_request.stream:
             # For streaming, we need to wrap the stream to handle receipts
             return self._create_streaming_wrapper(
                 provider=provider,
                 model_name=model_name,
-                request=request,
+                request=adapted_request,
                 provider_type=provider_type,
                 original_alias=original_alias,
                 profile=profile
             )
-        
+
         # Send non-streaming request to provider
         response = await provider.chat(
-            messages=request.messages,
+            messages=adapted_request.messages,
             model=model_name,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            response_format=request.response_format,
-            tools=request.tools,
-            tool_choice=request.tool_choice,
-            json_response=request.json_response,
-            cache=request.cache,
+            temperature=adapted_request.temperature,
+            max_tokens=adapted_request.max_tokens,
+            response_format=adapted_request.response_format,
+            tools=adapted_request.tools,
+            tool_choice=adapted_request.tool_choice,
+            json_response=adapted_request.json_response,
+            cache=adapted_request.cache,
             stream=False,
-            extra_params=request.extra_params,
+            extra_params=adapted_request.extra_params,
+        )
+
+        # Post-process structured output if adapter was used
+        response = await self._post_process_structured_output(
+            response, adapted_request, provider_type
         )
 
         # Calculate and add cost information if available
@@ -617,6 +628,186 @@ class LLMRing:
         # Cache and return
         self._model_cache[cache_key] = model_info
         return model_info
+
+    async def _apply_structured_output_adapter(
+        self,
+        request: LLMRequest,
+        provider_type: str,
+        provider: BaseLLMProvider
+    ) -> LLMRequest:
+        """
+        Apply structured output adapter for non-OpenAI providers.
+
+        Converts json_schema requests to tool-based approaches for Anthropic/Google.
+        """
+        # Only adapt if we have a json_schema request and no existing tools
+        if (not request.response_format or
+            request.response_format.get("type") != "json_schema" or
+            request.tools):
+            return request
+
+        schema = request.response_format.get("json_schema", {}).get("schema", {})
+        if not schema:
+            return request
+
+        # Create a copy of the request to modify
+        from copy import deepcopy
+        adapted_request = deepcopy(request)
+
+        # Import Message for use in adapter
+        from llmring.schemas import Message
+
+        if provider_type == "anthropic":
+            # Anthropic: Use tool injection approach
+            respond_tool = {
+                "type": "function",
+                "function": {
+                    "name": "respond_with_structure",
+                    "description": f"Respond with structured data matching the required schema",
+                    "parameters": schema
+                }
+            }
+            adapted_request.tools = [respond_tool]
+            adapted_request.tool_choice = {"type": "any"}  # Force tool use
+
+        elif provider_type == "google":
+            # Google: Use function declaration approach
+            # Clean schema for Google (doesn't support all JSON Schema features)
+            google_schema = {k: v for k, v in schema.items() if k != "additionalProperties"}
+
+            respond_tool = {
+                "type": "function",
+                "function": {
+                    "name": "respond_with_structure",
+                    "description": f"Respond with structured data matching the required schema",
+                    "parameters": google_schema
+                }
+            }
+            adapted_request.tools = [respond_tool]
+            adapted_request.tool_choice = "any"  # Force function calling
+
+        elif provider_type == "ollama":
+            # Ollama: Best effort with format and schema hinting
+            adapted_request.json_response = True
+
+            # Add schema as system instruction
+            schema_instruction = f"\n\nIMPORTANT: Respond with valid JSON matching this schema:\n{json.dumps(schema, indent=2)}"
+
+            # Add to system message or create one
+            messages = list(adapted_request.messages)
+            if messages and messages[0].role == "system":
+                messages[0] = Message(
+                    role="system",
+                    content=messages[0].content + schema_instruction,
+                    metadata=messages[0].metadata
+                )
+            else:
+                messages.insert(0, Message(
+                    role="system",
+                    content=f"You are a helpful assistant.{schema_instruction}"
+                ))
+            adapted_request.messages = messages
+
+        # Mark request as adapted for post-processing
+        adapted_request.metadata = adapted_request.metadata or {}
+        adapted_request.metadata["_structured_output_adapted"] = True
+        adapted_request.metadata["_original_schema"] = schema
+
+        return adapted_request
+
+    async def _post_process_structured_output(
+        self,
+        response: LLMResponse,
+        request: LLMRequest,
+        provider_type: str
+    ) -> LLMResponse:
+        """
+        Post-process response from structured output adapter.
+
+        Extracts JSON from tool calls and validates against schema.
+        """
+        import json
+
+        # Only process if request was adapted
+        if (not request.metadata or
+            not request.metadata.get("_structured_output_adapted")):
+            return response
+
+        original_schema = request.metadata.get("_original_schema", {})
+
+        try:
+            if provider_type == "openai":
+                # OpenAI native: Parse JSON from content
+                try:
+                    parsed_data = json.loads(response.content)
+                    response.parsed = parsed_data
+
+                    # Validate against schema if strict mode
+                    if request.response_format and request.response_format.get("strict"):
+                        self._validate_json_schema(parsed_data, original_schema)
+
+                except json.JSONDecodeError:
+                    logger.warning("Failed to parse JSON from OpenAI response")
+
+            elif provider_type in ["anthropic", "google"] and response.tool_calls:
+                # Extract JSON from tool call arguments
+                for tool_call in response.tool_calls:
+                    if tool_call["function"]["name"] == "respond_with_structure":
+                        # Parse the arguments as our structured response
+                        tool_args = tool_call["function"]["arguments"]
+                        if isinstance(tool_args, str):
+                            parsed_data = json.loads(tool_args)
+                        else:
+                            parsed_data = tool_args
+
+                        # Set content to JSON string and parsed to dict
+                        response.content = json.dumps(parsed_data, indent=2)
+                        response.parsed = parsed_data
+
+                        # Validate against schema if strict mode
+                        if request.response_format and request.response_format.get("strict"):
+                            self._validate_json_schema(parsed_data, original_schema)
+
+                        break
+
+            elif provider_type == "ollama":
+                # Try to parse JSON from content
+                try:
+                    parsed_data = json.loads(response.content)
+                    response.parsed = parsed_data
+
+                    # Validate against schema if strict mode
+                    if request.response_format and request.response_format.get("strict"):
+                        self._validate_json_schema(parsed_data, original_schema)
+
+                except json.JSONDecodeError:
+                    # If JSON parsing fails and strict mode, could implement retry logic here
+                    logger.warning(f"Failed to parse JSON from {provider_type} response")
+
+        except Exception as e:
+            logger.warning(f"Structured output post-processing failed: {e}")
+
+        return response
+
+    def _validate_json_schema(self, data: Dict[str, Any], schema: Dict[str, Any]) -> None:
+        """
+        Validate data against JSON schema.
+
+        Raises ValidationError if data doesn't match schema.
+        """
+        try:
+            import jsonschema
+            jsonschema.validate(instance=data, schema=schema)
+        except ImportError:
+            # If jsonschema not available, skip validation
+            logger.warning("jsonschema not installed, skipping schema validation")
+        except jsonschema.ValidationError as e:
+            from llmring.exceptions import ValidationError
+            raise ValidationError(
+                f"Response does not match required schema: {e.message}",
+                field=e.absolute_path[-1] if e.absolute_path else None,
+                value=e.instance
+            )
 
     async def get_model_from_registry(
         self, provider: str, model_name: str
