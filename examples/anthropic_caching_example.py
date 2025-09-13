@@ -120,6 +120,10 @@ When answering questions, you:
 8. Provide references to official documentation when relevant
 9. Recommend appropriate tools and libraries
 10. Consider internationalization and localization needs
+
+Remember to be comprehensive in your responses. Provide detailed explanations with examples.
+Your knowledge is extensive and you should demonstrate it through thorough, well-reasoned answers.
+Always strive for clarity and completeness in your explanations.
 """
     
     print("=" * 60)
