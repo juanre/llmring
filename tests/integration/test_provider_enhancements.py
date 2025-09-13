@@ -199,7 +199,7 @@ class TestProviderEnhancements:
         long_system = "You are an expert assistant. " * 200  # Over 1024 tokens
 
         request = LLMRequest(
-            model="anthropic:claude-3-5-sonnet-20241022",
+            model="anthropic:claude-3-5-sonnet",
             messages=[
                 Message(
                     role="system",

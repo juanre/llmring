@@ -31,6 +31,7 @@ skip_if_ollama_not_running = pytest.mark.skipif(
 )
 
 
+@skip_if_ollama_not_running
 @pytest.mark.llm
 @pytest.mark.integration
 @pytest.mark.slow
@@ -65,10 +66,23 @@ class TestOllamaProviderIntegration:
                 pytest.skip("No models available in Ollama")
 
             # Skip large models that are too slow for integration testing
-            large_models = ["llama3.3", "deepseek-r1:32b", "llama3.2"]
+            # Allow small variants like :1b, :0.5b
+            small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
+
             for model in models:
-                if not any(large_model in model for large_model in large_models):
-                    return model  # Return first small model
+                # Check if it's a small variant
+                is_small = any(indicator in model for indicator in small_model_indicators)
+
+                # Check if it's a large base model
+                large_patterns = ["llama3.3", "deepseek-r1:32b"]
+                is_large_base = any(pattern in model for pattern in large_patterns)
+
+                # Allow small models or models that aren't in the large list
+                if is_small or not is_large_base:
+                    # Additional check for llama3.2 - only allow if it's small
+                    if "llama3.2" in model and not is_small:
+                        continue  # Skip large 3.2 models
+                    return model
 
             # If only large models available, skip tests
             pytest.skip(
@@ -175,7 +189,8 @@ class TestOllamaProviderIntegration:
         """Test error handling with invalid model."""
         messages = [Message(role="user", content="Hello")]
 
-        with pytest.raises(ValueError, match="Invalid model name format"):
+        from llmring.exceptions import ModelNotFoundError
+        with pytest.raises(ModelNotFoundError, match="Invalid model name format"):
             await provider.chat(messages=messages, model="invalid_model_name!@#")
 
     @pytest.mark.asyncio
