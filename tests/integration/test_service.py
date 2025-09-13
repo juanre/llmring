@@ -9,6 +9,7 @@ import pytest
 
 from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
+from llmring.exceptions import ProviderNotFoundError, ProviderAuthenticationError
 
 
 @pytest.mark.llm
@@ -235,7 +236,7 @@ class TestLLMRingIntegration:
             messages=[Message(role="user", content="test")], model="invalid:model"
         )
 
-        with pytest.raises(ValueError, match="Provider .* not found"):
+        with pytest.raises(ProviderNotFoundError, match="Provider .* not found"):
             await llmring.chat(request)
 
     @pytest.mark.asyncio
@@ -247,5 +248,5 @@ class TestLLMRingIntegration:
             model="definitely_not_a_provider:gpt-4",
         )
 
-        with pytest.raises(ValueError, match="Provider .* not found"):
+        with pytest.raises(ProviderNotFoundError, match="Provider .* not found"):
             await llmring.chat(request)

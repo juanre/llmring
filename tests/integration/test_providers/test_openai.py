@@ -12,6 +12,7 @@ import pytest
 
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.schemas import LLMResponse, Message
+from llmring.exceptions import ModelNotFoundError, ProviderResponseError
 
 
 @pytest.mark.llm
@@ -204,7 +205,7 @@ class TestOpenAIProviderIntegration:
         """Test error handling with invalid model."""
         messages = [Message(role="user", content="Hello")]
 
-        with pytest.raises(ValueError, match="Unsupported model"):
+        with pytest.raises(ModelNotFoundError, match="Unsupported model"):
             await provider.chat(messages=messages, model="invalid-model-name")
 
     @pytest.mark.asyncio
@@ -496,7 +497,7 @@ startxref
 
         # Should raise error about tools not being supported with PDF processing
         with pytest.raises(
-            ValueError,
+            ProviderResponseError,
             match="Tools and custom response formats are not supported when processing PDFs",
         ):
             await provider.chat(messages=messages, model="gpt-4o", tools=tools)

@@ -8,12 +8,29 @@ import os
 
 import aiohttp
 import pytest
+import httpx
 
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.schemas import LLMResponse, Message
 
 
-@pytest.mark.skip(reason="Ollama tests take too long - skipping for faster test runs")
+def is_ollama_running():
+    """Check if Ollama is running at localhost:11434."""
+    try:
+        with httpx.Client() as client:
+            response = client.get("http://localhost:11434/api/version", timeout=2.0)
+            return response.status_code == 200
+    except:
+        return False
+
+
+# Skip decorator that checks if Ollama is actually running
+skip_if_ollama_not_running = pytest.mark.skipif(
+    not is_ollama_running(),
+    reason="Ollama service not running at localhost:11434"
+)
+
+
 @pytest.mark.llm
 @pytest.mark.integration
 @pytest.mark.slow

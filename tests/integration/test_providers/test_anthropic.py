@@ -10,6 +10,7 @@ import pytest
 
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.schemas import LLMResponse, Message
+from llmring.exceptions import ModelNotFoundError
 
 
 @pytest.mark.llm
@@ -185,7 +186,7 @@ class TestAnthropicProviderIntegration:
         """Test error handling with invalid model."""
         messages = [Message(role="user", content="Hello")]
 
-        with pytest.raises(ValueError, match="Unsupported model"):
+        with pytest.raises(ModelNotFoundError, match="Unsupported model"):
             await provider.chat(messages=messages, model="invalid-model-name")
 
     @pytest.mark.asyncio
