@@ -8,7 +8,8 @@ A comprehensive Python library for LLM integration with unified interface, advan
 - **⚡ Streaming Support**: Real streaming for all providers (not simulated)
 - **🛠️ Native Tool Calling**: Provider-native function calling with consistent interface
 - **📋 Unified Structured Output**: JSON schema works across all providers with automatic adaptation
-- **📋 Alias Management**: Semantic model aliases via lockfile (`deep`, `fast`, `balanced`)
+- **🧠 Intelligent Configuration**: AI-powered lockfile creation with registry analysis
+- **📋 Smart Aliases**: Always-current semantic aliases (`deep`, `fast`, `balanced`) via intelligent recommendations
 - **💰 Cost Tracking**: Automatic cost calculation and receipt generation
 - **🎯 Registry Integration**: Centralized model capabilities and pricing
 - **🔧 Advanced Features**:
@@ -158,25 +159,39 @@ request = LLMRequest(
 )
 ```
 
-### Model Aliases
+### 🧠 Intelligent Model Aliases
+
+LLMRing features intelligent lockfile creation that analyzes the current registry and recommends optimal aliases:
 
 ```bash
-# Initialize lockfile with smart defaults
-llmring lock init
+# Create intelligent lockfile with current best models
+llmring lock init --interactive
 
-# Use semantic aliases instead of specific models
+# Analyze your configuration
+llmring lock analyze
+
+# Optimize existing lockfile
+llmring lock optimize
 ```
 
 ```python
+# Use semantic aliases (always current, registry-based)
 request = LLMRequest(
-    model="deep",      # → powerful reasoning model
-    model="fast",      # → quick response model
-    model="balanced",  # → best overall model
+    model="deep",      # → most capable reasoning model
+    model="fast",      # → cost-effective quick responses
+    model="balanced",  # → optimal all-around model
+    model="advisor",   # → powers intelligent systems
     messages=[Message(role="user", content="Hello")]
 )
 ```
 
-#### Advanced: Direct Model Access
+**Key Benefits:**
+- **Always current**: Aliases point to latest registry models, not outdated hardcoded ones
+- **Intelligent selection**: AI advisor analyzes registry and recommends optimal configuration
+- **Cost-aware**: Transparent cost analysis and recommendations
+- **Self-hosted**: Uses LLMRing's own API to power intelligent lockfile creation
+
+### 🚪 Advanced: Direct Model Access
 
 While aliases are recommended, you can still use direct provider:model format when needed:
 
@@ -275,6 +290,16 @@ GOOGLE_GEMINI_API_KEY=AIza...
 
 # Optional
 OLLAMA_BASE_URL=http://localhost:11434  # Default
+```
+
+### Intelligent Setup
+
+```bash
+# Create optimized configuration with AI advisor
+llmring lock init --interactive
+
+# The advisor analyzes the current registry and your API keys
+# to recommend optimal model aliases for your workflow
 ```
 
 ### Dependencies

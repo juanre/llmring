@@ -21,6 +21,14 @@ warrant a major version bump to 1.0.0, signaling production stability.
 - **API**: Added `response.parsed` field for direct Python object access
 - **Validation**: Optional strict mode with jsonschema validation
 
+#### Intelligent Configuration Management
+- **NEW**: AI-powered lockfile creation with `llmring lock init --interactive`
+- **Registry-driven**: All recommendations based on live registry analysis, not hardcoded defaults
+- **Self-hosted**: Uses LLMRing's own API with advisor model to power intelligent recommendations
+- **Smart aliases**: Always-current semantic aliases that adapt as registry evolves
+- **Cost-aware**: Transparent cost analysis and optimization suggestions
+- **CLI tools**: `analyze`, `optimize`, `validate` commands for lockfile management
+
 #### Provider Enhancements
 - **Google Gemini**: Real streaming via `generate_content_stream` (no more simulation)
 - **Google Gemini**: Native function calling via `types.Tool` and `FunctionDeclaration`
