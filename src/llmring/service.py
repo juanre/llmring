@@ -781,8 +781,46 @@ class LLMRing:
                         self._validate_json_schema(parsed_data, original_schema)
 
                 except json.JSONDecodeError:
-                    # If JSON parsing fails and strict mode, could implement retry logic here
-                    logger.warning(f"Failed to parse JSON from {provider_type} response")
+                    # If JSON parsing fails and strict mode, try one repair attempt
+                    if (request.response_format and
+                        request.response_format.get("strict") and
+                        request.extra_params.get("retry_on_json_failure", True)):
+
+                        logger.info(f"JSON parsing failed for {provider_type}, attempting repair")
+
+                        # Single retry with repair prompt
+                        from copy import deepcopy
+                        from llmring.schemas import Message
+                        repair_request = deepcopy(request)
+                        repair_prompt = f"The previous response was not valid JSON. Please provide ONLY valid JSON matching this schema:\n{json.dumps(original_schema, indent=2)}\n\nOriginal content to fix:\n{response.content}"
+
+                        repair_request.messages = [Message(role="user", content=repair_prompt)]
+                        repair_request.metadata["_retry_attempt"] = True
+
+                        try:
+                            # Get provider and retry (avoid infinite recursion)
+                            if not request.metadata.get("_retry_attempt"):
+                                provider = self.get_provider(provider_type)
+                                repair_response = await provider.chat(
+                                    messages=repair_request.messages,
+                                    model=repair_request.model.split(":", 1)[1] if ":" in repair_request.model else repair_request.model,
+                                    temperature=0.1,  # Lower temperature for better JSON
+                                    max_tokens=repair_request.max_tokens,
+                                    json_response=True,
+                                    extra_params=repair_request.extra_params
+                                )
+
+                                # Try parsing the repaired response
+                                repaired_data = json.loads(repair_response.content)
+                                response.content = repair_response.content
+                                response.parsed = repaired_data
+                                self._validate_json_schema(repaired_data, original_schema)
+                                logger.info(f"JSON repair successful for {provider_type}")
+
+                        except Exception as repair_error:
+                            logger.warning(f"JSON repair attempt failed: {repair_error}")
+                    else:
+                        logger.warning(f"Failed to parse JSON from {provider_type} response")
 
         except Exception as e:
             logger.warning(f"Structured output post-processing failed: {e}")
