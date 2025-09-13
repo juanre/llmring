@@ -2,7 +2,13 @@
 
 All notable changes to LLMRing will be documented in this file.
 
-## [0.4.0] - 2025-09-13
+## [1.0.0] - 2025-09-13
+
+**🎉 First Stable Release!**
+
+This major version release includes significant breaking changes and new features.
+The extensive breaking changes (provider interface, exception handling, service layer)
+warrant a major version bump to 1.0.0, signaling production stability.
 
 ### 🚀 Major Features
 
@@ -100,15 +106,42 @@ All notable changes to LLMRing will be documented in this file.
 - **Fixed**: OpenAI streaming tool call accumulation
 - **Fixed**: PDF comment accuracy (no vector stores implemented)
 
-### 🔄 Breaking Changes
+### ⚠️ Breaking Changes
 
-- **Provider interface**: All providers now use explicit parameters instead of single `LLMRequest`
-- **Exception types**: Generic `ValueError`/`Exception` replaced with typed exceptions
-- **Response format**: Enhanced with `parsed` field for structured output
+#### Provider Interface (Major Breaking Change)
+- **BREAKING**: `BaseLLMProvider.chat()` signature changed from `chat(request: LLMRequest)` to `chat(messages, model, temperature, ...)` with explicit parameters
+- **Impact**: Custom provider implementations must update their `chat()` method signature
+- **Migration**: Update provider classes to match new signature with `extra_params` parameter
+
+#### Exception Handling (Breaking Change)
+- **BREAKING**: All providers now raise typed exceptions instead of generic `ValueError`/`Exception`
+- **Changed**:
+  - Invalid API key: `ValueError` → `ProviderAuthenticationError`
+  - Unsupported model: `ValueError` → `ModelNotFoundError`
+  - Rate limiting: `Exception` → `ProviderRateLimitError`
+  - Timeouts: `Exception` → `ProviderTimeoutError`
+  - API errors: `Exception` → `ProviderResponseError`
+- **Impact**: Exception handling code must be updated to catch specific exception types
+- **Migration**: Replace generic `except ValueError` with specific exception types from `llmring.exceptions`
+
+#### Service Layer Changes
+- **BREAKING**: `service_extended.py` response access pattern changed
+- **Changed**: Code accessing `response.choices[0].message.content` will fail
+- **Fixed**: Now uses `response.content` directly
+- **Impact**: Custom code using service_extended must update response access
+
+#### MCP Client Changes
+- **BREAKING**: `LLMRing.chat()` no longer accepts `id_at_origin` parameter
+- **Changed**: Correlation IDs now passed via `LLMRequest.metadata["id_at_origin"]`
+- **Impact**: MCP integration code must update parameter passing
+
+#### Response Schema Enhancement
+- **NEW**: Added `LLMResponse.parsed` field for structured output
+- **Non-breaking**: Existing code continues to work, new field optional
 
 ### 🎯 Migration Guide
 
-#### From 0.3.x to 0.4.0
+#### From 0.3.x to 1.0.0
 
 **Exception Handling:**
 ```python
@@ -118,7 +151,7 @@ try:
 except ValueError as e:
     print("Error:", e)
 
-# New (0.4.0)
+# New (1.0.0)
 from llmring.exceptions import ProviderAuthenticationError, ModelNotFoundError
 
 try:
@@ -131,7 +164,7 @@ except ModelNotFoundError:
 
 **Structured Output:**
 ```python
-# New in 0.4.0 - Works across all providers
+# New in 1.0.0 - Works across all providers
 request = LLMRequest(
     model="any-provider",
     response_format={
