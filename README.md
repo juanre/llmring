@@ -98,12 +98,12 @@ if response.tool_calls:
 
 ## 🔧 Advanced Features
 
-### Provider-Specific Parameters
+### 🎯 Unified Structured Output (All Providers)
 
 ```python
-# OpenAI: Structured output with JSON schema
+# Same JSON schema API works across ALL providers!
 request = LLMRequest(
-    model="openai:gpt-4o",
+    model="anthropic:claude-3-5-sonnet",  # Works with any provider
     messages=[Message(role="user", content="Generate a person")],
     response_format={
         "type": "json_schema",
@@ -113,15 +113,24 @@ request = LLMRequest(
                 "type": "object",
                 "properties": {
                     "name": {"type": "string"},
-                    "age": {"type": "integer"}
+                    "age": {"type": "integer"},
+                    "email": {"type": "string"}
                 },
-                "required": ["name", "age"],
-                "additionalProperties": False
+                "required": ["name", "age"]
             }
         },
-        "strict": True
+        "strict": True  # Validates across all providers
     }
 )
+
+response = await service.chat(request)
+print("JSON:", response.content)   # Valid JSON string
+print("Data:", response.parsed)    # Python dict ready to use
+```
+
+### Provider-Specific Parameters
+
+```python
 
 # Anthropic: Prompt caching for 90% cost savings
 request = LLMRequest(
@@ -167,22 +176,63 @@ request = LLMRequest(
 )
 ```
 
-### Raw SDK Access
+### 🚪 Raw SDK Access (Escape Hatch)
+
+When you need the full power of the underlying SDKs:
 
 ```python
-# Full SDK power when needed
-openai_client = service.get_provider("openai").client
-anthropic_client = service.get_provider("anthropic").client
-google_client = service.get_provider("google").client
-ollama_client = service.get_provider("ollama").client
+# Access any provider's raw client for maximum SDK features
+openai_client = service.get_provider("openai").client      # openai.AsyncOpenAI
+anthropic_client = service.get_provider("anthropic").client # anthropic.AsyncAnthropic
+google_client = service.get_provider("google").client       # google.genai.Client
+ollama_client = service.get_provider("ollama").client       # ollama.AsyncClient
 
-# Use any SDK feature directly
+# Use any SDK feature not exposed by LLMRing
 response = await openai_client.chat.completions.create(
     model="gpt-4o",
     messages=[{"role": "user", "content": "Hello"}],
+    logprobs=True,
+    top_logprobs=10,
+    parallel_tool_calls=False,
     # Any OpenAI parameter
 )
+
+# Anthropic with all SDK features
+response = await anthropic_client.messages.create(
+    model="claude-3-5-sonnet-20241022",
+    messages=[{"role": "user", "content": "Hello"}],
+    max_tokens=100,
+    top_p=0.9,
+    top_k=40,
+    system=[{
+        "type": "text",
+        "text": "You are helpful",
+        "cache_control": {"type": "ephemeral"}
+    }]
+)
+
+# Google with native SDK features
+response = google_client.models.generate_content(
+    model="gemini-1.5-pro",
+    contents="Hello",
+    generation_config={
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 40,
+        "candidate_count": 3
+    },
+    safety_settings=[{
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    }]
+)
 ```
+
+**When to use raw clients:**
+- Advanced SDK features not in LLMRing
+- Provider-specific optimizations
+- Complex configurations
+- Performance-critical applications
 
 ## 🌐 Provider Support
 
