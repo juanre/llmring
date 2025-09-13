@@ -129,8 +129,8 @@ class LLMRingExtended(LLMRing):
                 # Add user message(s)
                 for msg in request.messages:
                     messages_to_store.append({
-                        "role": msg.get("role"),
-                        "content": msg.get("content"),
+                        "role": msg.role,
+                        "content": msg.content,
                         "metadata": {
                             "model_requested": request.model,
                             "temperature": request.temperature,

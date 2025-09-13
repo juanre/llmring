@@ -7,6 +7,7 @@ import os
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from llmring.base import BaseLLMProvider
+from llmring.exceptions import ModelNotFoundError, ProviderNotFoundError
 from llmring.lockfile import Lockfile
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
@@ -121,7 +122,7 @@ class LLMRing:
         elif provider_type == "ollama":
             self.providers[provider_type] = OllamaProvider(**kwargs)
         else:
-            raise ValueError(f"Unknown provider type: {provider_type}")
+            raise ProviderNotFoundError(f"Unknown provider type: {provider_type}")
 
     def get_provider(self, provider_type: str) -> BaseLLMProvider:
         """
@@ -137,7 +138,7 @@ class LLMRing:
             ValueError: If provider not found
         """
         if provider_type not in self.providers:
-            raise ValueError(
+            raise ProviderNotFoundError(
                 f"Provider '{provider_type}' not found. Available providers: {list(self.providers.keys())}"
             )
         return self.providers[provider_type]
@@ -168,7 +169,7 @@ class LLMRing:
                 if self.providers:
                     return list(self.providers.keys())[0], model
                 else:
-                    raise ValueError("No providers available")
+                    raise ProviderNotFoundError("No providers available")
 
     def resolve_alias(self, alias_or_model: str, profile: Optional[str] = None) -> str:
         """
@@ -237,8 +238,10 @@ class LLMRing:
                 valid = validate_result
                 
             if not valid:
-                raise ValueError(
-                    f"Model '{model_name}' not supported by {provider_type} provider"
+                raise ModelNotFoundError(
+                    f"Model '{model_name}' not supported by {provider_type} provider",
+                    model_name=model_name,
+                    provider=provider_type
                 )
 
         # If no model specified, use provider's default
@@ -512,7 +515,8 @@ class LLMRing:
             profile: Optional profile name
         """
         if not self.lockfile:
-            raise ValueError("No lockfile found")
+            from llmring.exceptions import LockfileNotFoundError
+            raise LockfileNotFoundError("No lockfile found")
 
         profile_config = self.lockfile.get_profile(profile)
         if profile_config.remove_binding(alias):
