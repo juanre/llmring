@@ -51,6 +51,7 @@ class GoogleProvider(BaseLLMProvider):
             api_key
             or os.environ.get("GEMINI_API_KEY", "")
             or os.environ.get("GOOGLE_API_KEY", "")
+            or os.environ.get("GOOGLE_GEMINI_API_KEY", "")
         )
         if not api_key:
             raise ProviderAuthenticationError(
@@ -430,6 +431,10 @@ class GoogleProvider(BaseLLMProvider):
                     )]
                 ))
 
+        # Add tools to config if present
+        if google_tools:
+            config_params["tools"] = google_tools
+
         config = types.GenerateContentConfig(**config_params)
 
         # Convert conversation messages to Google format
@@ -478,25 +483,20 @@ class GoogleProvider(BaseLLMProvider):
                     provider="google"
                 )
 
-            # Use real streaming API (returns async generator directly)
-            call_params = {
-                "model": model,
-                "contents": google_messages,
-                "config": config,
-            }
-
-            # Add tools if present
-            if google_tools:
-                call_params["tools"] = google_tools
-
-            stream_response = self.client.models.generate_content_stream(**call_params)
+            # Use real streaming API (Google SDK returns sync generator, need to wrap)
+            # Tools are now passed via config, not as a separate parameter
+            stream_response = self.client.models.generate_content_stream(
+                model=model,
+                contents=google_messages,
+                config=config,
+            )
             await self._breaker.record_success(key)
 
-            # Process the streaming response
+            # Process the streaming response (sync generator, iterate normally)
             accumulated_content = ""
             tool_calls = []
 
-            async for chunk in stream_response:
+            for chunk in stream_response:
                 if chunk.candidates and len(chunk.candidates) > 0:
                     candidate = chunk.candidates[0]
 
@@ -667,6 +667,10 @@ class GoogleProvider(BaseLLMProvider):
         if extra_params:
             config_params.update(extra_params)
 
+        # Add tools to config if present
+        if google_tools:
+            config_params["tools"] = google_tools
+
         config = types.GenerateContentConfig(**config_params) if config_params else None
 
         # Execute in thread pool since google-genai is synchronous
@@ -694,7 +698,6 @@ class GoogleProvider(BaseLLMProvider):
                                 model=api_model,
                                 contents=converted_content,
                                 config=config,
-                                tools=google_tools,
                             ),
                         ),
                         timeout=total_timeout,
@@ -752,7 +755,7 @@ class GoogleProvider(BaseLLMProvider):
                     # Create chat with history and send the current message
                     def _run_chat():
                         chat = self.client.chats.create(
-                            model=api_model, config=config, history=history, tools=google_tools
+                            model=api_model, config=config, history=history
                         )
                         converted_content = self._convert_content_to_google_format(
                             current_message.content

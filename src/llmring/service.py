@@ -84,8 +84,10 @@ class LLMRing:
                 logger.error(f"Failed to initialize OpenAI provider: {e}")
 
         # Initialize Google provider if API key is available
-        google_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get(
-            "GEMINI_API_KEY"
+        google_key = (
+            os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY")
+            or os.environ.get("GOOGLE_GEMINI_API_KEY")
         )
         if google_key:
             try:
