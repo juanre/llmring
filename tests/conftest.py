@@ -147,9 +147,13 @@ def anthropic_provider():
 @pytest.fixture
 def google_provider():
     """Create Google provider instance, skip if no API key"""
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+    api_key = (
+        os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or os.getenv("GOOGLE_GEMINI_API_KEY")
+    )
     if not api_key:
-        pytest.skip("GOOGLE_API_KEY or GEMINI_API_KEY not found in environment")
+        pytest.skip("GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GEMINI_API_KEY not found in environment")
     return GoogleProvider(api_key=api_key)
 
 

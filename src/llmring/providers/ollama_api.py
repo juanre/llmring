@@ -386,6 +386,11 @@ class OllamaProvider(BaseLLMProvider):
                     )
 
         except Exception as e:
+            # If it's already a typed LLMRing exception, just re-raise it
+            from llmring.exceptions import LLMRingError
+            if isinstance(e, LLMRingError):
+                raise
+
             await self._breaker.record_failure(key)
             error_msg = str(e)
 
@@ -610,6 +615,11 @@ class OllamaProvider(BaseLLMProvider):
                     provider="ollama"
                 ) from e
         except Exception as e:
+            # If it's already a typed LLMRing exception, just re-raise it
+            from llmring.exceptions import LLMRingError
+            if isinstance(e, LLMRingError):
+                raise
+
             try:
                 await self._breaker.record_failure(f"ollama:{model}")
             except Exception:

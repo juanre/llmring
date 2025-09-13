@@ -367,8 +367,13 @@ class OpenAIProvider(BaseLLMProvider):
 
             resp = await self.client.responses.create(**request_params)
         except Exception as e:
+            # If it's already a typed LLMRing exception, just re-raise it
+            from llmring.exceptions import LLMRingError
+            if isinstance(e, LLMRingError):
+                raise
+
             error_msg = str(e)
-            if "API key" in error_msg.lower() or "unauthorized" in error_msg.lower():
+            if "api key" in error_msg.lower() or "unauthorized" in error_msg.lower():
                 raise ProviderAuthenticationError(
                     f"OpenAI API authentication failed: {error_msg}",
                     provider="openai"
@@ -592,10 +597,15 @@ class OpenAIProvider(BaseLLMProvider):
                                 "total_tokens": self.get_token_count(str(openai_messages)) + self.get_token_count(accumulated_content),
                             }
                         )
-                        
+
         except Exception as e:
+            # If it's already a typed LLMRing exception, just re-raise it
+            from llmring.exceptions import LLMRingError
+            if isinstance(e, LLMRingError):
+                raise
+
             error_msg = str(e)
-            if "API key" in error_msg.lower() or "unauthorized" in error_msg.lower():
+            if "api key" in error_msg.lower() or "unauthorized" in error_msg.lower():
                 raise ProviderAuthenticationError(
                     f"OpenAI API authentication failed: {error_msg}",
                     provider="openai"
@@ -950,6 +960,11 @@ class OpenAIProvider(BaseLLMProvider):
             response: ChatCompletion = await retry_async(_do_call)
             await self._breaker.record_success(breaker_key)
         except Exception as e:
+            # If it's already a typed LLMRing exception, just re-raise it
+            from llmring.exceptions import LLMRingError
+            if isinstance(e, LLMRingError):
+                raise
+
             # record failure for breaker
             try:
                 breaker_key = f"openai:{model}"
@@ -958,7 +973,7 @@ class OpenAIProvider(BaseLLMProvider):
                 pass
             # Handle specific OpenAI errors with more context
             error_msg = str(e)
-            if "API key" in error_msg.lower() or "unauthorized" in error_msg.lower():
+            if "api key" in error_msg.lower() or "unauthorized" in error_msg.lower():
                 raise ProviderAuthenticationError(
                     f"OpenAI API authentication failed: {error_msg}",
                     provider="openai"

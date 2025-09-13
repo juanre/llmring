@@ -349,8 +349,13 @@ class AnthropicProvider(BaseLLMProvider):
                         )
                         
         except Exception as e:
+            # If it's already a typed LLMRing exception, just re-raise it
+            from llmring.exceptions import LLMRingError
+            if isinstance(e, LLMRingError):
+                raise
+
             error_msg = str(e)
-            if "API key" in error_msg.lower():
+            if "api key" in error_msg.lower() or "authentication_error" in error_msg.lower() or "x-api-key" in error_msg.lower():
                 raise ProviderAuthenticationError(
                     f"Anthropic API authentication failed: {error_msg}",
                     provider="anthropic"
@@ -590,13 +595,18 @@ class AnthropicProvider(BaseLLMProvider):
             response: AnthropicMessage = await retry_async(_do_call)
             await self._breaker.record_success(breaker_key)
         except Exception as e:
+            # If it's already a typed LLMRing exception, just re-raise it
+            from llmring.exceptions import LLMRingError
+            if isinstance(e, LLMRingError):
+                raise
+
             try:
                 await self._breaker.record_failure(f"anthropic:{model}")
             except Exception:
                 pass
             # Handle specific Anthropic errors with more context
             error_msg = str(e)
-            if "API key" in error_msg.lower():
+            if "api key" in error_msg.lower() or "authentication_error" in error_msg.lower() or "x-api-key" in error_msg.lower():
                 raise ProviderAuthenticationError(
                     f"Anthropic API authentication failed: {error_msg}",
                     provider="anthropic"

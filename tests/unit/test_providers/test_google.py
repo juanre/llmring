@@ -171,8 +171,9 @@ class TestGoogleProviderUnit:
     async def test_chat_with_unsupported_model_raises_error(
         self, google_provider, simple_user_message
     ):
-        """Test that using an unsupported model raises ValueError."""
-        with pytest.raises(ValueError, match="Unsupported model"):
+        """Test that using an unsupported model raises ModelNotFoundError."""
+        from llmring.exceptions import ModelNotFoundError
+        with pytest.raises(ModelNotFoundError, match="Unsupported model"):
             await google_provider.chat(
                 messages=simple_user_message, model="definitely-not-a-real-model"
             )

@@ -544,6 +544,11 @@ class GoogleProvider(BaseLLMProvider):
                         )
 
         except Exception as e:
+            # If it's already a typed LLMRing exception, just re-raise it
+            from llmring.exceptions import LLMRingError
+            if isinstance(e, LLMRingError):
+                raise
+
             await self._breaker.record_failure(key)
             error_msg = str(e)
 
@@ -786,6 +791,11 @@ class GoogleProvider(BaseLLMProvider):
                         provider="google"
                     )
         except Exception as e:
+            # If it's already a typed LLMRing exception, just re-raise it
+            from llmring.exceptions import LLMRingError
+            if isinstance(e, LLMRingError):
+                raise
+
             error_msg = str(e)
             # Handle rate limiting with exponential backoff
             if "rate limit" in error_msg.lower() or "quota" in error_msg.lower():

@@ -11,6 +11,7 @@ import pytest
 
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.schemas import LLMResponse, Message
+from llmring.exceptions import ProviderAuthenticationError, ModelNotFoundError
 
 
 @pytest.mark.llm
@@ -25,11 +26,11 @@ class TestAnthropicProviderUnit:
         assert provider.default_model == "claude-3-7-sonnet-20250219"
 
     def test_initialization_without_api_key_raises_error(self):
-        """Test that missing API key raises ValueError."""
+        """Test that missing API key raises ProviderAuthenticationError."""
         # Temporarily unset environment variable
         old_key = os.environ.pop("ANTHROPIC_API_KEY", None)
         try:
-            with pytest.raises(ValueError, match="Anthropic API key must be provided"):
+            with pytest.raises(ProviderAuthenticationError, match="Anthropic API key must be provided"):
                 AnthropicProvider()
         finally:
             if old_key:
@@ -143,8 +144,8 @@ class TestAnthropicProviderUnit:
     async def test_chat_with_unsupported_model_raises_error(
         self, anthropic_provider, simple_user_message
     ):
-        """Test that using an unsupported model raises ValueError."""
-        with pytest.raises(ValueError, match="Unsupported model"):
+        """Test that using an unsupported model raises ModelNotFoundError."""
+        with pytest.raises(ModelNotFoundError, match="Unsupported model"):
             await anthropic_provider.chat(
                 messages=simple_user_message, model="definitely-not-a-real-model"
             )

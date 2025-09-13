@@ -11,6 +11,7 @@ import pytest
 
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.schemas import LLMResponse, Message
+from llmring.exceptions import ProviderAuthenticationError, ModelNotFoundError, ProviderResponseError
 
 
 @pytest.mark.llm
@@ -25,11 +26,11 @@ class TestOpenAIProviderUnit:
         assert provider.default_model == "gpt-4o"
 
     def test_initialization_without_api_key_raises_error(self):
-        """Test that missing API key raises ValueError."""
+        """Test that missing API key raises ProviderAuthenticationError."""
         # Temporarily unset environment variable
         old_key = os.environ.pop("OPENAI_API_KEY", None)
         try:
-            with pytest.raises(ValueError, match="OpenAI API key must be provided"):
+            with pytest.raises(ProviderAuthenticationError, match="OpenAI API key must be provided"):
                 OpenAIProvider()
         finally:
             if old_key:
@@ -133,8 +134,8 @@ class TestOpenAIProviderUnit:
     async def test_chat_with_unsupported_model_raises_error(
         self, openai_provider, simple_user_message
     ):
-        """Test that using an unsupported model raises ValueError."""
-        with pytest.raises(ValueError, match="Unsupported model"):
+        """Test that using an unsupported model raises ModelNotFoundError."""
+        with pytest.raises(ModelNotFoundError, match="Unsupported model"):
             await openai_provider.chat(
                 messages=simple_user_message, model="definitely-not-a-real-model"
             )
@@ -423,7 +424,7 @@ class TestOpenAIProviderUnit:
         ]
 
         with pytest.raises(
-            ValueError,
+            ProviderResponseError,
             match="Tools and custom response formats are not supported when processing PDFs",
         ):
             await openai_provider.chat(messages=messages, model="gpt-4o", tools=tools)
@@ -449,7 +450,7 @@ class TestOpenAIProviderUnit:
         ]
 
         with pytest.raises(
-            ValueError,
+            ProviderResponseError,
             match="Tools and custom response formats are not supported when processing PDFs",
         ):
             await openai_provider.chat(
