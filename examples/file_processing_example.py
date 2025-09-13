@@ -122,7 +122,7 @@ async def demo_llm_integration():
         content = analyze_image("path/to/your/image.jpg", "Describe this image")
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="gpt-4o"  # or any vision-capable model
+            model="balanced"  # Use semantic alias for vision-capable model
         )
         response = await service.chat(request)
         print(f"LLM Response: {response.content}")

@@ -153,14 +153,14 @@ async def test_streaming_preserves_model_info():
     mock_provider = AsyncMock()
 
     async def mock_stream():
-        yield StreamChunk(delta="Test", model="gpt-4o-mini")
-        yield StreamChunk(delta=" response", model="gpt-4o-mini", finish_reason="stop")
+        yield StreamChunk(delta="Test", model="fast")
+        yield StreamChunk(delta=" response", model="fast", finish_reason="stop")
 
     mock_provider.chat = AsyncMock(return_value=mock_stream())
     service.providers["openai"] = mock_provider
 
     request = LLMRequest(
-        model="openai:gpt-4o-mini",
+        model="fast",
         messages=[Message(role="user", content="Test")],
         stream=True,
     )
@@ -172,7 +172,7 @@ async def test_streaming_preserves_model_info():
 
     # All chunks should have model info
     for chunk in chunks:
-        assert chunk.model == "gpt-4o-mini"
+        assert chunk.model == "fast"
 
 
 @pytest.mark.asyncio

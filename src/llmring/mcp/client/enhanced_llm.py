@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_enhanced_llm(
-    llm_model: str = "anthropic:claude-3-haiku-20240307",
+    llm_model: str = "fast",
     llmring_server_url: str | None = None,
     mcp_server_url: str | None = None,
     origin: str = "enhanced-llm",
@@ -94,7 +94,7 @@ class EnhancedLLM:
 
     def __init__(
         self,
-        llm_model: str = "anthropic:claude-3-haiku-20240307",
+        llm_model: str = "fast",
         llmring_server_url: str | None = None,
         mcp_server_url: str | None = None,
         origin: str = "enhanced-llm",

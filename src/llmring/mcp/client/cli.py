@@ -449,8 +449,8 @@ Examples:
     )
     parser.add_argument(
         "--model",
-        default=os.getenv("LLM_MODEL", "anthropic:claude-3-haiku-20240307"),
-        help="LLM model to use (provider:model format)",
+        default=os.getenv("LLM_MODEL", "fast"),
+        help="LLM model alias (fast, balanced, deep) or provider:model format",
     )
 
     # Create subparsers for commands

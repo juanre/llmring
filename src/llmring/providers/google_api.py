@@ -24,6 +24,7 @@ from llmring.net.circuit_breaker import CircuitBreaker
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.net.retry import retry_async
+from llmring.registry import RegistryClient
 from llmring.schemas import LLMResponse, Message, StreamChunk
 
 
@@ -76,32 +77,11 @@ class GoogleProvider(BaseLLMProvider):
         # Initialize the client
         self.client = genai.Client(api_key=api_key)
 
-        # List of officially supported models
-        self.supported_models = [
-            # Latest models
-            "gemini-2.5-pro",
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-lite",
-            "gemini-2.0-pro",
-            # Legacy models for compatibility
-            "gemini-1.5-pro",
-            "gemini-1.5-flash",
-            "gemini-pro",
-            "gemini-pro-vision",
-        ]
+        # Registry client for model validation
+        self._registry_client = RegistryClient()
 
-        # Map model names only for legacy/unversioned names
-        # Honor user-specified model versions (don't downgrade 2.x to 1.5)
-        self.model_mapping = {
-            # Only map unversioned legacy names to stable versions
-            "gemini-pro": "gemini-1.5-pro",
-            "gemini-pro-vision": "gemini-1.5-pro",
-            "gemini-flash": "gemini-1.5-flash",
-            # Keep specific versions as-is (user intention should be honored)
-            # "gemini-2.5-pro": "gemini-2.5-pro",  # No mapping needed
-            # "gemini-2.0-flash": "gemini-2.0-flash",  # No mapping needed
-            # "gemini-1.5-pro": "gemini-1.5-pro",  # No mapping needed
-        }
+
+        # Note: Model name mapping removed - rely on registry for model availability
         self._breaker = CircuitBreaker()
 
     def _convert_content_to_google_format(
@@ -185,9 +165,9 @@ class GoogleProvider(BaseLLMProvider):
 
         return parts if parts else str(content)
 
-    def validate_model(self, model: str) -> bool:
+    async def validate_model(self, model: str) -> bool:
         """
-        Check if the model is supported by Google.
+        Check if the model is supported by Google using registry lookup.
 
         Args:
             model: Model name to check
@@ -199,16 +179,31 @@ class GoogleProvider(BaseLLMProvider):
         if model.lower().startswith("google:"):
             model = model.split(":", 1)[1]
 
-        return model in self.supported_models
+        try:
+            # Try registry validation
+            return await self._registry_client.validate_model("google", model)
+        except Exception as e:
+            # If registry is unavailable, log warning and allow gracefully
+            import logging
+            logging.warning(f"Registry unavailable for model validation, allowing gracefully: {e}")
+            return True
 
-    def get_supported_models(self) -> List[str]:
+    async def get_supported_models(self) -> List[str]:
         """
-        Get list of supported Google model names.
+        Get list of supported Google model names from registry.
 
         Returns:
             List of supported model names
         """
-        return self.supported_models.copy()
+        try:
+            # Try to fetch from registry
+            models = await self._registry_client.fetch_current_models("google")
+            return [model.model_name for model in models if model.is_active]
+        except Exception as e:
+            # Registry unavailable - return empty list for graceful degradation
+            import logging
+            logging.warning(f"Registry unavailable for supported models, returning empty list: {e}")
+            return []
 
     def get_default_model(self) -> str:
         """
@@ -226,9 +221,12 @@ class GoogleProvider(BaseLLMProvider):
         Returns:
             Provider capabilities
         """
+        # Get current models for capabilities
+        supported_models = await self.get_supported_models()
+
         return ProviderCapabilities(
             provider_name="google",
-            supported_models=self.supported_models.copy(),
+            supported_models=supported_models,
             supports_streaming=True,
             supports_tools=True,
             supports_vision=True,
@@ -352,22 +350,10 @@ class GoogleProvider(BaseLLMProvider):
         if model.lower().startswith("google:") or model.lower().startswith("gemini:"):
             model = model.split(":", 1)[1]
 
-        # Map model name to supported versions if needed
-        if model.startswith("gemini-2."):
-            # User specified 2.x model, honor it instead of mapping to 1.5
-            pass
-        elif model.startswith("gemini-1."):
-            # Use as specified
-            pass
-        else:
-            # Add fallback for unspecified versions
-            if "gemini-pro" == model:
-                model = "gemini-1.5-pro"
-            elif "gemini-flash" == model:
-                model = "gemini-1.5-flash"
+        # Note: Model name normalization removed - use exact model names from registry
 
         # Validate model
-        if not self.validate_model(model):
+        if not await self.validate_model(model):
             raise ModelNotFoundError(
                 f"Unsupported model: {original_model}",
                 model_name=model,
@@ -652,13 +638,13 @@ class GoogleProvider(BaseLLMProvider):
             model = model.split(":", 1)[1]
 
         # Verify model is supported
-        if not self.validate_model(model):
+        if not await self.validate_model(model):
             raise ModelNotFoundError(
                 f"Unsupported model: {model}", provider="google", model_name=model
             )
 
-        # Get the actual API model name
-        api_model = self.model_mapping.get(model, model)
+        # Use model name as provided (no hardcoded mapping)
+        api_model = model
 
         # Extract system message and build conversation history
         system_message = None

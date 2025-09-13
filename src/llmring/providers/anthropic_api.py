@@ -22,6 +22,7 @@ from llmring.exceptions import (
 )
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
+from llmring.registry import RegistryClient
 from llmring.schemas import LLMResponse, Message, StreamChunk
 
 
@@ -70,28 +71,14 @@ class AnthropicProvider(BaseLLMProvider):
             default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
         )
 
-        # List of officially supported models
-        self.supported_models = [
-            # Claude 3.7 models
-            "claude-3-7-sonnet-20250219",
-            "claude-3-7-sonnet",  # Latest version without date
-            # Claude 3.5 models
-            "claude-3-5-sonnet-20241022-v2",
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-sonnet-20240620",
-            "claude-3-5-sonnet",  # Latest version without date
-            "claude-3-5-haiku-20241022",
-            "claude-3-5-haiku",  # Latest version without date
-            # Claude 3 models
-            "claude-3-opus-20240229",
-            "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307",
-        ]
+        # Registry client for model validation (no hardcoded models)
+        self._registry_client = RegistryClient()
+        self._cached_models = None  # Will be populated from registry
         self._breaker = CircuitBreaker()
 
-    def validate_model(self, model: str) -> bool:
+    async def validate_model(self, model: str) -> bool:
         """
-        Check if the model is supported by Anthropic.
+        Check if the model is supported by Anthropic using registry lookup.
 
         Args:
             model: Model name to check
@@ -103,36 +90,32 @@ class AnthropicProvider(BaseLLMProvider):
         if model.lower().startswith("anthropic:"):
             model = model.split(":", 1)[1]
 
-        # Check for exact match
-        if model in self.supported_models:
+        try:
+            # Try registry validation
+            return await self._registry_client.validate_model("anthropic", model)
+        except Exception as e:
+            # If registry is unavailable, log warning and allow gracefully
+            import logging
+            logging.warning(f"Registry unavailable for model validation, allowing gracefully: {e}")
             return True
 
-        # For models without specific version, try to find a match with the base name
-        if "-202" not in model:  # If no date in the model name
-            for supported_model in self.supported_models:
-                if supported_model.startswith(model + "-"):
-                    return True
 
-            # Handle claude-3.5 -> claude-3-5 conversion
-            if "claude-3.5" in model:
-                normalized_model = model.replace("claude-3.5", "claude-3-5")
-                for supported_model in self.supported_models:
-                    if (
-                        supported_model.startswith(normalized_model + "-")
-                        or supported_model == normalized_model
-                    ):
-                        return True
-
-        return False
-
-    def get_supported_models(self) -> List[str]:
+    async def get_supported_models(self) -> List[str]:
         """
-        Get list of supported Anthropic model names.
+        Get list of supported Anthropic model names from registry.
 
         Returns:
             List of supported model names
         """
-        return self.supported_models.copy()
+        try:
+            # Try to fetch from registry
+            models = await self._registry_client.fetch_current_models("anthropic")
+            return [model.model_name for model in models if model.is_active]
+        except Exception as e:
+            # Registry unavailable - return empty list for graceful degradation
+            import logging
+            logging.warning(f"Registry unavailable for supported models, returning empty list: {e}")
+            return []
 
     def get_default_model(self) -> str:
         """
@@ -150,9 +133,12 @@ class AnthropicProvider(BaseLLMProvider):
         Returns:
             Provider capabilities
         """
+        # Get current models for capabilities
+        supported_models = await self.get_supported_models()
+
         return ProviderCapabilities(
             provider_name="anthropic",
-            supported_models=self.supported_models.copy(),
+            supported_models=supported_models,
             supports_streaming=True,
             supports_tools=True,
             supports_vision=True,
@@ -242,15 +228,10 @@ class AnthropicProvider(BaseLLMProvider):
         if model.lower().startswith("anthropic:"):
             model = model.split(":", 1)[1]
 
-        # Find latest version for models without date
-        if "-202" not in model:
-            for supported_model in self.supported_models:
-                if supported_model.startswith(model + "-"):
-                    model = supported_model
-                    break
+        # Note: Model name normalization removed - use exact model names from registry
 
         # Verify model is supported
-        if not self.validate_model(model):
+        if not await self.validate_model(model):
             raise ModelNotFoundError(
                 f"Unsupported model: {original_model}",
                 provider="anthropic",
@@ -567,15 +548,10 @@ class AnthropicProvider(BaseLLMProvider):
         if model.lower().startswith("anthropic:"):
             model = model.split(":", 1)[1]
 
-        # Find latest version for models without date
-        if "-202" not in model:
-            for supported_model in self.supported_models:
-                if supported_model.startswith(model + "-"):
-                    model = supported_model
-                    break
+        # Note: Model name normalization removed - use exact model names from registry
 
         # Verify model is supported
-        if not self.validate_model(model):
+        if not await self.validate_model(model):
             raise ModelNotFoundError(
                 f"Unsupported model: {original_model}",
                 provider="anthropic",

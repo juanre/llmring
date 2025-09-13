@@ -151,7 +151,7 @@ class LLMRing:
         Parse a model string into provider and model name.
 
         Args:
-            model: Model string (e.g., "anthropic:claude-3-opus-20240229" or just "gpt-4")
+            model: Model alias (e.g., "fast", "balanced") or provider:model string (e.g., "anthropic:claude-3-opus")
 
         Returns:
             Tuple of (provider_type, model_name)
@@ -600,7 +600,7 @@ class LLMRing:
         Get information about a specific model.
 
         Args:
-            model: Model string (e.g., "openai:gpt-4")
+            model: Model alias (e.g., "fast", "balanced") or provider:model string (e.g., "openai:gpt-4")
 
         Returns:
             Model information dictionary
@@ -994,7 +994,7 @@ class LLMRing:
             Cost breakdown or None if pricing not available
 
         Example:
-            response = await ring.chat("openai:gpt-4o-mini", messages)
+            response = await ring.chat("fast", messages)  # Use alias instead of direct model
             cost = await ring.calculate_cost(response)
             print(f"Total cost: ${cost['total_cost']:.4f}")
         """
@@ -1037,7 +1037,7 @@ class LLMRing:
         Get enhanced model information including registry data.
 
         Args:
-            model: Model string (e.g., "openai:gpt-4")
+            model: Model alias (e.g., "fast", "balanced") or provider:model string (e.g., "openai:gpt-4")
 
         Returns:
             Enhanced model information dictionary

@@ -58,7 +58,7 @@ class TestUnifiedStructuredOutput:
         self, service, structured_request_template
     ):
         """Test OpenAI native JSON schema support via unified interface."""
-        request = LLMRequest(model="openai:gpt-4o-mini", **structured_request_template)
+        request = LLMRequest(model="fast", **structured_request_template)
         response = await service.chat(request)
 
         # Verify response structure
@@ -84,7 +84,7 @@ class TestUnifiedStructuredOutput:
     ):
         """Test Anthropic tool injection approach via unified interface."""
         request = LLMRequest(
-            model="anthropic:claude-3-5-haiku", **structured_request_template
+            model="balanced", **structured_request_template
         )
         response = await service.chat(request)
 
@@ -115,7 +115,7 @@ class TestUnifiedStructuredOutput:
     ):
         """Test Google function calling approach via unified interface."""
         request = LLMRequest(
-            model="google:gemini-1.5-flash", **structured_request_template
+            model="fast", **structured_request_template
         )
         response = await service.chat(request)
 
@@ -141,7 +141,7 @@ class TestUnifiedStructuredOutput:
         self, service, structured_request_template
     ):
         """Test Ollama best-effort approach via unified interface."""
-        request = LLMRequest(model="ollama:llama3.2:1b", **structured_request_template)
+        request = LLMRequest(model="local", **structured_request_template)
 
         try:
             response = await service.chat(request)
@@ -183,11 +183,11 @@ class TestUnifiedStructuredOutput:
             if provider_name in available_providers:
                 try:
                     if provider_name == "openai":
-                        model = "openai:gpt-4o-mini"
+                        model = "fast"
                     elif provider_name == "anthropic":
-                        model = "anthropic:claude-3-5-haiku"
+                        model = "balanced"
                     elif provider_name == "google":
-                        model = "google:gemini-1.5-flash"
+                        model = "fast"
 
                     request = LLMRequest(model=model, **request_template)
                     response = await service.chat(request)
@@ -217,7 +217,7 @@ class TestUnifiedStructuredOutput:
         """Test that schema adaptation logic works correctly."""
         # Test OpenAI pass-through (should not be adapted)
         openai_request = LLMRequest(
-            model="openai:gpt-4o",
+            model="test",
             messages=[Message(role="user", content="test")],
             response_format={
                 "type": "json_schema",
@@ -240,7 +240,7 @@ class TestUnifiedStructuredOutput:
 
         # Should adapt Anthropic
         anthropic_request = LLMRequest(
-            model="anthropic:claude-3-5-sonnet",
+            model="balanced",
             messages=[Message(role="user", content="test")],
             response_format={
                 "type": "json_schema",

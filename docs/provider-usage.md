@@ -1,8 +1,12 @@
 # Provider Usage Guide
 
-## Extra Parameters and Raw Client Access
+## Model Aliases vs Direct Models
 
 This guide shows how to use provider-specific features through `extra_params` and direct SDK access.
+
+**Recommended**: Use semantic aliases like `fast`, `balanced`, `deep` for maintainability and cost optimization. These examples use aliases throughout.
+
+**Advanced**: You can still use direct `provider:model` format when you need specific model versions or provider features.
 
 ## Extra Params Usage
 
@@ -17,7 +21,7 @@ from llmring.schemas import LLMRequest, Message
 service = LLMRing()
 
 request = LLMRequest(
-    model="openai:gpt-4o",
+    model="fast",
     messages=[Message(role="user", content="Hello")],
     extra_params={
         "logprobs": True,
@@ -36,7 +40,7 @@ response = await service.chat(request)
 
 ```python
 request = LLMRequest(
-    model="anthropic:claude-3-5-sonnet",
+    model="balanced",
     messages=[Message(role="user", content="Hello")],
     extra_params={
         "top_p": 0.9,
@@ -49,7 +53,7 @@ request = LLMRequest(
 
 ```python
 request = LLMRequest(
-    model="google:gemini-1.5-pro",
+    model="balanced",
     messages=[Message(role="user", content="Hello")],
     extra_params={
         "top_p": 0.8,
@@ -73,7 +77,7 @@ request = LLMRequest(
 
 ```python
 request = LLMRequest(
-    model="ollama:llama3.2:1b",
+    model="local",
     messages=[Message(role="user", content="Hello")],
     extra_params={
         "options": {
@@ -94,7 +98,7 @@ request = LLMRequest(
 
 # Alternative flat format (same effect):
 request = LLMRequest(
-    model="ollama:llama3.2:1b",
+    model="local",
     messages=[Message(role="user", content="Hello")],
     extra_params={
         "seed": 42,
@@ -117,7 +121,7 @@ openai_client = service.get_provider("openai").client
 
 # Use full OpenAI SDK capabilities
 response = await openai_client.chat.completions.create(
-    model="gpt-4o",
+    model="fast",  # Use alias or provider:model format when needed
     messages=[{"role": "user", "content": "Hello"}],
     logprobs=True,
     top_logprobs=10,
@@ -133,7 +137,7 @@ anthropic_client = service.get_provider("anthropic").client
 
 # Use full Anthropic SDK capabilities
 response = await anthropic_client.messages.create(
-    model="claude-3-5-sonnet-20241022",
+    model="balanced",  # Use alias or provider:model format when needed
     messages=[{"role": "user", "content": "Hello"}],
     max_tokens=100,
     top_p=0.9,
@@ -148,7 +152,7 @@ google_client = service.get_provider("google").client
 
 # Use full Google genai SDK capabilities
 response = google_client.models.generate_content(
-    model="gemini-1.5-pro",
+    model="balanced",  # Use alias or provider:model format when needed
     contents="Hello",
     generation_config={
         "temperature": 0.7,
@@ -171,7 +175,7 @@ ollama_client = service.get_provider("ollama").client
 
 # Use full Ollama SDK capabilities
 response = await ollama_client.chat(
-    model="llama3.2:1b",
+    model="local",
     messages=[{"role": "user", "content": "Hello"}],
     stream=True,
     options={
@@ -189,7 +193,7 @@ response = await ollama_client.chat(
 
 ```python
 request = LLMRequest(
-    model="openai:gpt-4o",
+    model="fast",
     messages=[Message(role="user", content="Generate a person")],
     response_format={
         "type": "json_schema",
@@ -218,7 +222,7 @@ response = await service.chat(request)
 
 ```python
 request = LLMRequest(
-    model="anthropic:claude-3-5-sonnet",
+    model="balanced",
     messages=[
         Message(
             role="system",

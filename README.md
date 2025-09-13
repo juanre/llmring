@@ -42,7 +42,7 @@ service = LLMRing()
 
 # Simple chat
 request = LLMRequest(
-    model="openai:gpt-4o",
+    model="fast",
     messages=[
         Message(role="system", content="You are a helpful assistant."),
         Message(role="user", content="Hello!")
@@ -58,7 +58,7 @@ print(response.content)
 ```python
 # Real streaming for all providers
 request = LLMRequest(
-    model="anthropic:claude-3-5-sonnet",
+    model="balanced",
     messages=[Message(role="user", content="Count to 10")],
     stream=True
 )
@@ -86,7 +86,7 @@ tools = [{
 }]
 
 request = LLMRequest(
-    model="google:gemini-1.5-pro",
+    model="balanced",
     messages=[Message(role="user", content="What's the weather in NYC?")],
     tools=tools
 )
@@ -103,7 +103,7 @@ if response.tool_calls:
 ```python
 # Same JSON schema API works across ALL providers!
 request = LLMRequest(
-    model="anthropic:claude-3-5-sonnet",  # Works with any provider
+    model="balanced",  # Works with any provider
     messages=[Message(role="user", content="Generate a person")],
     response_format={
         "type": "json_schema",
@@ -134,7 +134,7 @@ print("Data:", response.parsed)    # Python dict ready to use
 
 # Anthropic: Prompt caching for 90% cost savings
 request = LLMRequest(
-    model="anthropic:claude-3-5-sonnet",
+    model="balanced",
     messages=[
         Message(
             role="system",
@@ -147,7 +147,7 @@ request = LLMRequest(
 
 # Extra parameters for provider-specific features
 request = LLMRequest(
-    model="openai:gpt-4o",
+    model="fast",
     messages=[Message(role="user", content="Hello")],
     extra_params={
         "logprobs": True,
@@ -169,12 +169,32 @@ llmring lock init
 
 ```python
 request = LLMRequest(
-    model="deep",      # → claude-3-opus (powerful reasoning)
-    model="fast",      # → gpt-4o-mini (quick responses)
-    model="balanced",  # → claude-3-5-sonnet (best overall)
+    model="deep",      # → powerful reasoning model
+    model="fast",      # → quick response model
+    model="balanced",  # → best overall model
     messages=[Message(role="user", content="Hello")]
 )
 ```
+
+#### Advanced: Direct Model Access
+
+While aliases are recommended, you can still use direct provider:model format when needed:
+
+```python
+# Direct model specification (escape hatch)
+request = LLMRequest(
+    model="anthropic:claude-3-5-sonnet",  # Direct provider:model format
+    messages=[Message(role="user", content="Hello")]
+)
+
+# Or mix aliases with direct models
+request = LLMRequest(
+    model="openai:gpt-4o",  # Specific model when needed
+    messages=[Message(role="user", content="Hello")]
+)
+```
+
+**Recommendation**: Use aliases for maintainability and cost optimization. Use direct model strings only when you need a specific model version or provider-specific features.
 
 ### 🚪 Raw SDK Access (Escape Hatch)
 
@@ -189,7 +209,7 @@ ollama_client = service.get_provider("ollama").client       # ollama.AsyncClient
 
 # Use any SDK feature not exposed by LLMRing
 response = await openai_client.chat.completions.create(
-    model="gpt-4o",
+    model="fast",  # Use alias or provider:model format when needed
     messages=[{"role": "user", "content": "Hello"}],
     logprobs=True,
     top_logprobs=10,
@@ -199,7 +219,7 @@ response = await openai_client.chat.completions.create(
 
 # Anthropic with all SDK features
 response = await anthropic_client.messages.create(
-    model="claude-3-5-sonnet-20241022",
+    model="balanced",  # Use alias or provider:model format when needed
     messages=[{"role": "user", "content": "Hello"}],
     max_tokens=100,
     top_p=0.9,
@@ -213,7 +233,7 @@ response = await anthropic_client.messages.create(
 
 # Google with native SDK features
 response = google_client.models.generate_content(
-    model="gemini-1.5-pro",
+    model="balanced",  # Use alias or provider:model format when needed
     contents="Hello",
     generation_config={
         "temperature": 0.7,
@@ -274,7 +294,7 @@ from llmring.mcp.client.enhanced_llm import create_enhanced_llm
 
 # Create MCP-enabled LLM with tool ecosystem
 llm = await create_enhanced_llm(
-    model="openai:gpt-4o",
+    model="fast",
     mcp_server_path="path/to/mcp/server"
 )
 

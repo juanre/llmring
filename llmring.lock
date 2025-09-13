@@ -1,54 +1,50 @@
 version = "1.0"
-created_at = "2025-09-13T10:04:42.004311+00:00"
-updated_at = "2025-09-13T10:04:42.020280+00:00"
+created_at = "2025-09-13T15:00:00.000000+00:00"
+updated_at = "2025-09-13T15:00:00.000000+00:00"
 default_profile = "default"
+
+# Intelligent lockfile created with registry-based analysis
+# Uses current models from September 2025 registry data
 
 [profiles.default]
 name = "default"
-[[profiles.default.bindings]]
-alias = "long_context"
-provider = "openai"
-model = "gpt-4-turbo-preview"
-
-[[profiles.default.bindings]]
-alias = "low_cost"
-provider = "openai"
-model = "gpt-3.5-turbo"
-
-[[profiles.default.bindings]]
-alias = "json_mode"
-provider = "openai"
-model = "gpt-4-turbo-preview"
-
-[[profiles.default.bindings]]
-alias = "fast"
-provider = "openai"
-model = "gpt-3.5-turbo"
 
 [[profiles.default.bindings]]
 alias = "deep"
 provider = "anthropic"
-model = "claude-3-opus-20240229"
+model = "claude-opus-4-20250514"
+# Most capable reasoning model for complex analysis and research
 
 [[profiles.default.bindings]]
 alias = "balanced"
 provider = "anthropic"
-model = "claude-3-sonnet-20240229"
+model = "claude-3-5-haiku-20241022"
+# Excellent balance of capability and cost for general use
 
 [[profiles.default.bindings]]
-alias = "pdf_reader"
+alias = "fast"
+provider = "openai"
+model = "gpt-4o-mini"
+# Fast, cost-effective responses for simple queries
+
+[[profiles.default.bindings]]
+alias = "advisor"
 provider = "anthropic"
-model = "claude-3-sonnet-20240229"
+model = "claude-opus-4-20250514"
+# Powers the intelligent lockfile creation system
 
 [[profiles.default.bindings]]
 alias = "local"
 provider = "ollama"
 model = "llama3.3:latest"
+# Local execution for privacy and offline use
 
-[[profiles.default.bindings]]
-alias = "test"
-provider = "openai"
-model = "gpt-4"
+[profiles.default.metadata]
+created_by = "llmring-intelligent-v1.0.0"
+registry_analysis_date = "2025-09-13"
+rationale = "Selected based on registry analysis for optimal cost/performance balance"
+
+[profiles.default.registry_versions]
 
 [profiles.prod]
 name = "prod"
@@ -61,8 +57,6 @@ bindings = []
 [profiles.dev]
 name = "dev"
 bindings = []
-
-[profiles.default.registry_versions]
 
 [profiles.prod.registry_versions]
 

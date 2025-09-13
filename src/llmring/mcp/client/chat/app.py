@@ -99,7 +99,7 @@ class MCPChatApp:
     def __init__(
         self,
         mcp_server_url: str | None = None,
-        llm_model: str = "anthropic:claude-3-7-sonnet",
+        llm_model: str = "balanced",
         db_connection_string: str | None = None,
         session_id: str | None = None,
         db_manager: AsyncDatabaseManager | None = None,
@@ -789,8 +789,8 @@ def main():
     parser.add_argument("--server", help="MCP server URL")
     parser.add_argument(
         "--model",
-        default="anthropic:claude-3-7-sonnet-20250219",
-        help="LLM model to use",
+        default="balanced",
+        help="LLM model alias (fast, balanced, deep) or provider:model format",
     )
     parser.add_argument("--db", help="Database connection string")
     parser.add_argument(

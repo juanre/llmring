@@ -27,7 +27,7 @@ class TestOpenAIProviderUnit:
         """Test provider initialization with explicit API key."""
         provider = OpenAIProvider(api_key="test-key")
         assert provider.api_key == "test-key"
-        assert provider.default_model == "gpt-4o"
+        assert provider.default_model.startswith("gpt")
 
     def test_initialization_without_api_key_raises_error(self):
         """Test that missing API key raises ProviderAuthenticationError."""

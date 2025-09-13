@@ -30,7 +30,7 @@ Request schema for LLM interactions.
 from llmring.schemas import LLMRequest, Message
 
 request = LLMRequest(
-    model="openai:gpt-4o",                    # Required: Model identifier
+    model="fast",                    # Required: Model identifier or alias
     messages=[Message(...)],                 # Required: Conversation messages
     temperature=0.7,                         # Optional: 0.0-1.0
     max_tokens=1000,                         # Optional: Response length limit

@@ -19,6 +19,7 @@ from llmring.exceptions import (
 )
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
+from llmring.registry import RegistryClient
 from llmring.schemas import LLMResponse, Message, StreamChunk
 
 
@@ -62,27 +63,14 @@ class OllamaProvider(BaseLLMProvider):
         # Initialize the client with the SDK
         self.client = AsyncClient(host=base_url)
 
-        # List of commonly supported models
-        self.supported_models = [
-            "llama3.3:latest",
-            "llama3.3",
-            "llama3.2",
-            "llama3.1",
-            "llama3",
-            "mistral",
-            "mixtral",
-            "codellama",
-            "phi3",
-            "gemma2",
-            "gemma",
-            "qwen2.5",
-            "qwen",
-        ]
+        # Registry client for model validation
+        self._registry_client = RegistryClient()
+
         self._breaker = CircuitBreaker()
 
-    def validate_model(self, model: str) -> bool:
+    async def validate_model(self, model: str) -> bool:
         """
-        Check if the model is supported by Ollama.
+        Check if the model is supported by Ollama using registry lookup.
         This is a best-effort check since Ollama can support any
         model that's installed locally.
 
@@ -96,46 +84,47 @@ class OllamaProvider(BaseLLMProvider):
         if model.lower().startswith("ollama:"):
             model = model.split(":", 1)[1]
 
-        # Check if it's exactly in our supported models list
-        if model in self.supported_models:
-            return True
+        try:
+            # Try registry validation
+            return await self._registry_client.validate_model("ollama", model)
+        except Exception as e:
+            # If registry is unavailable, use basic pattern validation for Ollama models
+            import logging
+            import re
+            logging.warning(f"Registry unavailable for model validation, using basic pattern validation: {e}")
 
-        # Allow any model that starts with a known model name
-        for known_model in self.supported_models:
-            if model.startswith(known_model):
+            # Basic validation: Ollama models should be alphanumeric with hyphens, underscores, colons, and dots
+            # This allows for custom local models while rejecting obvious non-Ollama model names
+            if re.match(r"^[a-zA-Z0-9\-_:.]+$", model):
+                # Additional check: reject models that look like other providers
+                forbidden_patterns = [
+                    r"^gpt-", r"^claude-", r"^gemini-", r"^anthropic:", r"^openai:", r"^google:"
+                ]
+                for pattern in forbidden_patterns:
+                    if re.match(pattern, model.lower()):
+                        return False
                 return True
+            return False
 
-        # Check for common Ollama model patterns but reject non-Ollama models
-        ollama_patterns = [
-            r"^llama\d*",  # llama, llama2, llama3, etc.
-            r"^mistral",  # mistral variations
-            r"^mixtral",  # mixtral variations
-            r"^codellama",  # codellama variations
-            r"^phi\d*",  # phi, phi3, etc.
-            r"^gemma",  # gemma variations
-            r"^qwen",  # qwen variations
-            r"^deepseek",  # deepseek variations
-            r"^[a-z][a-z0-9\-_]*[:]",  # custom models with tags
-        ]
 
-        # Only allow models that match Ollama patterns and look valid
-        if re.match(r"^[a-zA-Z0-9\-_:.]+$", model):
-            for pattern in ollama_patterns:
-                if re.match(pattern, model.lower()):
-                    return True
-
-        return False
-
-    def get_supported_models(self) -> List[str]:
+    async def get_supported_models(self) -> List[str]:
         """
-        Get list of supported Ollama model names.
+        Get list of supported Ollama model names from registry.
         Note: This returns common models, but Ollama can support
         any model that's installed locally.
 
         Returns:
             List of supported model names
         """
-        return self.supported_models.copy()
+        try:
+            # Try to fetch from registry
+            models = await self._registry_client.fetch_current_models("ollama")
+            return [model.model_name for model in models if model.is_active]
+        except Exception as e:
+            # Registry unavailable - return empty list for graceful degradation
+            import logging
+            logging.warning(f"Registry unavailable for supported models, returning empty list: {e}")
+            return []
 
     def get_default_model(self) -> str:
         """
@@ -153,9 +142,12 @@ class OllamaProvider(BaseLLMProvider):
         Returns:
             Provider capabilities
         """
+        # Get current models for capabilities
+        supported_models = await self.get_supported_models()
+
         return ProviderCapabilities(
             provider_name="ollama",
-            supported_models=self.supported_models.copy(),
+            supported_models=supported_models,
             supports_streaming=True,
             supports_tools=False,  # Ollama doesn't support function calling yet
             supports_vision=True,  # Some models like llava support vision
@@ -212,8 +204,8 @@ class OllamaProvider(BaseLLMProvider):
                         models.append(model_name)
             return models
         except Exception:
-            # If we can't get the list, return our supported models list
-            return self.supported_models.copy()
+            # If we can't get the list, return empty list for graceful degradation
+            return []
 
     async def chat(
         self,
@@ -291,7 +283,7 @@ class OllamaProvider(BaseLLMProvider):
             model = model.split(":", 1)[1]
 
         # Validate model
-        if not self.validate_model(model):
+        if not await self.validate_model(model):
             raise ModelNotFoundError(
                 f"Unsupported model: {model}", model_name=model, provider="ollama"
             )
@@ -440,7 +432,7 @@ class OllamaProvider(BaseLLMProvider):
 
         # Note: We're more lenient with model validation for Ollama
         # since models are user-installed locally
-        if not self.validate_model(model):
+        if not await self.validate_model(model):
             raise ModelNotFoundError(
                 f"Invalid model name format: {model}",
                 provider="ollama",

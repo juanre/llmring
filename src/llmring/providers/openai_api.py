@@ -27,6 +27,7 @@ from llmring.net.retry import retry_async
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.net.safe_fetcher import SafeFetchError
 from llmring.net.safe_fetcher import fetch_bytes as safe_fetch_bytes
+from llmring.registry import RegistryClient
 from llmring.schemas import LLMResponse, Message, StreamChunk
 
 
@@ -70,23 +71,15 @@ class OpenAIProvider(BaseLLMProvider):
         # Initialize the client with the SDK
         self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
-        # List of officially supported models (as of early 2025)
-        self.supported_models = [
-            "gpt-4o",
-            "gpt-4o-mini",
-            "gpt-4o-2024-08-06",
-            "gpt-4-turbo",
-            "gpt-4",
-            "gpt-3.5-turbo",
-            "o1",
-            "o1-mini",
-        ]
+        # Registry client for model validation
+        self._registry_client = RegistryClient()
+
         # Simple circuit breaker per model
         self._breaker = CircuitBreaker()
 
-    def validate_model(self, model: str) -> bool:
+    async def validate_model(self, model: str) -> bool:
         """
-        Check if the model is supported by OpenAI.
+        Check if the model is supported by OpenAI using registry lookup.
 
         Args:
             model: Model name to check
@@ -98,16 +91,31 @@ class OpenAIProvider(BaseLLMProvider):
         if model.lower().startswith("openai:"):
             model = model.split(":", 1)[1]
 
-        return model in self.supported_models
+        try:
+            # Try registry validation
+            return await self._registry_client.validate_model("openai", model)
+        except Exception as e:
+            # If registry is unavailable, log warning and allow gracefully
+            import logging
+            logging.warning(f"Registry unavailable for model validation, allowing gracefully: {e}")
+            return True
 
-    def get_supported_models(self) -> List[str]:
+    async def get_supported_models(self) -> List[str]:
         """
-        Get list of supported OpenAI model names.
+        Get list of supported OpenAI model names from registry.
 
         Returns:
             List of supported model names
         """
-        return self.supported_models.copy()
+        try:
+            # Try to fetch from registry
+            models = await self._registry_client.fetch_current_models("openai")
+            return [model.model_name for model in models if model.is_active]
+        except Exception as e:
+            # Registry unavailable - return empty list for graceful degradation
+            import logging
+            logging.warning(f"Registry unavailable for supported models, returning empty list: {e}")
+            return []
 
     def get_default_model(self) -> str:
         """
@@ -125,9 +133,12 @@ class OpenAIProvider(BaseLLMProvider):
         Returns:
             Provider capabilities
         """
+        # Get current models for capabilities
+        supported_models = await self.get_supported_models()
+
         return ProviderCapabilities(
             provider_name="openai",
-            supported_models=self.supported_models.copy(),
+            supported_models=supported_models,
             supports_streaming=True,
             supports_tools=True,
             supports_vision=True,
@@ -449,7 +460,7 @@ class OpenAIProvider(BaseLLMProvider):
             model = model.split(":", 1)[1]
 
         # Verify model is supported
-        if not self.validate_model(model):
+        if not await self.validate_model(model):
             raise ModelNotFoundError(
                 f"Unsupported model: {model}", provider="openai", model_name=model
             )
@@ -866,7 +877,7 @@ class OpenAIProvider(BaseLLMProvider):
             model = model.split(":", 1)[1]
 
         # Verify model is supported
-        if not self.validate_model(model):
+        if not await self.validate_model(model):
             raise ModelNotFoundError(
                 f"Unsupported model: {model}", provider="openai", model_name=model
             )

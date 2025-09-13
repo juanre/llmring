@@ -147,7 +147,7 @@ Always strive for clarity and completeness in your explanations.
     ]
     
     request = LLMRequest(
-        model="anthropic:claude-3-5-sonnet-20241022",  # Sonnet has 1024 token minimum vs 2048 for Haiku
+        model="balanced",  # Use balanced alias for Anthropic Claude Sonnet
         messages=messages,
         max_tokens=200,
         temperature=0.7
@@ -181,7 +181,7 @@ Always strive for clarity and completeness in your explanations.
     ]
     
     request = LLMRequest(
-        model="anthropic:claude-3-5-sonnet-20241022",  # Sonnet has 1024 token minimum vs 2048 for Haiku
+        model="balanced",  # Use balanced alias for Anthropic Claude Sonnet
         messages=messages,
         max_tokens=200,
         temperature=0.7
@@ -240,7 +240,7 @@ async def test_conversation_caching():
     ]
     
     request = LLMRequest(
-        model="anthropic:claude-3-5-haiku",
+        model="fast",  # Use fast alias for efficient Anthropic model
         messages=messages,
         max_tokens=300
     )
@@ -254,7 +254,7 @@ async def test_conversation_caching():
     messages.append(Message(role="user", content="What about caching strategy?"))
     
     request = LLMRequest(
-        model="anthropic:claude-3-5-haiku",
+        model="fast",  # Use fast alias for efficient Anthropic model
         messages=messages,
         max_tokens=300
     )

@@ -27,7 +27,7 @@ class TestServiceExtendedFixes:
         conversation_id = uuid4()
 
         request = LLMRequest(
-            model="openai:gpt-4o-mini",
+            model="fast",
             messages=[
                 Message(
                     role="system",
@@ -69,7 +69,7 @@ class TestServiceExtendedFixes:
         conversation_id = uuid4()
 
         request = LLMRequest(
-            model="anthropic:claude-3-5-haiku",
+            model="balanced",
             messages=[
                 Message(
                     role="system",
@@ -109,7 +109,7 @@ class TestServiceExtendedFixes:
     async def test_response_structure_validation(self, extended_service):
         """Test that response structure is correct (has content, not choices)."""
         request = LLMRequest(
-            model="openai:gpt-4o-mini",
+            model="fast",
             messages=[
                 Message(role="system", content="You are a helpful assistant."),
                 Message(role="user", content="Say hello"),
@@ -144,7 +144,7 @@ class TestServiceExtendedFixes:
         conversation_id = uuid4()
 
         request = LLMRequest(
-            model="openai:gpt-4o-mini",
+            model="fast",
             messages=[Message(role="user", content="Test message")],
             max_tokens=10,
             temperature=0.1,
@@ -189,7 +189,7 @@ class TestServiceExtendedFixes:
     async def test_tool_calls_in_response_structure(self, extended_service):
         """Test that tool calls are properly handled in the fixed response structure."""
         request = LLMRequest(
-            model="openai:gpt-4o",
+            model="test",
             messages=[
                 Message(
                     role="system",

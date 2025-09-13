@@ -85,15 +85,15 @@ def project_headers():
 async def seeded_server(llmring_server_client, project_headers):
     """Seed the server with a couple of aliases and one usage log.
 
-    - Creates aliases: summarizer → openai:gpt-4o-mini, cheap → openai:gpt-3.5-turbo
+    - Creates aliases: summarizer → fast, cheap → fast
     - Logs one usage entry (with explicit cost to avoid live registry dependency)
     """
     c = llmring_server_client
 
     # Seed aliases
     for alias, model in [
-        ("summarizer", "openai:gpt-4o-mini"),
-        ("cheap", "openai:gpt-3.5-turbo"),
+        ("summarizer", "fast"),
+        ("cheap", "fast"),
     ]:
         r = await c.post(
             "/api/v1/aliases/bind",
@@ -106,7 +106,7 @@ async def seeded_server(llmring_server_client, project_headers):
     r = await c.post(
         "/api/v1/log",
         json={
-            "model": "gpt-4o-mini",
+            "model": "fast",
             "provider": "openai",
             "input_tokens": 100,
             "output_tokens": 20,

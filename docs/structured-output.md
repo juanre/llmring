@@ -21,7 +21,7 @@ service = LLMRing()
 
 # This works identically across ALL providers
 request = LLMRequest(
-    model="anthropic:claude-3-5-sonnet",  # or openai:gpt-4o, google:gemini-1.5-pro, ollama:llama3.2
+    model="balanced",  # or test, fast, local
     messages=[Message(role="user", content="Generate a person")],
     response_format={
         "type": "json_schema",
@@ -67,7 +67,7 @@ response.tool_calls # list: Tool calls used for adaptation (Anthropic/Google)
 ```python
 # Uses OpenAI's native JSON schema support
 request = LLMRequest(
-    model="openai:gpt-4o",
+    model="fast",
     messages=[Message(role="user", content="Generate user data")],
     response_format={
         "type": "json_schema",
@@ -96,7 +96,7 @@ request = LLMRequest(
 ```python
 # Automatically converts to tool-based approach
 request = LLMRequest(
-    model="anthropic:claude-3-5-sonnet",
+    model="balanced",
     messages=[Message(role="user", content="Generate user data")],
     response_format={
         "type": "json_schema",
@@ -131,7 +131,7 @@ request = LLMRequest(
 ```python
 # Automatically converts to function calling approach
 request = LLMRequest(
-    model="google:gemini-1.5-pro",
+    model="balanced",
     messages=[Message(role="user", content="Generate user data")],
     response_format={
         "type": "json_schema",
@@ -167,7 +167,7 @@ request = LLMRequest(
 ```python
 # Uses prompt engineering with schema hints
 request = LLMRequest(
-    model="ollama:llama3.2:1b",
+    model="local",
     messages=[Message(role="user", content="Generate user data")],
     response_format={
         "type": "json_schema",
@@ -202,7 +202,7 @@ request = LLMRequest(
 ```python
 # Streaming works with structured output
 request = LLMRequest(
-    model="anthropic:claude-3-5-sonnet",
+    model="balanced",
     messages=[Message(role="user", content="Generate multiple users")],
     response_format={...},  # Same schema
     stream=True
@@ -303,7 +303,7 @@ product_schema = {
 }
 
 request = LLMRequest(
-    model="openai:gpt-4o",  # Works with any provider
+    model="fast",  # Works with any provider
     messages=[Message(role="user", content="Create a laptop product")],
     response_format={
         "type": "json_schema",
@@ -333,7 +333,7 @@ extraction_schema = {
 }
 
 request = LLMRequest(
-    model="google:gemini-1.5-pro",
+    model="balanced",
     messages=[Message(role="user", content="Extract company info from this text: ...")],
     response_format={
         "type": "json_schema",

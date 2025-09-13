@@ -57,7 +57,7 @@ async def example_streaming_without_tools():
     
     # Create enhanced LLM
     llm = create_enhanced_llm(
-        llm_model="openai:gpt-4o-mini",
+        llm_model="fast",  # Use semantic alias
         origin="streaming-example"
     )
     
@@ -87,7 +87,7 @@ async def example_streaming_with_tools():
     
     # Create enhanced LLM
     llm = create_enhanced_llm(
-        llm_model="openai:gpt-4o-mini",
+        llm_model="fast",  # Use semantic alias
         origin="streaming-example"
     )
     
@@ -150,7 +150,7 @@ async def example_non_streaming_with_tools():
     
     # Create enhanced LLM
     llm = create_enhanced_llm(
-        llm_model="openai:gpt-4o-mini",
+        llm_model="fast",  # Use semantic alias
         origin="streaming-example"
     )
     

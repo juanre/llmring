@@ -38,7 +38,7 @@ class TestProviderEnhancements:
     async def test_google_real_streaming_vs_faked(self, service):
         """Test that Google streaming is real (multiple chunks) not faked (single chunk)."""
         request = LLMRequest(
-            model="google:gemini-1.5-flash",
+            model="fast",
             messages=[
                 Message(
                     role="user",
@@ -186,7 +186,7 @@ class TestProviderEnhancements:
     async def test_openai_json_schema_support(self, service):
         """Test OpenAI JSON schema support (new feature)."""
         request = LLMRequest(
-            model="openai:gpt-4o",
+            model="test",
             messages=[
                 Message(role="user", content="Generate a person with name and age")
             ],
@@ -236,7 +236,7 @@ class TestProviderEnhancements:
         long_system = "You are an expert assistant. " * 200  # Over 1024 tokens
 
         request = LLMRequest(
-            model="anthropic:claude-3-5-sonnet",
+            model="balanced",
             messages=[
                 Message(
                     role="system",

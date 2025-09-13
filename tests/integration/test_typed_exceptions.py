@@ -32,7 +32,7 @@ class TestTypedExceptions:
     def sample_request(self):
         """Sample request for testing."""
         return LLMRequest(
-            model="openai:gpt-4o-mini",
+            model="fast",
             messages=[Message(role="user", content="test")],
             max_tokens=10,
         )
@@ -47,7 +47,7 @@ class TestTypedExceptions:
 
         with pytest.raises(ProviderAuthenticationError) as exc_info:
             await provider.chat(
-                messages=sample_request.messages, model="gpt-4o-mini", max_tokens=10
+                messages=sample_request.messages, model="fast", max_tokens=10
             )
 
         assert exc_info.value.provider == "openai"
@@ -69,7 +69,7 @@ class TestTypedExceptions:
         with pytest.raises(ProviderAuthenticationError) as exc_info:
             await provider.chat(
                 messages=sample_request.messages,
-                model="claude-3-5-haiku",
+                model="balanced",
                 max_tokens=10,
             )
 
@@ -122,7 +122,7 @@ class TestTypedExceptions:
                 (ProviderTimeoutError, ProviderResponseError)
             ) as exc_info:
                 await provider.chat(
-                    messages=sample_request.messages, model="gpt-4o-mini", max_tokens=10
+                    messages=sample_request.messages, model="fast", max_tokens=10
                 )
 
         # Either timeout or auth error is acceptable for this test
@@ -143,7 +143,7 @@ class TestTypedExceptions:
         with patch.object(provider._breaker, "allow", return_value=False):
             with pytest.raises(CircuitBreakerError) as exc_info:
                 await provider.chat(
-                    messages=sample_request.messages, model="gpt-4o-mini", max_tokens=10
+                    messages=sample_request.messages, model="fast", max_tokens=10
                 )
 
         assert exc_info.value.provider == "openai"

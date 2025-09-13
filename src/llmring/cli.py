@@ -544,7 +544,7 @@ def main():
     chat_parser = subparsers.add_parser("chat", help="Send a chat message")
     chat_parser.add_argument("message", help="Message to send")
     chat_parser.add_argument(
-        "--model", default="openai:gpt-3.5-turbo", help="Model or alias to use"
+        "--model", default="fast", help="Model alias (fast, balanced, deep) or provider:model"
     )
     chat_parser.add_argument("--system", help="System prompt")
     chat_parser.add_argument(
@@ -564,7 +564,7 @@ def main():
 
     # Info command
     info_parser = subparsers.add_parser("info", help="Show model information")
-    info_parser.add_argument("model", help="Model identifier (e.g., openai:gpt-4)")
+    info_parser.add_argument("model", help="Model alias (fast, balanced, deep) or provider:model (e.g., openai:gpt-4)")
     info_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # Providers command

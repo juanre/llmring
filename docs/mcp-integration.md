@@ -20,7 +20,7 @@ from llmring.mcp.client.enhanced_llm import create_enhanced_llm
 
 # Create an enhanced LLM with MCP tools
 llm = await create_enhanced_llm(
-    model="openai:gpt-4o",
+    model="fast",
     mcp_server_path="/path/to/mcp/server"
 )
 

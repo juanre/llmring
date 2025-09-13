@@ -129,7 +129,7 @@ class TestFileProcessing:
         available_models = service.get_available_models()
         if (
             not available_models.get("openai")
-            or "gpt-4o" not in available_models["openai"]
+            or "gpt-4" not in available_models["openai"]
         ):
             pytest.skip("OpenAI GPT-4o not available")
 
@@ -141,7 +141,7 @@ class TestFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="gpt-4o",
+            model="test",
             max_tokens=200,
         )
 
@@ -204,7 +204,7 @@ class TestFileProcessing:
 
             request = LLMRequest(
                 messages=[Message(role="user", content=content)],
-                model="gemini-1.5-flash",
+                model="fast",
                 max_tokens=200,
             )
 
@@ -290,7 +290,7 @@ class TestFileProcessing:
 
             request = LLMRequest(
                 messages=[Message(role="user", content=content)],
-                model="gemini-1.5-flash",
+                model="fast",
                 max_tokens=300,
             )
 
@@ -341,7 +341,7 @@ class TestFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="gpt-4o",  # Will automatically use Assistants API for PDFs
+            model="test",  # Will automatically use Assistants API for PDFs
             max_tokens=300,
         )
 

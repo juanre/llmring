@@ -28,7 +28,7 @@ async def example_no_database():
     # Make a request
     request = LLMRequest(
         messages=[Message(role="user", content="What is 2+2?")],
-        model="gpt-4o-mini",  # or "claude-3-haiku-20240307"
+        model="fast",  # Use semantic alias (fast, balanced, deep)
         temperature=0,
     )
 
@@ -51,7 +51,7 @@ async def example_with_sqlite():
     # Make a request (automatically logged)
     request = LLMRequest(
         messages=[Message(role="user", content="Tell me a short joke")],
-        model="gpt-4o-mini",
+        model="fast",
         temperature=0.7,
         max_tokens=100,
     )
@@ -78,7 +78,7 @@ async def example_with_caching():
     # First request (not cached)
     request = LLMRequest(
         messages=[Message(role="user", content="What is the capital of France?")],
-        model="gpt-4o-mini",
+        model="fast",
         temperature=0,  # Must be <= 0.1 for caching
         cache={"enabled": True, "ttl_seconds": 300},  # Cache for 5 minutes
     )
@@ -99,12 +99,20 @@ async def example_different_providers():
 
     service = LLMRing(enable_db_logging=False)
 
+    # Recommended: use aliases instead of provider:model format
     providers = [
-        ("openai:gpt-4o-mini", "OPENAI_API_KEY"),
-        ("anthropic:claude-3-haiku-20240307", "ANTHROPIC_API_KEY"),
-        # ("google:gemini-1.5-flash", "GOOGLE_API_KEY"),
-        # ("ollama:llama2", None),  # Requires local Ollama
+        ("fast", "OPENAI_API_KEY"),  # Maps to cost-effective model
+        ("balanced", "ANTHROPIC_API_KEY"),  # Maps to balanced model
+        # ("deep", "ANTHROPIC_API_KEY"),  # Maps to powerful model
+        # ("local", None),  # Maps to local Ollama model
     ]
+
+    # Advanced: Direct provider:model format (escape hatch)
+    # providers = [
+    #     ("openai:gpt-4o-mini", "OPENAI_API_KEY"),
+    #     ("anthropic:claude-3-haiku-20240307", "ANTHROPIC_API_KEY"),
+    #     ("google:gemini-1.5-flash", "GOOGLE_API_KEY"),
+    # ]
 
     for model, env_var in providers:
         if env_var and not os.getenv(env_var):
