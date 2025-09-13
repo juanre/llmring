@@ -259,6 +259,19 @@ class OllamaProvider(BaseLLMProvider):
                 extra_params=extra_params,
             )
 
+        return await self._chat_non_streaming(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
+            json_response=json_response,
+            cache=cache,
+            extra_params=extra_params,
+        )
+
     async def _stream_chat(
         self,
         messages: List[Message],
