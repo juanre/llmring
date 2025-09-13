@@ -435,6 +435,34 @@ class GoogleProvider(BaseLLMProvider):
         if google_tools:
             config_params["tools"] = google_tools
 
+            # Handle tool_choice if provided
+            if tool_choice:
+                if tool_choice == "auto":
+                    # Google default behavior
+                    pass
+                elif tool_choice == "none":
+                    # Disable function calling
+                    config_params["tool_config"] = types.ToolConfig(
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfig.Mode.NONE
+                        )
+                    )
+                elif tool_choice == "any" or tool_choice == "required":
+                    # Force function calling
+                    config_params["tool_config"] = types.ToolConfig(
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfig.Mode.ANY
+                        )
+                    )
+                elif isinstance(tool_choice, dict) and "function" in tool_choice:
+                    # Specific function choice - not directly supported by Google
+                    # Fall back to ANY mode with the available tools
+                    config_params["tool_config"] = types.ToolConfig(
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfig.Mode.ANY
+                        )
+                    )
+
         config = types.GenerateContentConfig(**config_params)
 
         # Convert conversation messages to Google format
@@ -492,11 +520,25 @@ class GoogleProvider(BaseLLMProvider):
             )
             await self._breaker.record_success(key)
 
-            # Process the streaming response (sync generator, iterate normally)
+            # Process the streaming response (wrap sync iteration in thread executor)
             accumulated_content = ""
             tool_calls = []
 
-            for chunk in stream_response:
+            # Convert sync generator to async generator to avoid blocking event loop
+            import concurrent.futures
+
+            def _iterate_chunks():
+                """Iterate over sync generator in thread."""
+                chunks = []
+                for chunk in stream_response:
+                    chunks.append(chunk)
+                return chunks
+
+            # Get all chunks in thread executor
+            loop = asyncio.get_event_loop()
+            chunks = await loop.run_in_executor(None, _iterate_chunks)
+
+            for chunk in chunks:
                 if chunk.candidates and len(chunk.candidates) > 0:
                     candidate = chunk.candidates[0]
 
@@ -675,6 +717,34 @@ class GoogleProvider(BaseLLMProvider):
         # Add tools to config if present
         if google_tools:
             config_params["tools"] = google_tools
+
+            # Handle tool_choice if provided
+            if tool_choice:
+                if tool_choice == "auto":
+                    # Google default behavior
+                    pass
+                elif tool_choice == "none":
+                    # Disable function calling
+                    config_params["tool_config"] = types.ToolConfig(
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfig.Mode.NONE
+                        )
+                    )
+                elif tool_choice == "any" or tool_choice == "required":
+                    # Force function calling
+                    config_params["tool_config"] = types.ToolConfig(
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfig.Mode.ANY
+                        )
+                    )
+                elif isinstance(tool_choice, dict) and "function" in tool_choice:
+                    # Specific function choice - not directly supported by Google
+                    # Fall back to ANY mode with the available tools
+                    config_params["tool_config"] = types.ToolConfig(
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfig.Mode.ANY
+                        )
+                    )
 
         config = types.GenerateContentConfig(**config_params) if config_params else None
 
