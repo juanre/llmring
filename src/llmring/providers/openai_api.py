@@ -468,9 +468,13 @@ class OpenAIProvider(BaseLLMProvider):
             
             # Process the stream
             accumulated_content = ""
+            accumulated_tool_calls = {}
+            
             async for chunk in stream:
                 if chunk.choices and len(chunk.choices) > 0:
                     choice = chunk.choices[0]
+                    
+                    # Handle content streaming
                     if choice.delta and choice.delta.content:
                         accumulated_content += choice.delta.content
                         yield StreamChunk(
@@ -478,12 +482,47 @@ class OpenAIProvider(BaseLLMProvider):
                             model=model,
                             finish_reason=choice.finish_reason,
                         )
-                    elif choice.finish_reason:
-                        # Final chunk with usage information
+                    
+                    # Handle tool call streaming
+                    if choice.delta and choice.delta.tool_calls:
+                        for tool_call_delta in choice.delta.tool_calls:
+                            idx = tool_call_delta.index
+                            
+                            # Initialize tool call if new
+                            if idx not in accumulated_tool_calls:
+                                accumulated_tool_calls[idx] = {
+                                    "id": "",
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""}
+                                }
+                            
+                            # Accumulate tool call deltas
+                            if tool_call_delta.id:
+                                accumulated_tool_calls[idx]["id"] = tool_call_delta.id
+                            
+                            if tool_call_delta.function:
+                                if tool_call_delta.function.name:
+                                    accumulated_tool_calls[idx]["function"]["name"] = tool_call_delta.function.name
+                                
+                                if tool_call_delta.function.arguments:
+                                    accumulated_tool_calls[idx]["function"]["arguments"] += tool_call_delta.function.arguments
+                    
+                    # Handle finish
+                    if choice.finish_reason:
+                        # Convert accumulated tool calls to list
+                        tool_calls_list = None
+                        if accumulated_tool_calls:
+                            tool_calls_list = [
+                                accumulated_tool_calls[idx] 
+                                for idx in sorted(accumulated_tool_calls.keys())
+                            ]
+                        
+                        # Final chunk with usage information and tool calls
                         yield StreamChunk(
                             delta="",
                             model=model,
                             finish_reason=choice.finish_reason,
+                            tool_calls=tool_calls_list,
                             usage={
                                 "prompt_tokens": self.get_token_count(str(openai_messages)),
                                 "completion_tokens": self.get_token_count(accumulated_content),

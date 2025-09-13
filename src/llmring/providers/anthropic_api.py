@@ -53,7 +53,12 @@ class AnthropicProvider(BaseLLMProvider):
         self.default_model = model
 
         # Initialize the client with the SDK
-        self.client = AsyncAnthropic(api_key=api_key, base_url=base_url)
+        # Include beta header for prompt caching (still needed as of 2025)
+        self.client = AsyncAnthropic(
+            api_key=api_key,
+            base_url=base_url,
+            default_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
+        )
 
         # List of officially supported models
         self.supported_models = [
@@ -235,7 +240,7 @@ class AnthropicProvider(BaseLLMProvider):
             raise ValueError(f"Unsupported model: {original_model}")
             
         # Prepare messages and system prompt
-        anthropic_messages, system_message = self._prepare_messages(messages)
+        anthropic_messages, system_message, system_cache_control = self._prepare_messages(messages)
         
         # Build request parameters
         request_params = {
@@ -247,7 +252,17 @@ class AnthropicProvider(BaseLLMProvider):
         }
         
         if system_message:
-            request_params["system"] = system_message
+            # Add system message with cache control if available
+            if system_cache_control:
+                request_params["system"] = [
+                    {
+                        "type": "text",
+                        "text": system_message,
+                        "cache_control": system_cache_control
+                    }
+                ]
+            else:
+                request_params["system"] = system_message
             
         # Handle tools if provided
         if tools:
@@ -258,7 +273,16 @@ class AnthropicProvider(BaseLLMProvider):
         # Handle JSON response format
         if json_response or (response_format and response_format.get("type") in ["json_object", "json"]):
             json_instruction = "\n\nIMPORTANT: You must respond with valid JSON only."
-            request_params["system"] = (request_params.get("system", "") + json_instruction).strip()
+            # Preserve cache control structure if present
+            if isinstance(request_params.get("system"), list):
+                # System is a list with cache control, append to text
+                request_params["system"][0]["text"] += json_instruction
+            elif request_params.get("system"):
+                # System is a string, just append
+                request_params["system"] += json_instruction
+            else:
+                # No system message yet
+                request_params["system"] = json_instruction.strip()
             
         # Make streaming API call
         try:
@@ -283,15 +307,22 @@ class AnthropicProvider(BaseLLMProvider):
                 elif event.type == "message_delta":
                     # Final event with usage information
                     if hasattr(event, 'usage'):
+                        usage_dict = {
+                            "prompt_tokens": event.usage.input_tokens,
+                            "completion_tokens": event.usage.output_tokens,
+                            "total_tokens": event.usage.input_tokens + event.usage.output_tokens,
+                        }
+                        # Add cache-related usage if available
+                        if hasattr(event.usage, 'cache_creation_input_tokens'):
+                            usage_dict["cache_creation_input_tokens"] = event.usage.cache_creation_input_tokens
+                        if hasattr(event.usage, 'cache_read_input_tokens'):
+                            usage_dict["cache_read_input_tokens"] = event.usage.cache_read_input_tokens
+                        
                         yield StreamChunk(
                             delta="",
                             model=model,
                             finish_reason=event.stop_reason if hasattr(event, 'stop_reason') else "stop",
-                            usage={
-                                "prompt_tokens": event.usage.input_tokens,
-                                "completion_tokens": event.usage.output_tokens,
-                                "total_tokens": event.usage.input_tokens + event.usage.output_tokens,
-                            } if event.usage else None
+                            usage=usage_dict if event.usage else None
                         )
                         
         except Exception as e:
@@ -303,14 +334,18 @@ class AnthropicProvider(BaseLLMProvider):
             else:
                 raise Exception(f"Anthropic API error: {error_msg}") from e
     
-    def _prepare_messages(self, messages: List[Message]) -> tuple[List[Dict], Optional[str]]:
-        """Convert messages to Anthropic format and extract system message."""
+    def _prepare_messages(self, messages: List[Message]) -> tuple[List[Dict], Optional[str], Optional[Dict]]:
+        """Convert messages to Anthropic format and extract system message with cache control."""
         anthropic_messages = []
         system_message = None
+        system_cache_control = None
         
         for msg in messages:
             if msg.role == "system":
                 system_message = msg.content if isinstance(msg.content, str) else str(msg.content)
+                # Check for cache control in system message metadata
+                if hasattr(msg, 'metadata') and msg.metadata and 'cache_control' in msg.metadata:
+                    system_cache_control = msg.metadata['cache_control']
             else:
                 # Handle tool calls and responses
                 if msg.role == "assistant" and hasattr(msg, "tool_calls") and msg.tool_calls:
@@ -337,9 +372,16 @@ class AnthropicProvider(BaseLLMProvider):
                 else:
                     # Regular messages
                     content = self._format_message_content(msg.content)
+                    
+                    # Add cache control to the last content block if present in metadata
+                    if hasattr(msg, 'metadata') and msg.metadata and 'cache_control' in msg.metadata:
+                        if content and isinstance(content, list) and len(content) > 0:
+                            # Add cache_control to the last content block
+                            content[-1]['cache_control'] = msg.metadata['cache_control']
+                    
                     anthropic_messages.append({"role": msg.role, "content": content})
                     
-        return anthropic_messages, system_message
+        return anthropic_messages, system_message, system_cache_control
     
     def _format_message_content(self, content: Any) -> List[Dict]:
         """Format message content to Anthropic's expected format."""
@@ -444,103 +486,8 @@ class AnthropicProvider(BaseLLMProvider):
         if not self.validate_model(model):
             raise ValueError(f"Unsupported model: {original_model}")
 
-        # Convert messages to Anthropic format
-        anthropic_messages = []
-        system_message = None
-
-        for msg in messages:
-            if msg.role == "system":
-                system_message = msg.content
-            else:
-                # Handle function/tool responses properly
-                if (
-                    msg.role == "assistant"
-                    and hasattr(msg, "tool_calls")
-                    and msg.tool_calls
-                ):
-                    # Convert tool calls from our format to Anthropic's format
-                    content = []
-                    if msg.content:
-                        content.append({"type": "text", "text": msg.content})
-
-                    for tool_call in msg.tool_calls:
-                        content.append(
-                            {
-                                "type": "tool_use",
-                                "id": tool_call["id"],
-                                "name": tool_call["function"]["name"],
-                                "input": tool_call["function"]["arguments"],
-                            }
-                        )
-
-                    anthropic_messages.append({"role": "assistant", "content": content})
-                elif hasattr(msg, "tool_call_id") and msg.tool_call_id:
-                    # Tool responses in Anthropic format
-                    anthropic_messages.append(
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "tool_result",
-                                    "tool_use_id": msg.tool_call_id,
-                                    "content": msg.content,
-                                }
-                            ],
-                        }
-                    )
-                else:
-                    # Regular messages
-                    content = msg.content
-                    # Convert content to list format if it's a string
-                    if isinstance(content, str):
-                        content = [{"type": "text", "text": content}]
-                    elif isinstance(content, list):
-                        # Ensure the list is in the correct format
-                        formatted_content = []
-                        for item in content:
-                            if isinstance(item, str):
-                                formatted_content.append({"type": "text", "text": item})
-                            elif isinstance(item, dict):
-                                # Handle image content
-                                if item.get("type") == "image_url":
-                                    # Convert OpenAI format to Anthropic format
-                                    image_data = item["image_url"]["url"]
-                                    # Extract base64 data from data URL
-                                    if image_data.startswith("data:"):
-                                        media_type, base64_data = (
-                                            image_data.split(";")[0].split(":")[1],
-                                            image_data.split(",")[1],
-                                        )
-                                        formatted_content.append(
-                                            {
-                                                "type": "image",
-                                                "source": {
-                                                    "type": "base64",
-                                                    "media_type": media_type,
-                                                    "data": base64_data,
-                                                },
-                                            }
-                                        )
-                                    else:
-                                        # URL image
-                                        formatted_content.append(
-                                            {
-                                                "type": "image",
-                                                "source": {
-                                                    "type": "url",
-                                                    "url": image_data,
-                                                },
-                                            }
-                                        )
-                                # Handle document content (universal format)
-                                elif item.get("type") == "document":
-                                    # Universal document format -> Anthropic document format (same!)
-                                    formatted_content.append(item)
-                                else:
-                                    formatted_content.append(item)
-                        content = formatted_content
-
-                    anthropic_messages.append({"role": msg.role, "content": content})
+        # Convert messages to Anthropic format using _prepare_messages
+        anthropic_messages, system_message, system_cache_control = self._prepare_messages(messages)
 
         # Build the request parameters
         request_params = {
@@ -551,69 +498,38 @@ class AnthropicProvider(BaseLLMProvider):
         }
 
         if system_message:
-            request_params["system"] = system_message
+            # Add system message with cache control if available
+            if system_cache_control:
+                request_params["system"] = [
+                    {
+                        "type": "text",
+                        "text": system_message,
+                        "cache_control": system_cache_control
+                    }
+                ]
+            else:
+                request_params["system"] = system_message
 
         # Handle tools if provided
         if tools:
-            anthropic_tools = []
-            for tool in tools:
-                # Handle both OpenAI/unit test format and direct format
-                if "function" in tool:
-                    # OpenAI/unit test format: {"type": "function", "function": {"name": "...", "parameters": {...}}}
-                    func = tool["function"]
-                    anthropic_tool = {
-                        "name": func["name"],
-                        "description": func.get("description", ""),
-                        "input_schema": func.get(
-                            "parameters", {"type": "object", "properties": {}}
-                        ),
-                    }
-                else:
-                    # Direct format: {"name": "...", "input_schema": {...}}
-                    anthropic_tool = {
-                        "name": tool["name"],
-                        "description": tool.get("description", ""),
-                        "input_schema": tool.get(
-                            "input_schema",
-                            tool.get(
-                                "parameters", {"type": "object", "properties": {}}
-                            ),
-                        ),
-                    }
-                anthropic_tools.append(anthropic_tool)
-            request_params["tools"] = anthropic_tools
-
-            # Handle tool choice
+            request_params["tools"] = self._prepare_tools(tools)
             if tool_choice:
-                if tool_choice == "auto":
-                    request_params["tool_choice"] = {"type": "auto"}
-                elif tool_choice == "any":
-                    request_params["tool_choice"] = {"type": "any"}
-                elif tool_choice == "none":
-                    request_params["tool_choice"] = {"type": "none"}
-                elif isinstance(tool_choice, dict):
-                    # Specific tool choice
-                    request_params["tool_choice"] = tool_choice
+                request_params["tool_choice"] = self._prepare_tool_choice(tool_choice)
 
-        # Handle response format for JSON outputs
-        if response_format:
-            if (
-                response_format.get("type") == "json_object"
-                or response_format.get("type") == "json"
-            ):
-                # While Anthropic doesn't have a direct JSON mode like OpenAI,
-                # we can use structured output through function calling or clear instructions
-                json_instruction = "\n\nIMPORTANT: You must respond with valid JSON only. Do not include any explanatory text before or after the JSON."
+        # Handle JSON response format
+        if json_response or (response_format and response_format.get("type") in ["json_object", "json"]):
+            json_instruction = "\n\nIMPORTANT: You must respond with valid JSON only."
+            # Preserve cache control structure if present
+            if isinstance(request_params.get("system"), list):
+                # System is a list with cache control, append to text
+                request_params["system"][0]["text"] += json_instruction
+            elif request_params.get("system"):
+                # System is a string, just append
+                request_params["system"] += json_instruction
+            else:
+                # No system message yet
+                request_params["system"] = json_instruction.strip()
 
-                if system_message:
-                    request_params["system"] = system_message + json_instruction
-                else:
-                    request_params["system"] = json_instruction
-
-                # If a schema is provided, add it to the instructions
-                if response_format.get("schema"):
-                    schema_instruction = f"\n\nThe JSON must conform to this schema: {json.dumps(response_format['schema'])}"
-                    request_params["system"] += schema_instruction
 
         # Make the API call using the SDK
         try:
@@ -672,17 +588,34 @@ class AnthropicProvider(BaseLLMProvider):
                     }
                 )
 
-        # Prepare the response
+        # Prepare the response with cache-aware usage
+        usage_dict = {
+            "prompt_tokens": int(response.usage.input_tokens),
+            "completion_tokens": int(response.usage.output_tokens),
+            "total_tokens": int(
+                response.usage.input_tokens + response.usage.output_tokens
+            ),
+        }
+        
+        # Add cache-related usage if available
+        # The Anthropic SDK returns these as separate fields
+        if hasattr(response.usage, 'cache_creation_input_tokens'):
+            usage_dict["cache_creation_input_tokens"] = response.usage.cache_creation_input_tokens
+        if hasattr(response.usage, 'cache_read_input_tokens'):
+            usage_dict["cache_read_input_tokens"] = response.usage.cache_read_input_tokens
+
+        # Also check for cache_creation detail object which has ephemeral token info
+        if hasattr(response.usage, 'cache_creation') and response.usage.cache_creation:
+            cache_creation = response.usage.cache_creation
+            if hasattr(cache_creation, 'ephemeral_5m_input_tokens'):
+                usage_dict["cache_creation_5m_tokens"] = cache_creation.ephemeral_5m_input_tokens
+            if hasattr(cache_creation, 'ephemeral_1h_input_tokens'):
+                usage_dict["cache_creation_1h_tokens"] = cache_creation.ephemeral_1h_input_tokens
+            
         llm_response = LLMResponse(
             content=content.strip() if content else "",
             model=model,
-            usage={
-                "prompt_tokens": int(response.usage.input_tokens),
-                "completion_tokens": int(response.usage.output_tokens),
-                "total_tokens": int(
-                    response.usage.input_tokens + response.usage.output_tokens
-                ),
-            },
+            usage=usage_dict,
             finish_reason=finish_reason,
         )
 

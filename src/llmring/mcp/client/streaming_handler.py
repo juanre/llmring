@@ -63,8 +63,8 @@ class StreamingToolHandler:
             if chunk.delta:
                 accumulated_content += chunk.delta
             
-            # Check for tool calls in the chunk
-            if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
+            # Check for tool calls in the chunk (they come in the final chunk)
+            if chunk.tool_calls:
                 accumulated_tool_calls = chunk.tool_calls
             
             # Store usage information
@@ -98,7 +98,6 @@ class StreamingToolHandler:
                     temperature=initial_request.temperature,
                     max_tokens=initial_request.max_tokens,
                     stream=True,  # Continue streaming
-                    user_id=initial_request.user_id,
                 )
                 
                 # Stream the follow-up response
