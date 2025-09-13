@@ -89,18 +89,17 @@ class GoogleProvider(BaseLLMProvider):
             "gemini-pro-vision",
         ]
 
-        # Map model names to actual API model names
-        # Using stable models instead of experimental ones for reliability
+        # Map model names only for legacy/unversioned names
+        # Honor user-specified model versions (don't downgrade 2.x to 1.5)
         self.model_mapping = {
-            "gemini-2.5-pro": "gemini-1.5-pro",  # Use stable model
-            "gemini-2.0-flash": "gemini-1.5-flash",
-            "gemini-2.0-flash-lite": "gemini-1.5-flash",
-            "gemini-2.0-pro": "gemini-1.5-pro",
-            # Legacy model mappings - keep for compatibility
-            "gemini-1.5-pro": "gemini-1.5-pro",
-            "gemini-1.5-flash": "gemini-1.5-flash",
+            # Only map unversioned legacy names to stable versions
             "gemini-pro": "gemini-1.5-pro",
             "gemini-pro-vision": "gemini-1.5-pro",
+            "gemini-flash": "gemini-1.5-flash",
+            # Keep specific versions as-is (user intention should be honored)
+            # "gemini-2.5-pro": "gemini-2.5-pro",  # No mapping needed
+            # "gemini-2.0-flash": "gemini-2.0-flash",  # No mapping needed
+            # "gemini-1.5-pro": "gemini-1.5-pro",  # No mapping needed
         }
         self._breaker = CircuitBreaker()
 
@@ -305,28 +304,20 @@ class GoogleProvider(BaseLLMProvider):
         Returns:
             LLM response or async iterator of stream chunks if streaming
         """
-        # For now, streaming is not fully implemented - fall back to non-streaming
+        # Implement real streaming using Google SDK
         if stream:
-            async def _single_chunk_stream():
-                response = await self._chat_non_streaming(
-                    messages=messages,
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format=response_format,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    json_response=json_response,
-                    cache=cache,
-                    extra_params=extra_params,
-                )
-                yield StreamChunk(
-                    delta=response.content,
-                    model=response.model,
-                    finish_reason=response.finish_reason,
-                    usage=response.usage,
-                )
-            return _single_chunk_stream()
+            return self._stream_chat(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
+                json_response=json_response,
+                cache=cache,
+                extra_params=extra_params,
+            )
 
         return await self._chat_non_streaming(
             messages=messages,
@@ -340,7 +331,243 @@ class GoogleProvider(BaseLLMProvider):
             cache=cache,
             extra_params=extra_params,
         )
-    
+
+    async def _stream_chat(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """Real streaming implementation using Google SDK."""
+        # Process model name (remove provider prefix)
+        original_model = model
+        if model.lower().startswith("google:") or model.lower().startswith("gemini:"):
+            model = model.split(":", 1)[1]
+
+        # Map model name to supported versions if needed
+        if model.startswith("gemini-2."):
+            # User specified 2.x model, honor it instead of mapping to 1.5
+            pass
+        elif model.startswith("gemini-1."):
+            # Use as specified
+            pass
+        else:
+            # Add fallback for unspecified versions
+            if "gemini-pro" == model:
+                model = "gemini-1.5-pro"
+            elif "gemini-flash" == model:
+                model = "gemini-1.5-flash"
+
+        # Validate model
+        if not self.validate_model(model):
+            raise ModelNotFoundError(
+                f"Unsupported model: {original_model}",
+                model_name=model,
+                provider="google"
+            )
+
+        # Extract system message and build conversation
+        system_message = None
+        conversation_messages = []
+
+        for msg in messages:
+            if msg.role == "system":
+                system_message = msg.content
+            else:
+                conversation_messages.append(msg)
+
+        # Build generation config
+        config_params = {}
+
+        if system_message:
+            config_params["system_instruction"] = system_message
+
+        if temperature is not None:
+            config_params["temperature"] = temperature
+
+        if max_tokens is not None:
+            config_params["max_output_tokens"] = max_tokens
+
+        # Handle JSON response format
+        if json_response or (response_format and response_format.get("type") in ["json_object", "json"]):
+            config_params["response_mime_type"] = "application/json"
+
+        # Apply extra parameters
+        if extra_params:
+            config_params.update(extra_params)
+
+        # Handle tools using native Google function calling
+        google_tools = None
+        if tools:
+            google_tools = []
+            for tool in tools:
+                # Convert OpenAI/universal format to Google format
+                if "function" in tool:
+                    # OpenAI format: {"type": "function", "function": {"name": "...", "parameters": {...}}}
+                    func = tool["function"]
+                    tool_name = func["name"]
+                    tool_description = func.get("description", "")
+                    tool_parameters = func.get("parameters", {})
+                else:
+                    # Direct format: {"name": "...", "parameters": {...}}
+                    tool_name = tool["name"]
+                    tool_description = tool.get("description", "")
+                    tool_parameters = tool.get("parameters", {})
+
+                # Create Google FunctionDeclaration
+                google_tools.append(types.Tool(
+                    function_declarations=[types.FunctionDeclaration(
+                        name=tool_name,
+                        description=tool_description,
+                        parameters=tool_parameters
+                    )]
+                ))
+
+        config = types.GenerateContentConfig(**config_params)
+
+        # Convert conversation messages to Google format
+        google_messages = []
+        for msg in conversation_messages:
+            if msg.role in ["user", "assistant"]:
+                # Handle different content types
+                if isinstance(msg.content, str):
+                    google_messages.append(types.Content(
+                        role="user" if msg.role == "user" else "model",
+                        parts=[types.Part(text=msg.content)]
+                    ))
+                elif isinstance(msg.content, list):
+                    # Handle multimodal content
+                    parts = []
+                    for item in msg.content:
+                        if isinstance(item, str):
+                            parts.append(types.Part(text=item))
+                        elif isinstance(item, dict):
+                            if item.get("type") == "text":
+                                parts.append(types.Part(text=item["text"]))
+                            elif item.get("type") == "image_url":
+                                # Convert image to Google format
+                                image_data = item["image_url"]["url"]
+                                if image_data.startswith("data:"):
+                                    # Extract base64 data
+                                    media_type, base64_data = image_data.split(";")[0].split(":")[1], image_data.split(",")[1]
+                                    parts.append(types.Part(
+                                        inline_data=types.Blob(
+                                            mime_type=media_type,
+                                            data=base64.b64decode(base64_data)
+                                        )
+                                    ))
+
+                    if parts:
+                        google_messages.append(types.Content(
+                            role="user" if msg.role == "user" else "model",
+                            parts=parts
+                        ))
+
+        try:
+            key = f"google:{model}"
+            if not await self._breaker.allow(key):
+                raise CircuitBreakerError(
+                    "Google circuit breaker is open - too many recent failures",
+                    provider="google"
+                )
+
+            # Use real streaming API (returns async generator directly)
+            call_params = {
+                "model": model,
+                "contents": google_messages,
+                "config": config,
+            }
+
+            # Add tools if present
+            if google_tools:
+                call_params["tools"] = google_tools
+
+            stream_response = self.client.models.generate_content_stream(**call_params)
+            await self._breaker.record_success(key)
+
+            # Process the streaming response
+            accumulated_content = ""
+            tool_calls = []
+
+            async for chunk in stream_response:
+                if chunk.candidates and len(chunk.candidates) > 0:
+                    candidate = chunk.candidates[0]
+
+                    if hasattr(candidate, 'content') and candidate.content:
+                        # Extract text and function calls from content parts
+                        chunk_text = ""
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                chunk_text += part.text
+                            elif hasattr(part, 'function_call') and part.function_call:
+                                # Handle native function calls
+                                function_call = part.function_call
+                                tool_calls.append({
+                                    "id": f"call_{len(tool_calls)}",  # Google doesn't provide IDs
+                                    "type": "function",
+                                    "function": {
+                                        "name": function_call.name,
+                                        "arguments": json.dumps(function_call.args) if function_call.args else "{}"
+                                    }
+                                })
+
+                        if chunk_text:
+                            accumulated_content += chunk_text
+                            yield StreamChunk(
+                                delta=chunk_text,
+                                model=model,
+                                finish_reason=None,
+                            )
+
+                    # Check for finish
+                    if hasattr(candidate, 'finish_reason') and candidate.finish_reason:
+                        finish_reason = str(candidate.finish_reason).lower()
+
+                        # Final chunk with usage estimation and tool calls
+                        yield StreamChunk(
+                            delta="",
+                            model=model,
+                            finish_reason=finish_reason,
+                            tool_calls=tool_calls if tool_calls else None,
+                            usage={
+                                "prompt_tokens": self.get_token_count(str(google_messages)),
+                                "completion_tokens": self.get_token_count(accumulated_content),
+                                "total_tokens": self.get_token_count(str(google_messages)) + self.get_token_count(accumulated_content),
+                            }
+                        )
+
+        except Exception as e:
+            await self._breaker.record_failure(key)
+            error_msg = str(e)
+
+            if "api_key" in error_msg.lower() or "unauthorized" in error_msg.lower():
+                raise ProviderAuthenticationError(
+                    f"Google API authentication failed: {error_msg}",
+                    provider="google"
+                ) from e
+            elif "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
+                raise ProviderRateLimitError(
+                    f"Google API rate limit exceeded: {error_msg}",
+                    provider="google"
+                ) from e
+            elif "timeout" in error_msg.lower():
+                raise ProviderTimeoutError(
+                    f"Google API timeout: {error_msg}",
+                    provider="google"
+                ) from e
+            else:
+                raise ProviderResponseError(
+                    f"Google API error: {error_msg}",
+                    provider="google"
+                ) from e
+
     async def _chat_non_streaming(
         self,
         messages: List[Message],
@@ -393,27 +620,32 @@ class GoogleProvider(BaseLLMProvider):
         if max_tokens is not None:
             config_params["max_output_tokens"] = max_tokens
 
-        # Handle tools if provided (limited support in Gemini)
+        # Handle tools using native Google function calling
+        google_tools = None
         if tools:
-            # For now, we'll add tools to the system instruction since Gemini's
-            # function calling APIs are still evolving
-            tools_str = json.dumps(
-                [
-                    {
-                        "name": tool["name"],
-                        "description": tool.get("description", ""),
-                        "parameters": tool.get("parameters", {}),
-                    }
-                    for tool in tools
-                ],
-                indent=2,
-            )
+            google_tools = []
+            for tool in tools:
+                # Convert OpenAI/universal format to Google format
+                if "function" in tool:
+                    # OpenAI format: {"type": "function", "function": {"name": "...", "parameters": {...}}}
+                    func = tool["function"]
+                    tool_name = func["name"]
+                    tool_description = func.get("description", "")
+                    tool_parameters = func.get("parameters", {})
+                else:
+                    # Direct format: {"name": "...", "parameters": {...}}
+                    tool_name = tool["name"]
+                    tool_description = tool.get("description", "")
+                    tool_parameters = tool.get("parameters", {})
 
-            tools_instruction = f"\nAvailable tools:\n{tools_str}\n"
-            if "system_instruction" in config_params:
-                config_params["system_instruction"] += tools_instruction
-            else:
-                config_params["system_instruction"] = tools_instruction
+                # Create Google FunctionDeclaration
+                google_tools.append(types.Tool(
+                    function_declarations=[types.FunctionDeclaration(
+                        name=tool_name,
+                        description=tool_description,
+                        parameters=tool_parameters
+                    )]
+                ))
 
         # Handle JSON response format
         if response_format:
@@ -462,6 +694,7 @@ class GoogleProvider(BaseLLMProvider):
                                 model=api_model,
                                 contents=converted_content,
                                 config=config,
+                                tools=google_tools,
                             ),
                         ),
                         timeout=total_timeout,
@@ -519,7 +752,7 @@ class GoogleProvider(BaseLLMProvider):
                     # Create chat with history and send the current message
                     def _run_chat():
                         chat = self.client.chats.create(
-                            model=api_model, config=config, history=history
+                            model=api_model, config=config, history=history, tools=google_tools
                         )
                         converted_content = self._convert_content_to_google_format(
                             current_message.content
@@ -576,37 +809,28 @@ class GoogleProvider(BaseLLMProvider):
                     provider="google"
                 ) from e
 
-        # Parse for function calls (basic handling since Gemini doesn't have native function calling yet)
+        # Parse for native function calls from Google response
         tool_calls = None
-        if tools and response_text and "```json" in response_text:
-            # Try to extract function call from JSON code blocks
-            try:
-                # Find JSON blocks
-                start_idx = response_text.find("```json")
-                if start_idx != -1:
-                    json_text = response_text[start_idx + 7 :]
-                    end_idx = json_text.find("```")
-                    if end_idx != -1:
-                        json_text = json_text[:end_idx].strip()
-                        tool_data = json.loads(json_text)
+        if tools and hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'content') and candidate.content:
+                tool_calls = []
+                for part in candidate.content.parts:
+                    if hasattr(part, 'function_call') and part.function_call:
+                        # Handle native function calls
+                        function_call = part.function_call
+                        tool_calls.append({
+                            "id": f"call_{len(tool_calls)}",  # Google doesn't provide IDs
+                            "type": "function",
+                            "function": {
+                                "name": function_call.name,
+                                "arguments": json.dumps(function_call.args) if function_call.args else "{}"
+                            }
+                        })
 
-                        # Basic structure expected: {"name": "...", "arguments": {...}}
-                        if isinstance(tool_data, dict) and "name" in tool_data:
-                            tool_calls = [
-                                {
-                                    "id": f"call_{hash(json_text) & 0xFFFFFFFF:x}",  # Generate a deterministic ID
-                                    "type": "function",
-                                    "function": {
-                                        "name": tool_data["name"],
-                                        "arguments": json.dumps(
-                                            tool_data.get("arguments", {})
-                                        ),
-                                    },
-                                }
-                            ]
-            except (json.JSONDecodeError, KeyError):
-                # If extraction fails, just return the text response
-                pass
+                # If no tool calls found, reset to None
+                if not tool_calls:
+                    tool_calls = None
 
         # Simple usage tracking (google-genai doesn't provide detailed token counts)
         usage = {

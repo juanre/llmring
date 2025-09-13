@@ -244,42 +244,167 @@ class OllamaProvider(BaseLLMProvider):
         Returns:
             LLM response or async iterator of stream chunks if streaming
         """
-        # For now, streaming is not fully implemented - fall back to non-streaming
+        # Implement real streaming using Ollama SDK
         if stream:
-            async def _single_chunk_stream():
-                response = await self._chat_non_streaming(
-                    messages=messages,
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format=response_format,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    json_response=json_response,
-                    cache=cache,
-                    extra_params=extra_params,
-                )
-                yield StreamChunk(
-                    delta=response.content,
-                    model=response.model,
-                    finish_reason=response.finish_reason,
-                    usage=response.usage,
-                )
-            return _single_chunk_stream()
+            return self._stream_chat(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
+                json_response=json_response,
+                cache=cache,
+                extra_params=extra_params,
+            )
 
-        return await self._chat_non_streaming(
-            messages=messages,
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format=response_format,
-            tools=tools,
-            tool_choice=tool_choice,
-            json_response=json_response,
-            cache=cache,
-            extra_params=extra_params,
-        )
-    
+    async def _stream_chat(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """Real streaming implementation using Ollama SDK."""
+        # Strip provider prefix if present
+        if model.lower().startswith("ollama:"):
+            model = model.split(":", 1)[1]
+
+        # Validate model
+        if not self.validate_model(model):
+            raise ModelNotFoundError(
+                f"Unsupported model: {model}",
+                model_name=model,
+                provider="ollama"
+            )
+
+        # Convert messages to Ollama format (includes tool handling)
+        ollama_messages = []
+        for msg in messages:
+            # Handle different message types
+            if msg.role == "system":
+                # System messages become assistant messages in Ollama
+                ollama_messages.append({
+                    "role": "assistant",
+                    "content": f"System: {msg.content}"
+                })
+            elif msg.role in ["user", "assistant"]:
+                ollama_messages.append({
+                    "role": msg.role,
+                    "content": str(msg.content)
+                })
+
+        # Handle tools through prompt engineering (Ollama doesn't have native function calling)
+        if tools:
+            tools_prompt = self._create_tools_prompt(tools)
+            if ollama_messages and ollama_messages[0]["role"] == "assistant":
+                ollama_messages[0]["content"] += f"\n\n{tools_prompt}"
+            else:
+                ollama_messages.insert(0, {
+                    "role": "assistant",
+                    "content": tools_prompt
+                })
+
+        # Handle JSON response format
+        if json_response or (response_format and response_format.get("type") in ["json_object", "json"]):
+            json_instruction = "\n\nIMPORTANT: Respond only with valid JSON."
+            if ollama_messages:
+                ollama_messages[-1]["content"] += json_instruction
+
+        # Build request parameters for streaming
+        options = {}
+        if temperature is not None:
+            options["temperature"] = temperature
+        if max_tokens is not None:
+            options["num_predict"] = max_tokens
+
+        request_params = {
+            "model": model,
+            "messages": ollama_messages,
+            "stream": True,  # Enable real streaming
+            "options": options,
+        }
+
+        # Apply extra parameters
+        # Supports Ollama-specific options: mirostat, penalty_*, num_ctx, seed, etc.
+        # Can be passed as {"options": {"seed": 123}} or {"seed": 123}
+        if extra_params:
+            if "options" in extra_params:
+                # Merge with existing options
+                options.update(extra_params["options"])
+                request_params["options"] = options
+            else:
+                # Apply directly to request
+                request_params.update(extra_params)
+
+        try:
+            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+
+            key = f"ollama:{model}"
+            if not await self._breaker.allow(key):
+                raise CircuitBreakerError(
+                    "Ollama circuit breaker is open - too many recent failures",
+                    provider="ollama"
+                )
+
+            # Use real streaming API (returns async generator directly)
+            stream_response = self.client.chat(**request_params)
+            await self._breaker.record_success(key)
+
+            # Process the streaming response
+            accumulated_content = ""
+            async for chunk in stream_response:
+                if hasattr(chunk, 'message') and chunk.message:
+                    delta_content = chunk.message.get('content', '')
+                    if delta_content:
+                        accumulated_content += delta_content
+                        yield StreamChunk(
+                            delta=delta_content,
+                            model=model,
+                            finish_reason=None,
+                        )
+
+                # Check if this is the final chunk
+                if hasattr(chunk, 'done') and chunk.done:
+                    # Final chunk with usage estimation
+                    yield StreamChunk(
+                        delta="",
+                        model=model,
+                        finish_reason="stop",
+                        usage={
+                            "prompt_tokens": self.get_token_count(str(ollama_messages)),
+                            "completion_tokens": self.get_token_count(accumulated_content),
+                            "total_tokens": self.get_token_count(str(ollama_messages)) + self.get_token_count(accumulated_content),
+                        }
+                    )
+
+        except Exception as e:
+            await self._breaker.record_failure(key)
+            error_msg = str(e)
+
+            if "connect" in error_msg.lower():
+                raise ProviderResponseError(
+                    f"Failed to connect to Ollama at http://localhost:11434: {error_msg}",
+                    provider="ollama"
+                ) from e
+            elif "timeout" in error_msg.lower():
+                raise ProviderTimeoutError(
+                    f"Ollama request timed out: {error_msg}",
+                    provider="ollama"
+                ) from e
+            else:
+                raise ProviderResponseError(
+                    f"Ollama error: {error_msg}",
+                    provider="ollama"
+                ) from e
+
     async def _chat_non_streaming(
         self,
         messages: List[Message],

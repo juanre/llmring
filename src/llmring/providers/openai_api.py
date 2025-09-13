@@ -206,7 +206,10 @@ class OpenAIProvider(BaseLLMProvider):
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """
-        Process messages containing PDFs using OpenAI's Responses API with file_search vector stores.
+        Process messages containing PDFs using OpenAI's Responses API with file upload.
+
+        Note: This implementation uploads PDFs directly and processes them with the model.
+        It does not use vector stores or file_search for RAG functionality.
         """
         # Extract PDF data and text from messages
         pdf_data_list, combined_text = self._extract_pdf_content_and_text(messages)
@@ -236,7 +239,7 @@ class OpenAIProvider(BaseLLMProvider):
                             {"file_id": file_obj.id, "temp_path": tmp_file.name}
                         )
 
-            # Build Responses API input using input_file items (no RAG/vector store)
+            # Build Responses API input using input_file items (direct file processing)
             content_items: List[Dict[str, Any]] = []
             content_items.append({"type": "input_text", "text": combined_text})
             for info in uploaded_files:
@@ -494,6 +497,14 @@ class OpenAIProvider(BaseLLMProvider):
                 request_params["response_format"] = {"type": "json_object"}
             elif response_format.get("type") == "json":
                 request_params["response_format"] = {"type": "json_object"}
+            elif response_format.get("type") == "json_schema":
+                # Support OpenAI's JSON schema format
+                json_schema_format = {"type": "json_schema"}
+                if "json_schema" in response_format:
+                    json_schema_format["json_schema"] = response_format["json_schema"]
+                if response_format.get("strict") is not None:
+                    json_schema_format["json_schema"]["strict"] = response_format["strict"]
+                request_params["response_format"] = json_schema_format
             else:
                 request_params["response_format"] = response_format
                 
@@ -895,6 +906,14 @@ class OpenAIProvider(BaseLLMProvider):
             elif response_format.get("type") == "json":
                 # Map our generic "json" to OpenAI's "json_object"
                 request_params["response_format"] = {"type": "json_object"}
+            elif response_format.get("type") == "json_schema":
+                # Support OpenAI's JSON schema format
+                json_schema_format = {"type": "json_schema"}
+                if "json_schema" in response_format:
+                    json_schema_format["json_schema"] = response_format["json_schema"]
+                if response_format.get("strict") is not None:
+                    json_schema_format["json_schema"]["strict"] = response_format["strict"]
+                request_params["response_format"] = json_schema_format
             else:
                 request_params["response_format"] = response_format
 
