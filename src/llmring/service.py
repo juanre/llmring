@@ -272,7 +272,10 @@ class LLMRing:
             response_format=request.response_format,
             tools=request.tools,
             tool_choice=request.tool_choice,
+            json_response=request.json_response,
+            cache=request.cache,
             stream=False,
+            extra_params=request.extra_params,
         )
 
         # Calculate and add cost information if available
@@ -365,7 +368,10 @@ class LLMRing:
             response_format=request.response_format,
             tools=request.tools,
             tool_choice=request.tool_choice,
+            json_response=request.json_response,
+            cache=request.cache,
             stream=True,
+            extra_params=request.extra_params,
         )
         
         # Track usage for receipt generation
