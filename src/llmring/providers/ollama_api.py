@@ -88,23 +88,11 @@ class OllamaProvider(BaseLLMProvider):
             # Try registry validation
             return await self._registry_client.validate_model("ollama", model)
         except Exception as e:
-            # If registry is unavailable, use basic pattern validation for Ollama models
+            # If registry is unavailable, log warning and allow gracefully
+            # Ollama supports any locally installed model - no hardcoded validation
             import logging
-            import re
-            logging.warning(f"Registry unavailable for model validation, using basic pattern validation: {e}")
-
-            # Basic validation: Ollama models should be alphanumeric with hyphens, underscores, colons, and dots
-            # This allows for custom local models while rejecting obvious non-Ollama model names
-            if re.match(r"^[a-zA-Z0-9\-_:.]+$", model):
-                # Additional check: reject models that look like other providers
-                forbidden_patterns = [
-                    r"^gpt-", r"^claude-", r"^gemini-", r"^anthropic:", r"^openai:", r"^google:"
-                ]
-                for pattern in forbidden_patterns:
-                    if re.match(pattern, model.lower()):
-                        return False
-                return True
-            return False
+            logging.warning(f"Registry unavailable for Ollama model validation, allowing gracefully: {e}")
+            return True
 
 
     async def get_supported_models(self) -> List[str]:

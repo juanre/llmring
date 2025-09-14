@@ -243,7 +243,7 @@ class LLMRing:
 
         # If no model specified, use provider's default
         if not model_name and hasattr(provider, "get_default_model"):
-            model_name = provider.get_default_model()
+            model_name = await provider.get_default_model()
 
         # Validate context limits if possible
         validation_error = await self.validate_context_limit(request)
@@ -573,7 +573,7 @@ class LLMRing:
         self.lockfile.save(lockfile_path)
         logger.info(f"Created lockfile at {lockfile_path}")
 
-    def get_available_models(self) -> Dict[str, List[str]]:
+    async def get_available_models(self) -> Dict[str, List[str]]:
         """
         Get all available models from registered providers.
 
@@ -583,12 +583,12 @@ class LLMRing:
         models = {}
         for provider_name, provider in self.providers.items():
             if hasattr(provider, "get_supported_models"):
-                models[provider_name] = provider.get_supported_models()
+                models[provider_name] = await provider.get_supported_models()
             else:
                 models[provider_name] = []
         return models
 
-    def get_model_info(self, model: str) -> Dict[str, Any]:
+    async def get_model_info(self, model: str) -> Dict[str, Any]:
         """
         Get information about a specific model.
 
@@ -613,12 +613,13 @@ class LLMRing:
             "provider": provider_type,
             "model": model_name,
             "supported": hasattr(provider, "validate_model")
-            and provider.validate_model(model_name),
+            and await provider.validate_model(model_name),
         }
 
         # Add default model info if available
         if hasattr(provider, "get_default_model"):
-            model_info["is_default"] = model_name == provider.get_default_model()
+            default_model = await provider.get_default_model()
+            model_info["is_default"] = model_name == default_model
 
         # Cache and return
         self._model_cache[cache_key] = model_info
@@ -1038,7 +1039,7 @@ class LLMRing:
         provider_type, model_name = self._parse_model_string(model)
 
         # Get basic info
-        model_info = self.get_model_info(model)
+        model_info = await self.get_model_info(model)
 
         # Enhance with registry data
         registry_model = await self.get_model_from_registry(provider_type, model_name)

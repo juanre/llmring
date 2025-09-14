@@ -29,6 +29,7 @@ class TestUnifiedStructuredOutput:
             "type": "object",
             "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
             "required": ["name", "age"],
+            "additionalProperties": False
         }
 
     @pytest.fixture

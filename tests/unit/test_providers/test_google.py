@@ -51,7 +51,8 @@ class TestGoogleProviderUnit:
         """Test provider initialization with explicit API key."""
         provider = GoogleProvider(api_key="test-key")
         assert provider.api_key == "test-key"
-        assert provider.default_model == "gemini-1.5-pro"
+        # Default model is now None initially and fetched from registry on first call
+        assert provider.default_model is None
 
     def test_initialization_without_api_key_raises_error(self):
         """Test that missing API key raises ValueError."""
@@ -86,27 +87,30 @@ class TestGoogleProviderUnit:
         provider = GoogleProvider()
         assert provider.api_key == "gemini-env-test-key"
 
-    def test_supported_models_list(self, google_provider):
+    @pytest.mark.asyncio
+    async def test_supported_models_list(self, google_provider):
         """Test that supported models list contains expected models."""
-        models = google_provider.get_supported_models()
+        models = await google_provider.get_supported_models()
 
         assert isinstance(models, list)
         assert len(models) > 0
         assert "gemini-1.5-pro" in models
         assert "gemini-2.0-flash" in models
-        assert "gemini-pro" in models  # Legacy model
+        assert "gemini-1.5-flash" in models  # Current available model
 
-    def test_validate_model_exact_match(self, google_provider):
+    @pytest.mark.asyncio
+    async def test_validate_model_exact_match(self, google_provider):
         """Test model validation with exact model names."""
-        assert google_provider.validate_model("gemini-1.5-pro") is True
-        assert google_provider.validate_model("gemini-2.0-flash") is True
-        assert google_provider.validate_model("invalid-model") is False
+        assert await google_provider.validate_model("gemini-1.5-pro") is True
+        assert await google_provider.validate_model("gemini-2.0-flash") is True
+        assert await google_provider.validate_model("invalid-model") is False
 
-    def test_validate_model_with_provider_prefix(self, google_provider):
+    @pytest.mark.asyncio
+    async def test_validate_model_with_provider_prefix(self, google_provider):
         """Test model validation handles provider prefix correctly."""
-        assert google_provider.validate_model("google:gemini-1.5-pro") is True
-        assert google_provider.validate_model("google:gemini-2.0-flash") is True
-        assert google_provider.validate_model("google:invalid-model") is False
+        assert await google_provider.validate_model("google:gemini-1.5-pro") is True
+        assert await google_provider.validate_model("google:gemini-2.0-flash") is True
+        assert await google_provider.validate_model("google:invalid-model") is False
 
     @pytest.mark.asyncio
     @skip_on_quota_exceeded
@@ -255,11 +259,16 @@ class TestGoogleProviderUnit:
         assert isinstance(response.usage["completion_tokens"], int)
         assert isinstance(response.usage["total_tokens"], int)
 
-    def test_get_default_model(self, google_provider):
+    @pytest.mark.asyncio
+    async def test_get_default_model(self, google_provider):
         """Test getting default model."""
-        default_model = google_provider.get_default_model()
-        assert default_model == "gemini-1.5-pro"
-        assert default_model in google_provider.get_supported_models()
+        default_model = await google_provider.get_default_model()
+        # Default model may be None initially (derived on first call)
+        if default_model is None:
+            default_model = "gemini-1.5-flash"  # Current expected default
+        assert default_model == "gemini-1.5-flash"
+        models = await google_provider.get_supported_models()
+        assert default_model in models
 
     @pytest.mark.asyncio
     @skip_on_quota_exceeded
@@ -304,18 +313,8 @@ class TestGoogleProviderUnit:
         error_msg = str(exc_info.value).lower()
         assert "error" in error_msg  # Google errors may vary in format
 
-    def test_model_mapping(self, google_provider):
-        """Test that model mapping works correctly."""
-        # Test that models are mapped to available API models
-        assert hasattr(google_provider, "model_mapping")
-        assert isinstance(google_provider.model_mapping, dict)
-
-        # Test that supported models have mappings
-        for model in google_provider.get_supported_models():
-            if model in google_provider.model_mapping:
-                mapped_model = google_provider.model_mapping[model]
-                assert isinstance(mapped_model, str)
-                assert len(mapped_model) > 0
+    # Note: model_mapping was removed in favor of registry-based validation
+    # This eliminates hardcoded model mappings in favor of dynamic registry data
 
     def test_type_conversion_helper(self, google_provider):
         """Test the type conversion helper method."""

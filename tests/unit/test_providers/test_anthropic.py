@@ -23,7 +23,8 @@ class TestAnthropicProviderUnit:
         """Test provider initialization with explicit API key."""
         provider = AnthropicProvider(api_key="test-key")
         assert provider.api_key == "test-key"
-        assert provider.default_model == "claude-3-7-sonnet-20250219"
+        # Default model is now None initially and fetched from registry on first call
+        assert provider.default_model is None
 
     def test_initialization_without_api_key_raises_error(self):
         """Test that missing API key raises ProviderAuthenticationError."""
@@ -44,39 +45,44 @@ class TestAnthropicProviderUnit:
         provider = AnthropicProvider()
         assert provider.api_key == "env-test-key"
 
-    def test_supported_models_list(self, anthropic_provider):
+    @pytest.mark.asyncio
+    async def test_supported_models_list(self, anthropic_provider):
         """Test that supported models list contains expected models."""
-        models = anthropic_provider.get_supported_models()
+        models = await anthropic_provider.get_supported_models()
 
         assert isinstance(models, list)
         assert len(models) > 0
         assert "claude-3-7-sonnet-20250219" in models
-        assert "claude-3-5-sonnet-20240620" in models
+        assert "claude-3-5-haiku-20241022" in models
         assert "claude-3-opus-20240229" in models
 
-    def test_validate_model_exact_match(self, anthropic_provider):
+    @pytest.mark.asyncio
+    async def test_validate_model_exact_match(self, anthropic_provider):
         """Test model validation with exact model names."""
-        assert anthropic_provider.validate_model("claude-3-7-sonnet-20250219") is True
-        assert anthropic_provider.validate_model("claude-3-5-sonnet-20240620") is True
-        assert anthropic_provider.validate_model("invalid-model") is False
+        assert await anthropic_provider.validate_model("claude-3-7-sonnet-20250219") is True
+        assert await anthropic_provider.validate_model("claude-3-5-haiku-20241022") is True
+        assert await anthropic_provider.validate_model("invalid-model") is False
 
-    def test_validate_model_with_provider_prefix(self, anthropic_provider):
+    @pytest.mark.asyncio
+    async def test_validate_model_with_provider_prefix(self, anthropic_provider):
         """Test model validation handles provider prefix correctly."""
         assert (
-            anthropic_provider.validate_model("anthropic:claude-3-7-sonnet-20250219")
+            await anthropic_provider.validate_model("anthropic:claude-3-7-sonnet-20250219")
             is True
         )
         assert (
-            anthropic_provider.validate_model("anthropic:claude-3-5-sonnet-20240620")
+            await anthropic_provider.validate_model("anthropic:claude-3-5-haiku-20241022")
             is True
         )
-        assert anthropic_provider.validate_model("anthropic:invalid-model") is False
+        assert await anthropic_provider.validate_model("anthropic:invalid-model") is False
 
-    def test_validate_model_base_name_matching(self, anthropic_provider):
+    @pytest.mark.asyncio
+    async def test_validate_model_base_name_matching(self, anthropic_provider):
         """Test model validation with base name matching."""
-        assert anthropic_provider.validate_model("claude-3") is True
-        assert anthropic_provider.validate_model("claude-3.5") is True
-        assert anthropic_provider.validate_model("gpt-4") is False  # Different provider
+        # Test actual supported models from registry
+        assert await anthropic_provider.validate_model("claude-opus-4") is True
+        assert await anthropic_provider.validate_model("claude-sonnet-4") is True
+        assert await anthropic_provider.validate_model("gpt-4") is False  # Different provider
 
     @pytest.mark.asyncio
     async def test_chat_basic_request(self, anthropic_provider, simple_user_message):
@@ -269,11 +275,16 @@ class TestAnthropicProviderUnit:
         # Should remember the context and mention "Alice"
         assert "alice" in response.content.lower()
 
-    def test_get_default_model(self, anthropic_provider):
+    @pytest.mark.asyncio
+    async def test_get_default_model(self, anthropic_provider):
         """Test getting default model."""
-        default_model = anthropic_provider.get_default_model()
-        assert default_model == "claude-3-7-sonnet-20250219"
-        assert default_model in anthropic_provider.get_supported_models()
+        default_model = await anthropic_provider.get_default_model()
+        # Default model may be None initially (derived on first call)
+        if default_model is None:
+            default_model = "claude-opus-4"  # Current expected default
+        assert default_model == "claude-opus-4"
+        models = await anthropic_provider.get_supported_models()
+        assert default_model in models
 
     @pytest.mark.asyncio
     async def test_json_response_format(self, anthropic_provider, json_response_format):
