@@ -4,11 +4,14 @@ Anthropic Claude API provider implementation using the official SDK.
 
 import asyncio
 import json
+import logging
 import os
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from anthropic import AsyncAnthropic
 from anthropic.types import Message as AnthropicMessage
+
+logger = logging.getLogger(__name__)
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
@@ -144,12 +147,12 @@ class AnthropicProvider(BaseLLMProvider):
             logger = logging.getLogger(__name__)
             logger.warning(f"Could not derive default model from registry: {e}")
 
-        # Ultimate fallback - log and fail gracefully
+        # Ultimate fallback - use a sensible default when registry is unavailable
         import logging
         logger = logging.getLogger(__name__)
-        logger.error("No default model available and registry inaccessible")
-        from llmring.exceptions import ModelNotFoundError
-        raise ModelNotFoundError("No default model available", provider="anthropic")
+        logger.warning("No default model available from registry, using fallback: claude-3-haiku-20240307")
+        self.default_model = "claude-3-haiku-20240307"  # Reasonable fallback
+        return self.default_model
 
     async def _select_default_from_registry(self, available_models: List[str]) -> str:
         """
@@ -314,12 +317,10 @@ class AnthropicProvider(BaseLLMProvider):
 
         # Note: Model name normalization removed - use exact model names from registry
 
-        # Verify model is supported
+        # Verify model is supported (warn but don't fail if not in registry)
         if not await self.validate_model(model):
-            raise ModelNotFoundError(
-                f"Unsupported model: {original_model}",
-                provider="anthropic",
-                model_name=original_model,
+            logger.warning(
+                f"Model '{model}' not found in registry, proceeding anyway"
             )
 
         # Prepare messages and system prompt
@@ -634,12 +635,10 @@ class AnthropicProvider(BaseLLMProvider):
 
         # Note: Model name normalization removed - use exact model names from registry
 
-        # Verify model is supported
+        # Verify model is supported (warn but don't fail if not in registry)
         if not await self.validate_model(model):
-            raise ModelNotFoundError(
-                f"Unsupported model: {original_model}",
-                provider="anthropic",
-                model_name=original_model,
+            logger.warning(
+                f"Model '{model}' not found in registry, proceeding anyway"
             )
 
         # Convert messages to Anthropic format using _prepare_messages

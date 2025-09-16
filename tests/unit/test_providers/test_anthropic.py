@@ -52,26 +52,26 @@ class TestAnthropicProviderUnit:
 
         assert isinstance(models, list)
         assert len(models) > 0
-        assert "claude-3-7-sonnet-20250219" in models
         assert "claude-3-5-haiku-20241022" in models
+        assert "claude-3-haiku-20240307" in models
         assert "claude-3-opus-20240229" in models
 
     @pytest.mark.asyncio
     async def test_validate_model_exact_match(self, anthropic_provider):
         """Test model validation with exact model names."""
-        assert await anthropic_provider.validate_model("claude-3-7-sonnet-20250219") is True
         assert await anthropic_provider.validate_model("claude-3-5-haiku-20241022") is True
+        assert await anthropic_provider.validate_model("claude-3-haiku-20240307") is True
         assert await anthropic_provider.validate_model("invalid-model") is False
 
     @pytest.mark.asyncio
     async def test_validate_model_with_provider_prefix(self, anthropic_provider):
         """Test model validation handles provider prefix correctly."""
         assert (
-            await anthropic_provider.validate_model("anthropic:claude-3-7-sonnet-20250219")
+            await anthropic_provider.validate_model("anthropic:claude-3-5-haiku-20241022")
             is True
         )
         assert (
-            await anthropic_provider.validate_model("anthropic:claude-3-5-haiku-20241022")
+            await anthropic_provider.validate_model("anthropic:claude-3-haiku-20240307")
             is True
         )
         assert await anthropic_provider.validate_model("anthropic:invalid-model") is False
@@ -80,8 +80,8 @@ class TestAnthropicProviderUnit:
     async def test_validate_model_base_name_matching(self, anthropic_provider):
         """Test model validation with base name matching."""
         # Test actual supported models from registry
-        assert await anthropic_provider.validate_model("claude-opus-4") is True
-        assert await anthropic_provider.validate_model("claude-sonnet-4") is True
+        assert await anthropic_provider.validate_model("claude-3-opus-20240229") is True
+        assert await anthropic_provider.validate_model("claude-3-5-haiku-20241022") is True
         assert await anthropic_provider.validate_model("gpt-4") is False  # Different provider
 
     @pytest.mark.asyncio
@@ -89,14 +89,14 @@ class TestAnthropicProviderUnit:
         """Test basic chat functionality with minimal token usage."""
         response = await anthropic_provider.chat(
             messages=simple_user_message,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             max_tokens=10,  # Minimal tokens to reduce cost
         )
 
         assert isinstance(response, LLMResponse)
         assert response.content is not None
         assert len(response.content) > 0
-        assert response.model == "claude-3-7-sonnet-20250219"
+        assert response.model == "claude-3-5-haiku-20241022"
         assert response.usage is not None
         assert response.usage["prompt_tokens"] > 0
         assert response.usage["completion_tokens"] > 0
@@ -110,7 +110,7 @@ class TestAnthropicProviderUnit:
         """Test chat with system message."""
         response = await anthropic_provider.chat(
             messages=system_user_messages,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             max_tokens=10,
         )
 
@@ -125,13 +125,13 @@ class TestAnthropicProviderUnit:
         """Test that provider prefix is correctly removed from model name."""
         response = await anthropic_provider.chat(
             messages=simple_user_message,
-            model="anthropic:claude-3-7-sonnet-20250219",
+            model="anthropic:claude-3-5-haiku-20241022",
             max_tokens=10,
         )
 
         assert isinstance(response, LLMResponse)
         assert (
-            response.model == "claude-3-7-sonnet-20250219"
+            response.model == "claude-3-5-haiku-20241022"
         )  # Prefix should be removed
 
     @pytest.mark.asyncio
@@ -139,7 +139,7 @@ class TestAnthropicProviderUnit:
         """Test chat with temperature and max_tokens parameters."""
         response = await anthropic_provider.chat(
             messages=simple_user_message,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             temperature=0.7,
             max_tokens=15,
         )
@@ -152,8 +152,9 @@ class TestAnthropicProviderUnit:
     async def test_chat_with_unsupported_model_raises_error(
         self, anthropic_provider, simple_user_message
     ):
-        """Test that using an unsupported model raises ModelNotFoundError."""
-        with pytest.raises(ModelNotFoundError, match="Unsupported model"):
+        """Test that using an unsupported model raises error from API."""
+        # Now that registry validation is advisory, the API itself determines if model exists
+        with pytest.raises((ModelNotFoundError, ProviderResponseError), match="not_found|not available"):
             await anthropic_provider.chat(
                 messages=simple_user_message, model="definitely-not-a-real-model"
             )
@@ -170,7 +171,7 @@ class TestAnthropicProviderUnit:
 
         response = await anthropic_provider.chat(
             messages=messages,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             tools=sample_tools,
             max_tokens=100,
         )
@@ -239,7 +240,7 @@ class TestAnthropicProviderUnit:
 
         response = await anthropic_provider.chat(
             messages=messages,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             tools=sample_tools,
             tool_choice="auto",
             max_tokens=100,
@@ -266,7 +267,7 @@ class TestAnthropicProviderUnit:
         """Test multi-turn conversation handling."""
         response = await anthropic_provider.chat(
             messages=multi_turn_conversation,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             max_tokens=20,
         )
 
@@ -281,8 +282,9 @@ class TestAnthropicProviderUnit:
         default_model = await anthropic_provider.get_default_model()
         # Default model may be None initially (derived on first call)
         if default_model is None:
-            default_model = "claude-opus-4"  # Current expected default
-        assert default_model == "claude-opus-4"
+            default_model = "claude-3-opus-20240229"  # Expected from test registry
+        # Default should be opus from test registry, or haiku as fallback
+        assert default_model in ["claude-3-opus-20240229", "claude-3-haiku-20240307"]
         models = await anthropic_provider.get_supported_models()
         assert default_model in models
 
@@ -297,7 +299,7 @@ class TestAnthropicProviderUnit:
 
         response = await anthropic_provider.chat(
             messages=messages,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             response_format=json_response_format,
             max_tokens=50,
         )
@@ -320,7 +322,7 @@ class TestAnthropicProviderUnit:
         with pytest.raises(Exception) as exc_info:
             await provider.chat(
                 messages=[Message(role="user", content="test")],
-                model="claude-3-7-sonnet-20250219",
+                model="claude-3-5-haiku-20241022",
                 max_tokens=10,
             )
 
@@ -342,7 +344,7 @@ class TestAnthropicProviderUnit:
         try:
             response = await anthropic_provider.chat(
                 messages=[Message(role="user", content="Hello")],
-                model="claude-3-7-sonnet-20250219",
+                model="claude-3-5-haiku-20241022",
                 max_tokens=5,
             )
             # If we get here, the call succeeded

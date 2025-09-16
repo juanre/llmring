@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "updated_at": "2024-08-20T00:00:00Z",
+  "models": {
+    "google:gemini-1.5-pro": {
+      "provider": "google",
+      "model_name": "gemini-1.5-pro",
+      "display_name": "Gemini 1.5 Pro",
+      "max_input_tokens": 1000000,
+      "max_output_tokens": 8192,
+      "is_active": true
+    },
+    "google:gemini-1.5-flash": {
+      "provider": "google",
+      "model_name": "gemini-1.5-flash",
+      "display_name": "Gemini 1.5 Flash",
+      "max_input_tokens": 1000000,
+      "max_output_tokens": 8192,
+      "is_active": true
+    },
+    "google:gemini-pro": {
+      "provider": "google",
+      "model_name": "gemini-pro",
+      "display_name": "Gemini Pro",
+      "max_input_tokens": 30720,
+      "max_output_tokens": 2048,
+      "is_active": true
+    }
+  }
+}

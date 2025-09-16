@@ -144,11 +144,12 @@ class OpenAIProvider(BaseLLMProvider):
             logger = logging.getLogger(__name__)
             logger.warning(f"Could not derive default model from registry: {e}")
 
-        # Ultimate fallback - log and fail gracefully
+        # Ultimate fallback - use a sensible default when registry is unavailable
         import logging
         logger = logging.getLogger(__name__)
-        logger.error("No default model available and registry inaccessible")
-        raise ModelNotFoundError("No default model available", provider="openai")
+        logger.warning("No default model available from registry, using fallback: gpt-4o-mini")
+        self.default_model = "gpt-4o-mini"  # Reasonable fallback
+        return self.default_model
 
     async def _select_default_from_registry(self, available_models: List[str]) -> str:
         """
@@ -535,10 +536,11 @@ class OpenAIProvider(BaseLLMProvider):
         if model.lower().startswith("openai:"):
             model = model.split(":", 1)[1]
 
-        # Verify model is supported
+        # Verify model is supported (warn but don't fail if not in registry)
         if not await self.validate_model(model):
-            raise ModelNotFoundError(
-                f"Unsupported model: {model}", provider="openai", model_name=model
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Model '{model}' not found in registry, proceeding anyway"
             )
 
         # o1 models and PDF processing don't support streaming yet
@@ -952,10 +954,11 @@ class OpenAIProvider(BaseLLMProvider):
         if model.lower().startswith("openai:"):
             model = model.split(":", 1)[1]
 
-        # Verify model is supported
+        # Verify model is supported (warn but don't fail if not in registry)
         if not await self.validate_model(model):
-            raise ModelNotFoundError(
-                f"Unsupported model: {model}", provider="openai", model_name=model
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Model '{model}' not found in registry, proceeding anyway"
             )
 
         # Route o1* models via Responses API

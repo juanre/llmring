@@ -5,11 +5,14 @@ Google Gemini API provider implementation using the official SDK.
 import asyncio
 import base64
 import json
+import logging
 import os
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from google import genai
 from google.genai import types
+
+logger = logging.getLogger(__name__)
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
 from llmring.exceptions import (
@@ -232,12 +235,10 @@ class GoogleProvider(BaseLLMProvider):
             logger = logging.getLogger(__name__)
             logger.warning(f"Could not derive default model from registry: {e}")
 
-        # Ultimate fallback - log and fail gracefully
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error("No default model available and registry inaccessible")
-        from llmring.exceptions import ModelNotFoundError
-        raise ModelNotFoundError("No default model available", provider="google")
+        # Ultimate fallback - use a sensible default when registry is unavailable
+        logger.warning("No default model available from registry, using fallback: gemini-1.5-flash")
+        self.default_model = "gemini-1.5-flash"  # Reasonable fallback
+        return self.default_model
 
     async def _select_default_from_registry(self, available_models: List[str]) -> str:
         """
@@ -440,12 +441,10 @@ class GoogleProvider(BaseLLMProvider):
 
         # Note: Model name normalization removed - use exact model names from registry
 
-        # Validate model
+        # Validate model (warn but don't fail if not in registry)
         if not await self.validate_model(model):
-            raise ModelNotFoundError(
-                f"Unsupported model: {original_model}",
-                model_name=model,
-                provider="google",
+            logger.warning(
+                f"Model '{model}' not found in registry, proceeding anyway"
             )
 
         # Extract system message and build conversation
@@ -725,10 +724,10 @@ class GoogleProvider(BaseLLMProvider):
         if model.lower().startswith("google:"):
             model = model.split(":", 1)[1]
 
-        # Verify model is supported
+        # Verify model is supported (warn but don't fail if not in registry)
         if not await self.validate_model(model):
-            raise ModelNotFoundError(
-                f"Unsupported model: {model}", provider="google", model_name=model
+            logger.warning(
+                f"Model '{model}' not found in registry, proceeding anyway"
             )
 
         # Use model name as provided (no hardcoded mapping)

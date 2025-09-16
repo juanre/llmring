@@ -116,16 +116,23 @@ class LLMRing:
             provider_type: Type of provider (anthropic, openai, google, ollama)
             **kwargs: Provider-specific configuration
         """
+        # Create provider instance
         if provider_type == "anthropic":
-            self.providers[provider_type] = AnthropicProvider(**kwargs)
+            provider = AnthropicProvider(**kwargs)
         elif provider_type == "openai":
-            self.providers[provider_type] = OpenAIProvider(**kwargs)
+            provider = OpenAIProvider(**kwargs)
         elif provider_type == "google":
-            self.providers[provider_type] = GoogleProvider(**kwargs)
+            provider = GoogleProvider(**kwargs)
         elif provider_type == "ollama":
-            self.providers[provider_type] = OllamaProvider(**kwargs)
+            provider = OllamaProvider(**kwargs)
         else:
             raise ProviderNotFoundError(f"Unknown provider type: {provider_type}")
+
+        # Set the registry client to use the same one as the service
+        if hasattr(provider, '_registry_client'):
+            provider._registry_client = self.registry
+
+        self.providers[provider_type] = provider
 
     def get_provider(self, provider_type: str) -> BaseLLMProvider:
         """

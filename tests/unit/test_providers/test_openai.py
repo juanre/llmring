@@ -145,8 +145,9 @@ class TestOpenAIProviderUnit:
     async def test_chat_with_unsupported_model_raises_error(
         self, openai_provider, simple_user_message
     ):
-        """Test that using an unsupported model raises ModelNotFoundError."""
-        with pytest.raises(ModelNotFoundError, match="Unsupported model"):
+        """Test that using an unsupported model raises ModelNotFoundError from API."""
+        # Now that registry validation is advisory, the API itself determines if model exists
+        with pytest.raises(ModelNotFoundError, match="model not available|does not exist"):
             await openai_provider.chat(
                 messages=simple_user_message, model="definitely-not-a-real-model"
             )

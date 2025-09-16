@@ -131,7 +131,16 @@ def openai_provider():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         pytest.skip("OPENAI_API_KEY not found in environment")
-    return OpenAIProvider(api_key=api_key)
+    provider = OpenAIProvider(api_key=api_key)
+    # Use test registry for unit tests
+    from pathlib import Path
+    from llmring.registry import RegistryClient
+    test_registry_path = Path(__file__).parent / "resources" / "registry"
+    if test_registry_path.exists():
+        provider._registry_client = RegistryClient(
+            registry_url=f"file://{test_registry_path}"
+        )
+    return provider
 
 
 @pytest.fixture
@@ -140,7 +149,16 @@ def anthropic_provider():
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         pytest.skip("ANTHROPIC_API_KEY not found in environment")
-    return AnthropicProvider(api_key=api_key)
+    provider = AnthropicProvider(api_key=api_key)
+    # Use test registry for unit tests
+    from pathlib import Path
+    from llmring.registry import RegistryClient
+    test_registry_path = Path(__file__).parent / "resources" / "registry"
+    if test_registry_path.exists():
+        provider._registry_client = RegistryClient(
+            registry_url=f"file://{test_registry_path}"
+        )
+    return provider
 
 
 @pytest.fixture
@@ -155,13 +173,31 @@ def google_provider():
         pytest.skip(
             "GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GEMINI_API_KEY not found in environment"
         )
-    return GoogleProvider(api_key=api_key)
+    provider = GoogleProvider(api_key=api_key)
+    # Use test registry for unit tests
+    from pathlib import Path
+    from llmring.registry import RegistryClient
+    test_registry_path = Path(__file__).parent / "resources" / "registry"
+    if test_registry_path.exists():
+        provider._registry_client = RegistryClient(
+            registry_url=f"file://{test_registry_path}"
+        )
+    return provider
 
 
 @pytest.fixture
 def ollama_provider():
     """Create Ollama provider instance"""
-    return OllamaProvider()
+    provider = OllamaProvider()
+    # Use test registry for unit tests
+    from pathlib import Path
+    from llmring.registry import RegistryClient
+    test_registry_path = Path(__file__).parent / "resources" / "registry"
+    if test_registry_path.exists():
+        provider._registry_client = RegistryClient(
+            registry_url=f"file://{test_registry_path}"
+        )
+    return provider
 
 
 # Test data fixtures
@@ -256,7 +292,12 @@ def sample_llm_response():
 @pytest.fixture
 async def llmring():
     """Create LLMRing instance"""
-    service = LLMRing()
+    from pathlib import Path
+    test_registry_path = Path(__file__).parent / "resources" / "registry"
+    if test_registry_path.exists():
+        service = LLMRing(registry_url=f"file://{test_registry_path}")
+    else:
+        service = LLMRing()
     yield service
     await service.close()
 

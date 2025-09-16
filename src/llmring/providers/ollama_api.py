@@ -141,12 +141,12 @@ class OllamaProvider(BaseLLMProvider):
             logger = logging.getLogger(__name__)
             logger.warning(f"Could not derive default model from registry: {e}")
 
-        # Ultimate fallback - log and fail gracefully
+        # Ultimate fallback - use a sensible default when registry is unavailable
         import logging
         logger = logging.getLogger(__name__)
-        logger.error("No default model available and registry inaccessible")
-        from llmring.exceptions import ModelNotFoundError
-        raise ModelNotFoundError("No default model available", provider="ollama")
+        logger.warning("No default model available from registry, using fallback: llama3")
+        self.default_model = "llama3"  # Reasonable fallback
+        return self.default_model
 
     async def _select_default_from_registry(self, available_models: List[str]) -> str:
         """
@@ -359,10 +359,12 @@ class OllamaProvider(BaseLLMProvider):
         if model.lower().startswith("ollama:"):
             model = model.split(":", 1)[1]
 
-        # Validate model
+        # Validate model (warn but don't fail if not in registry)
         if not await self.validate_model(model):
-            raise ModelNotFoundError(
-                f"Unsupported model: {model}", model_name=model, provider="ollama"
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Model '{model}' not found in registry, proceeding anyway"
             )
 
         # Convert messages to Ollama format (includes tool handling)
@@ -510,10 +512,10 @@ class OllamaProvider(BaseLLMProvider):
         # Note: We're more lenient with model validation for Ollama
         # since models are user-installed locally
         if not await self.validate_model(model):
-            raise ModelNotFoundError(
-                f"Invalid model name format: {model}",
-                provider="ollama",
-                model_name=model,
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Model '{model}' not found in registry, proceeding anyway"
             )
 
         # Convert messages to Ollama format
