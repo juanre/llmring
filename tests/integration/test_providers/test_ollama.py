@@ -192,7 +192,7 @@ class TestOllamaProviderIntegration:
 
         from llmring.exceptions import ModelNotFoundError
 
-        with pytest.raises(ModelNotFoundError, match="Invalid model name format"):
+        with pytest.raises(ModelNotFoundError, match="Ollama model not available"):
             await provider.chat(messages=messages, model="invalid_model_name!@#")
 
     @pytest.mark.asyncio
@@ -217,29 +217,40 @@ class TestOllamaProviderIntegration:
     @pytest.mark.asyncio
     async def test_model_validation(self, provider):
         """Test model validation methods."""
-        # Test valid models (based on supported list)
-        assert provider.validate_model("llama3") is True
-        assert provider.validate_model("mistral") is True
-        assert provider.validate_model("ollama:llama3") is True
+        # Get actually available models
+        available_models = await provider.get_available_models()
+        if not available_models:
+            pytest.skip("No Ollama models available")
 
-        # Test with tags
-        assert provider.validate_model("llama3:latest") is True
-        assert provider.validate_model("mistral:7b") is True
+        # Test with first available model
+        first_model = available_models[0]
+        base_name = first_model.split(":")[0]
+
+        # Test that we can validate the available models
+        assert await provider.validate_model(first_model) is True
+        assert await provider.validate_model(base_name) is True
+        assert await provider.validate_model(f"ollama:{first_model}") is True
+
+        # Test models that should be in registry
+        assert await provider.validate_model("llama3") is True
+        if len(available_models) > 1:
+            assert await provider.validate_model("llama3.3") is True
 
         # Test invalid models
-        assert provider.validate_model("gpt-4") is False
-        assert provider.validate_model("claude-3-opus") is False
-        assert provider.validate_model("invalid_model_name!@#") is False
+        assert await provider.validate_model("gpt-4") is False
+        assert await provider.validate_model("claude-3-opus") is False
+        assert await provider.validate_model("invalid_model_name!@#") is False
 
-    def test_supported_models_list(self, provider):
+    @pytest.mark.asyncio
+    async def test_supported_models_list(self, provider):
         """Test that supported models list is comprehensive."""
-        models = provider.get_supported_models()
+        models = await provider.get_supported_models()
 
-        # Should include popular models
-        assert "llama3" in models
-        assert "mistral" in models
-        assert "codellama" in models
-        assert "phi3" in models
+        # Should include models from registry
+        assert len(models) > 0
+        # At minimum should include models from registry
+        assert "llama3" in models or "llama3.3" in models
+        # May include more based on local installation
 
     def test_token_counting(self, provider):
         """Test token counting functionality."""

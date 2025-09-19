@@ -18,12 +18,7 @@ from llmring.exceptions import ProviderNotFoundError
 class TestLLMRingIntegration:
     """Integration tests for LLMRing with real providers."""
 
-    @pytest.fixture
-    def llmring(self):
-        """Create LLMRing without database dependency for now."""
-        # Note: In the future, this could be extended to use a test database
-        # For now, we'll test the service without DB integration
-        return LLMRing()
+    # llmring fixture is provided by conftest.py
 
     @pytest.mark.asyncio
     async def test_anthropic_provider_integration(self, llmring):
@@ -38,7 +33,7 @@ class TestLLMRingIntegration:
         # Create request
         request = LLMRequest(
             messages=[Message(role="user", content="Say 'Hello from Anthropic'")],
-            model="balanced",
+            model="mvp_test",
             max_tokens=20,
         )
 
@@ -48,7 +43,7 @@ class TestLLMRingIntegration:
         assert isinstance(response, LLMResponse)
         assert response.content is not None
         assert "hello" in response.content.lower()
-        assert response.model.endswith("sonnet")
+        assert "opus" in response.model.lower()  # Should be Opus 4.1 model
 
     @pytest.mark.asyncio
     async def test_openai_provider_integration(self, llmring):
@@ -63,7 +58,7 @@ class TestLLMRingIntegration:
         # Create request
         request = LLMRequest(
             messages=[Message(role="user", content="Say 'Hello from OpenAI'")],
-            model="fast",
+            model="openai_fast",
             max_tokens=20,
         )
 
@@ -173,7 +168,7 @@ class TestLLMRingIntegration:
             llmring.register_provider("anthropic", api_key=anthropic_key)
             request = LLMRequest(
                 messages=[Message(role="user", content="Say 'test'")],
-                model="balanced",
+                model="anthropic_balanced",
                 max_tokens=10,
             )
             response = await llmring.chat(request)
@@ -184,7 +179,7 @@ class TestLLMRingIntegration:
             llmring.register_provider("openai", api_key=openai_key)
             request = LLMRequest(
                 messages=[Message(role="user", content="Say 'test'")],
-                model="fast",
+                model="openai_fast",
                 max_tokens=10,
             )
             response = await llmring.chat(request)

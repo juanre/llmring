@@ -11,9 +11,6 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from anthropic import AsyncAnthropic
 from anthropic.types import Message as AnthropicMessage
 
-logger = logging.getLogger(__name__)
-
-# Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
 from llmring.exceptions import (
     CircuitBreakerError,
@@ -25,11 +22,16 @@ from llmring.exceptions import (
 )
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
+from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
 from llmring.registry import RegistryClient
 from llmring.schemas import LLMResponse, Message, StreamChunk
 
+# Note: do not call load_dotenv() in library code; handle in app entrypoints
 
-class AnthropicProvider(BaseLLMProvider):
+logger = logging.getLogger(__name__)
+
+
+class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggingMixin):
     """Implementation of Anthropic Claude API provider using the official SDK."""
 
     def __init__(
@@ -62,6 +64,13 @@ class AnthropicProvider(BaseLLMProvider):
         )
         super().__init__(config)
 
+        # Initialize registry client BEFORE mixin init
+        self._registry_client = RegistryClient()
+
+        # Now initialize mixins that may use the registry client
+        RegistryModelSelectorMixin.__init__(self)
+        ProviderLoggingMixin.__init__(self, "anthropic")
+
         # Store for backward compatibility
         self.api_key = api_key
         self.default_model = model  # Will be derived from registry if None
@@ -73,9 +82,6 @@ class AnthropicProvider(BaseLLMProvider):
             base_url=base_url,
             default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
         )
-
-        # Registry client for model validation (no hardcoded models)
-        self._registry_client = RegistryClient()
         self._cached_models = None  # Will be populated from registry
         self._breaker = CircuitBreaker()
 
@@ -134,84 +140,26 @@ class AnthropicProvider(BaseLLMProvider):
         try:
             models = await self.get_supported_models()
             if models:
-                # Use registry-based selection policy (no hardcoded preferences)
-                selected_model = await self._select_default_from_registry(models)
+                # Use registry-based selection with Anthropic-specific cost range
+                selected_model = await self.select_default_from_registry(
+                    provider_name="anthropic",
+                    available_models=models,
+                    cost_range=(0.1, 20.0),  # Anthropic's typical range
+                    fallback_model="claude-3-haiku-20240307"
+                )
                 self.default_model = selected_model
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.info(f"Anthropic: Derived default model from registry: {selected_model}")
+                self.log_info(f"Derived default model from registry: {selected_model}")
                 return selected_model
 
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not derive default model from registry: {e}")
+            self.log_warning(f"Could not derive default model from registry: {e}")
 
-        # Ultimate fallback - use a sensible default when registry is unavailable
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning("No default model available from registry, using fallback: claude-3-haiku-20240307")
-        self.default_model = "claude-3-haiku-20240307"  # Reasonable fallback
+        # Ultimate fallback
+        self.default_model = "claude-3-haiku-20240307"
+        self.log_warning("No default model available from registry, using fallback: claude-3-haiku-20240307")
         return self.default_model
 
-    async def _select_default_from_registry(self, available_models: List[str]) -> str:
-        """
-        Select default model from registry using policy (no hardcoded preferences).
-
-        Args:
-            available_models: List of available model names from registry
-
-        Returns:
-            Selected default model
-        """
-        # Policy: Select based on registry metadata if available
-        try:
-            registry_models = await self._registry_client.fetch_current_models("anthropic")
-            active_models = [m for m in registry_models if m.is_active and m.model_name in available_models]
-
-            if active_models:
-                # Select most balanced: reasonable cost + good capabilities + recent
-                scored_models = []
-                for model in active_models:
-                    score = 0
-                    # Prefer models with moderate cost (not cheapest, not most expensive)
-                    input_cost = model.dollars_per_million_tokens_input or 0
-                    if 0.1 <= input_cost <= 20.0:  # Balanced cost range for Anthropic
-                        score += 10
-
-                    # Prefer models with good capabilities
-                    if model.supports_function_calling:
-                        score += 5
-                    if model.supports_vision:
-                        score += 3
-
-                    # Prefer more recent models (if added_date is available)
-                    if model.added_date:
-                        import datetime
-                        days_since_added = (datetime.datetime.now(datetime.timezone.utc) - model.added_date).days
-                        if days_since_added < 180:  # Less than 6 months old
-                            score += 5
-
-                    scored_models.append((model.model_name, score))
-
-                if scored_models:
-                    # Select highest scoring model
-                    best_model = max(scored_models, key=lambda x: x[1])
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.info(f"Anthropic: Selected default model '{best_model[0]}' with score {best_model[1]} from registry analysis")
-                    return best_model[0]
-
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not use registry metadata for Anthropic selection: {e}")
-
-        # Fallback: first available model
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Anthropic: Fallback to first available model: {available_models[0]}")
-        return available_models[0]
+    # Legacy method removed - now using RegistryModelSelectorMixin.select_default_from_registry()
 
     async def get_capabilities(self) -> ProviderCapabilities:
         """
@@ -311,7 +259,6 @@ class AnthropicProvider(BaseLLMProvider):
     ) -> AsyncIterator[StreamChunk]:
         """Stream a chat response from Anthropic."""
         # Process model name
-        original_model = model
         if model.lower().startswith("anthropic:"):
             model = model.split(":", 1)[1]
 
@@ -483,12 +430,27 @@ class AnthropicProvider(BaseLLMProvider):
                     if msg.content:
                         content.append({"type": "text", "text": msg.content})
                     for tool_call in msg.tool_calls:
+                        # Standard interface: arguments are JSON strings from providers
+                        arguments = tool_call["function"]["arguments"]
+
+                        # Parse JSON string to dict for Anthropic's input field
+                        if isinstance(arguments, str):
+                            try:
+                                input_dict = json.loads(arguments)
+                            except (json.JSONDecodeError, TypeError):
+                                raise ValueError(f"Tool call arguments must be valid JSON: {arguments}")
+                        elif isinstance(arguments, dict):
+                            # Already a dict, use as-is
+                            input_dict = arguments
+                        else:
+                            raise ValueError(f"Tool call arguments must be JSON string or dict, got {type(arguments)}")
+
                         content.append(
                             {
                                 "type": "tool_use",
                                 "id": tool_call["id"],
                                 "name": tool_call["function"]["name"],
-                                "input": tool_call["function"]["arguments"],
+                                "input": input_dict,
                             }
                         )
                     anthropic_messages.append({"role": "assistant", "content": content})
@@ -629,7 +591,6 @@ class AnthropicProvider(BaseLLMProvider):
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
         # Process model name
-        original_model = model
         if model.lower().startswith("anthropic:"):
             model = model.split(":", 1)[1]
 
@@ -737,7 +698,7 @@ class AnthropicProvider(BaseLLMProvider):
                     f"Anthropic API rate limit exceeded: {error_msg}",
                     provider="anthropic",
                 ) from e
-            elif "model" in error_msg.lower() and "not found" in error_msg.lower():
+            elif ("model" in error_msg.lower() and "not found" in error_msg.lower()) or "not_found_error" in error_msg.lower():
                 raise ModelNotFoundError(
                     f"Anthropic model not available: {error_msg}",
                     provider="anthropic",

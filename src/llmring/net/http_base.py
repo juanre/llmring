@@ -228,7 +228,8 @@ class BaseHTTPClient:
         if response.content:
             try:
                 return response.json()
-            except:
+            except Exception:
+                # Response might not be valid JSON, return success status
                 return True
         return True
 

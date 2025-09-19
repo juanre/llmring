@@ -104,7 +104,7 @@ async def cmd_lock_init_intelligent(path: Path):
         )
 
         print("   Consulting advisor for recommendations...")
-        recommendations = await service.chat(analysis_request)
+        await service.chat(analysis_request)
 
         # Step 3: Use advisor recommendations to create lockfile
         print("🔧 Creating optimized lockfile...")
@@ -114,7 +114,6 @@ async def cmd_lock_init_intelligent(path: Path):
         # Full parsing would extract structured JSON from the advisor response
 
         from llmring.lockfile import Lockfile, ProfileConfig, AliasBinding
-        from llmring.registry import RegistryClient
 
         lockfile = Lockfile()
         profile = ProfileConfig(name="default")
@@ -274,7 +273,6 @@ async def _generate_registry_based_bindings(advisor_model: str) -> list[dict[str
                 })
 
         # "fast" - Most cost-effective model available
-        fast_added = False
         if os.getenv("OPENAI_API_KEY"):
             models = await registry.fetch_current_models("openai")
             cost_effective = [m for m in models if m.is_active and (m.dollars_per_million_tokens_input or 0) < 1.0]
@@ -286,7 +284,6 @@ async def _generate_registry_based_bindings(advisor_model: str) -> list[dict[str
                     "model": best.model_name,
                     "rationale": "Most cost-effective model for quick responses"
                 })
-                fast_added = True
 
         # "balanced" - Good middle-ground model
         if os.getenv("ANTHROPIC_API_KEY"):

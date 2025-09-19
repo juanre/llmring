@@ -186,7 +186,7 @@ class TestAnthropicProviderIntegration:
         """Test error handling with invalid model."""
         messages = [Message(role="user", content="Hello")]
 
-        with pytest.raises(ModelNotFoundError, match="Unsupported model"):
+        with pytest.raises(ModelNotFoundError, match="Anthropic model not available"):
             await provider.chat(messages=messages, model="invalid-model-name")
 
     @pytest.mark.asyncio
@@ -211,30 +211,24 @@ class TestAnthropicProviderIntegration:
     @pytest.mark.asyncio
     async def test_model_validation(self, provider):
         """Test model validation methods."""
-        # Test valid models
-        assert provider.validate_model("claude-3-5-haiku-20241022") is True
-        assert provider.validate_model("claude-3-5-sonnet-20241022") is True
-        assert provider.validate_model("anthropic:claude-3-5-haiku-20241022") is True
+        # Test valid models (using models actually in registry)
+        assert await provider.validate_model("claude-3-5-haiku-20241022") is True
+        assert await provider.validate_model("claude-3-opus-20240229") is True
+        assert await provider.validate_model("anthropic:claude-3-5-haiku-20241022") is True
 
         # Test invalid models
-        assert provider.validate_model("gpt-4") is False
-        assert provider.validate_model("invalid-model") is False
+        assert await provider.validate_model("gpt-4") is False
+        assert await provider.validate_model("invalid-model") is False
 
-    def test_supported_models_list(self, provider):
+    @pytest.mark.asyncio
+    async def test_supported_models_list(self, provider):
         """Test that supported models list is comprehensive."""
-        models = provider.get_supported_models()
+        models = await provider.get_supported_models()
 
-        # Should include Claude 3.7 models
-        assert "claude-3-7-sonnet-20250219" in models
-        assert "claude-3-7-sonnet" in models
-
-        # Should include Claude 3.5 models
-        assert "claude-3-5-sonnet-20241022" in models
+        # Should include models that are in the registry
+        assert len(models) > 0
         assert "claude-3-5-haiku-20241022" in models
-
-        # Should include Claude 3 models
         assert "claude-3-opus-20240229" in models
-        assert "claude-3-sonnet-20240229" in models
         assert "claude-3-haiku-20240307" in models
 
     def test_token_counting(self, provider):

@@ -12,26 +12,26 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from google import genai
 from google.genai import types
 
-logger = logging.getLogger(__name__)
-
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
 from llmring.exceptions import (
     CircuitBreakerError,
-    ModelNotFoundError,
     ProviderAuthenticationError,
     ProviderRateLimitError,
     ProviderResponseError,
     ProviderTimeoutError,
 )
 from llmring.net.circuit_breaker import CircuitBreaker
-
-# Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.net.retry import retry_async
+from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
 from llmring.registry import RegistryClient
 from llmring.schemas import LLMResponse, Message, StreamChunk
 
+# Note: do not call load_dotenv() in library code; handle in app entrypoints
 
-class GoogleProvider(BaseLLMProvider):
+logger = logging.getLogger(__name__)
+
+
+class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggingMixin):
     """Implementation of Google Gemini API provider using the official google-genai library."""
 
     def __init__(
@@ -72,6 +72,13 @@ class GoogleProvider(BaseLLMProvider):
         )
         super().__init__(config)
 
+        # Initialize registry client BEFORE mixin init
+        self._registry_client = RegistryClient()
+
+        # Now initialize mixins that may use the registry client
+        RegistryModelSelectorMixin.__init__(self)
+        ProviderLoggingMixin.__init__(self, "google")
+
         # Store for backward compatibility
         self.api_key = api_key
         self.project_id = project_id or os.environ.get("GOOGLE_PROJECT_ID", "")
@@ -80,8 +87,7 @@ class GoogleProvider(BaseLLMProvider):
         # Initialize the client
         self.client = genai.Client(api_key=api_key)
 
-        # Registry client for model validation
-        self._registry_client = RegistryClient()
+        # Registry client already initialized before mixins
 
 
         # Note: Model name mapping removed - rely on registry for model availability
@@ -222,86 +228,26 @@ class GoogleProvider(BaseLLMProvider):
         try:
             models = await self.get_supported_models()
             if models:
-                # Use registry-based selection policy (no hardcoded preferences)
-                selected_model = await self._select_default_from_registry(models)
+                # Use registry-based selection with Google-specific cost range
+                selected_model = await self.select_default_from_registry(
+                    provider_name="google",
+                    available_models=models,
+                    cost_range=(0.05, 2.0),  # Google's typical range
+                    fallback_model="gemini-1.5-flash"
+                )
                 self.default_model = selected_model
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.info(f"Google: Derived default model from registry: {selected_model}")
+                self.log_info(f"Derived default model from registry: {selected_model}")
                 return selected_model
 
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not derive default model from registry: {e}")
+            self.log_warning(f"Could not derive default model from registry: {e}")
 
-        # Ultimate fallback - use a sensible default when registry is unavailable
-        logger.warning("No default model available from registry, using fallback: gemini-1.5-flash")
-        self.default_model = "gemini-1.5-flash"  # Reasonable fallback
+        # Ultimate fallback
+        self.default_model = "gemini-1.5-flash"
+        self.log_warning("No default model available from registry, using fallback: gemini-1.5-flash")
         return self.default_model
 
-    async def _select_default_from_registry(self, available_models: List[str]) -> str:
-        """
-        Select default model from registry using policy (no hardcoded preferences).
-
-        Args:
-            available_models: List of available model names from registry
-
-        Returns:
-            Selected default model
-        """
-        # Policy: Select based on registry metadata if available
-        try:
-            registry_models = await self._registry_client.fetch_current_models("google")
-            active_models = [m for m in registry_models if m.is_active and m.model_name in available_models]
-
-            if active_models:
-                # Select most balanced: reasonable cost + good capabilities + recent
-                scored_models = []
-                for model in active_models:
-                    score = 0
-                    # Prefer models with moderate cost (not cheapest, not most expensive)
-                    input_cost = model.dollars_per_million_tokens_input or 0
-                    if 0.01 <= input_cost <= 10.0:  # Balanced cost range for Google
-                        score += 10
-
-                    # Prefer models with good capabilities
-                    if model.supports_function_calling:
-                        score += 5
-                    if model.supports_vision:
-                        score += 3
-
-                    # Prefer larger context models
-                    if model.max_input_tokens and model.max_input_tokens >= 1000000:  # 1M+ context
-                        score += 4
-
-                    # Prefer more recent models (if added_date is available)
-                    if model.added_date:
-                        import datetime
-                        days_since_added = (datetime.datetime.now(datetime.timezone.utc) - model.added_date).days
-                        if days_since_added < 180:  # Less than 6 months old
-                            score += 5
-
-                    scored_models.append((model.model_name, score))
-
-                if scored_models:
-                    # Select highest scoring model
-                    best_model = max(scored_models, key=lambda x: x[1])
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.info(f"Google: Selected default model '{best_model[0]}' with score {best_model[1]} from registry analysis")
-                    return best_model[0]
-
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not use registry metadata for Google selection: {e}")
-
-        # Fallback: first available model
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Google: Fallback to first available model: {available_models[0]}")
-        return available_models[0]
+    # Legacy method removed - now using RegistryModelSelectorMixin.select_default_from_registry()
 
     async def get_capabilities(self) -> ProviderCapabilities:
         """
@@ -435,7 +381,6 @@ class GoogleProvider(BaseLLMProvider):
     ) -> AsyncIterator[StreamChunk]:
         """Real streaming implementation using Google SDK."""
         # Process model name (remove provider prefix)
-        original_model = model
         if model.lower().startswith("google:") or model.lower().startswith("gemini:"):
             model = model.split(":", 1)[1]
 
@@ -969,6 +914,13 @@ class GoogleProvider(BaseLLMProvider):
             elif "timeout" in error_msg.lower():
                 raise ProviderTimeoutError(
                     f"Google API request timed out: {error_msg}", provider="google"
+                ) from e
+            elif ("not found" in error_msg.lower() and "model" in error_msg.lower()) or "not supported" in error_msg.lower():
+                from llmring.exceptions import ModelNotFoundError
+                raise ModelNotFoundError(
+                    f"Google model not available: {error_msg}",
+                    provider="google",
+                    model_name=model,
                 ) from e
             else:
                 # Re-raise SDK exceptions with our standard format

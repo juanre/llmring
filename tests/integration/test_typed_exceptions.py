@@ -23,16 +23,13 @@ from llmring.exceptions import (
 class TestTypedExceptions:
     """Test that providers raise appropriate typed exceptions."""
 
-    @pytest.fixture
-    def service(self):
-        """Create LLMRing service."""
-        return LLMRing()
+    # service fixture is provided by conftest.py
 
     @pytest.fixture
     def sample_request(self):
         """Sample request for testing."""
         return LLMRequest(
-            model="fast",
+            model="openai_fast",
             messages=[Message(role="user", content="test")],
             max_tokens=10,
         )
@@ -47,7 +44,7 @@ class TestTypedExceptions:
 
         with pytest.raises(ProviderAuthenticationError) as exc_info:
             await provider.chat(
-                messages=sample_request.messages, model="fast", max_tokens=10
+                messages=sample_request.messages, model="openai_fast", max_tokens=10
             )
 
         assert exc_info.value.provider == "openai"
@@ -122,7 +119,7 @@ class TestTypedExceptions:
                 (ProviderTimeoutError, ProviderResponseError)
             ) as exc_info:
                 await provider.chat(
-                    messages=sample_request.messages, model="fast", max_tokens=10
+                    messages=sample_request.messages, model="openai_fast", max_tokens=10
                 )
 
         # Either timeout or auth error is acceptable for this test
@@ -143,7 +140,7 @@ class TestTypedExceptions:
         with patch.object(provider._breaker, "allow", return_value=False):
             with pytest.raises(CircuitBreakerError) as exc_info:
                 await provider.chat(
-                    messages=sample_request.messages, model="fast", max_tokens=10
+                    messages=sample_request.messages, model="openai_fast", max_tokens=10
                 )
 
         assert exc_info.value.provider == "openai"

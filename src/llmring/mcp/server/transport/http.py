@@ -63,7 +63,8 @@ class SSEConnection:
         # Send a close signal to the queue
         try:
             await self.send_queue.put(None)
-        except:
+        except Exception:
+            # Queue might be closed or full, ignore
             pass
 
 

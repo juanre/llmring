@@ -7,10 +7,9 @@ through conversation and registry analysis.
 
 import json
 import logging
-from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from llmring.lockfile import AliasBinding, Lockfile, ProfileConfig
 from llmring.registry import RegistryClient

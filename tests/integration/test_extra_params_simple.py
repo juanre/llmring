@@ -11,10 +11,7 @@ from llmring.schemas import LLMRequest, Message
 class TestExtraParamsSimple:
     """Simple tests for extra_params functionality."""
 
-    @pytest.fixture
-    def service(self):
-        """Create LLMRing service."""
-        return LLMRing()
+    # service fixture is provided by conftest.py
 
     def test_extra_params_in_request_schema(self):
         """Test that LLMRequest properly includes extra_params."""

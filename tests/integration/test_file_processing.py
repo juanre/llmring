@@ -16,6 +16,12 @@ from llmring.file_utils import analyze_image, create_image_content
 from llmring.schemas import LLMRequest, Message
 from llmring.service import LLMRing
 
+# Import test model helpers
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from conftest_models import get_test_model
+
 
 def create_test_image_with_text() -> str:
     """Create a test image with readable text and return the file path."""
@@ -100,10 +106,7 @@ def create_test_pdf_with_text() -> str:
 class TestFileProcessing:
     """Clean integration tests for file processing across providers."""
 
-    @pytest.fixture
-    def service(self):
-        """Create LLM service for testing."""
-        return LLMRing()
+    # service fixture is provided by conftest.py
 
     @pytest.fixture
     def test_image_path(self):
@@ -126,7 +129,7 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_image_analysis_with_openai(self, service, test_image_path):
         """Test image analysis with OpenAI GPT-4o."""
-        available_models = service.get_available_models()
+        available_models = await service.get_available_models()
         if (
             not available_models.get("openai")
             or "gpt-4" not in available_models["openai"]
@@ -141,7 +144,7 @@ class TestFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="test",
+            model=get_test_model("openai", "vision"),
             max_tokens=200,
         )
 
@@ -161,7 +164,7 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_image_analysis_with_anthropic(self, service, test_image_path):
         """Test image analysis with Anthropic Claude."""
-        available_models = service.get_available_models()
+        available_models = await service.get_available_models()
         if not available_models.get("anthropic"):
             pytest.skip("Anthropic not available")
 
@@ -172,7 +175,7 @@ class TestFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="claude-3-7-sonnet",
+            model=get_test_model("anthropic", "vision"),
             max_tokens=200,
         )
 
@@ -192,7 +195,7 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_image_analysis_with_google(self, service, test_image_path):
         """Test image analysis with Google Gemini."""
-        available_models = service.get_available_models()
+        available_models = await service.get_available_models()
         if not available_models.get("google"):
             pytest.skip("Google not available")
 
@@ -204,7 +207,7 @@ class TestFileProcessing:
 
             request = LLMRequest(
                 messages=[Message(role="user", content=content)],
-                model="fast",
+                model=get_test_model("google", "vision"),
                 max_tokens=200,
             )
 
@@ -241,7 +244,7 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_pdf_processing_anthropic(self, service, test_pdf_path):
         """Test PDF processing with Anthropic using universal file interface."""
-        available_models = service.get_available_models()
+        available_models = await service.get_available_models()
         if not available_models.get("anthropic"):
             pytest.skip("Anthropic not available")
 
@@ -255,7 +258,7 @@ class TestFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="claude-3-7-sonnet",
+            model=get_test_model("anthropic", "pdf"),
             max_tokens=300,
         )
 
@@ -275,7 +278,7 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_pdf_processing_google(self, service, test_pdf_path):
         """Test PDF processing with Google using universal file interface."""
-        available_models = service.get_available_models()
+        available_models = await service.get_available_models()
         if not available_models.get("google"):
             pytest.skip("Google not available")
 
@@ -290,7 +293,7 @@ class TestFileProcessing:
 
             request = LLMRequest(
                 messages=[Message(role="user", content=content)],
-                model="fast",
+                model=get_test_model("google", "pdf"),
                 max_tokens=300,
             )
 
@@ -327,7 +330,7 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_pdf_processing_openai(self, service, test_pdf_path):
         """Test PDF processing with OpenAI using Assistants API automatically."""
-        available_models = service.get_available_models()
+        available_models = await service.get_available_models()
         if not available_models.get("openai"):
             pytest.skip("OpenAI not available")
 
@@ -341,7 +344,7 @@ class TestFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="test",  # Will automatically use Assistants API for PDFs
+            model=get_test_model("openai", "pdf"),  # Will automatically use Assistants API for PDFs
             max_tokens=300,
         )
 

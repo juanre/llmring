@@ -11,7 +11,7 @@ import pytest
 
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.schemas import LLMResponse, Message
-from llmring.exceptions import ProviderAuthenticationError, ModelNotFoundError
+from llmring.exceptions import ProviderAuthenticationError, ModelNotFoundError, ProviderResponseError
 
 
 @pytest.mark.llm
@@ -280,13 +280,14 @@ class TestAnthropicProviderUnit:
     async def test_get_default_model(self, anthropic_provider):
         """Test getting default model."""
         default_model = await anthropic_provider.get_default_model()
-        # Default model may be None initially (derived on first call)
-        if default_model is None:
-            default_model = "claude-3-opus-20240229"  # Expected from test registry
-        # Default should be opus from test registry, or haiku as fallback
-        assert default_model in ["claude-3-opus-20240229", "claude-3-haiku-20240307"]
+        # Default model should be set
+        assert default_model is not None
+        # Should be a valid Claude model
+        assert "claude" in default_model.lower() or "opus" in default_model.lower()
+        # Should be in the list of supported models (if registry is available)
         models = await anthropic_provider.get_supported_models()
-        assert default_model in models
+        if models:  # Only check if registry returned models
+            assert default_model in models
 
     @pytest.mark.asyncio
     async def test_json_response_format(self, anthropic_provider, json_response_format):

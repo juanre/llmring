@@ -247,7 +247,7 @@ class TestLockfileIntegration:
         service = service_with_lockfile
 
         # Get info for aliased model
-        info = service.get_model_info("openai:gpt-4o-mini")
+        info = await service.get_model_info("openai:gpt-4o-mini")
 
         assert info["provider"] == "openai"
         assert info["model"] == "gpt-4o-mini"

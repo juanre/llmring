@@ -15,16 +15,18 @@ import pytest
 from llmring.service import LLMRing
 from llmring.schemas import LLMRequest, LLMResponse, Message
 
+# Import test model helpers
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from conftest_models import get_test_model
+
 
 @pytest.mark.integration
 @pytest.mark.llm
 class TestProviderEnhancements:
     """Test provider enhancements with real APIs."""
 
-    @pytest.fixture
-    def service(self):
-        """Create LLMRing service with all providers."""
-        return LLMRing()
+    # service fixture is provided by conftest.py
 
     @pytest.mark.skipif(
         not (
@@ -38,7 +40,7 @@ class TestProviderEnhancements:
     async def test_google_real_streaming_vs_faked(self, service):
         """Test that Google streaming is real (multiple chunks) not faked (single chunk)."""
         request = LLMRequest(
-            model="fast",
+            model=get_test_model("google"),
             messages=[
                 Message(
                     role="user",
@@ -81,7 +83,7 @@ class TestProviderEnhancements:
         """Test that Google honors user-specified model versions (no 2.x → 1.5 downgrade)."""
         # Try a 2.x model - should be accepted, not downgraded to 1.5
         request = LLMRequest(
-            model="google:gemini-2.0-flash-lite",
+            model="google:gemini-2.0-flash",  # Use an actual model from registry
             messages=[Message(role="user", content="What model are you?")],
             max_tokens=30,
             temperature=0.1,
@@ -135,7 +137,7 @@ class TestProviderEnhancements:
         ]
 
         request = LLMRequest(
-            model="google:gemini-1.5-pro",  # Use Pro for better function calling
+            model=f"google:{get_test_model('google')}",  # Use valid registry model
             messages=[
                 Message(
                     role="user",
@@ -186,7 +188,7 @@ class TestProviderEnhancements:
     async def test_openai_json_schema_support(self, service):
         """Test OpenAI JSON schema support (new feature)."""
         request = LLMRequest(
-            model="test",
+            model=get_test_model("openai"),
             messages=[
                 Message(role="user", content="Generate a person with name and age")
             ],
@@ -236,7 +238,7 @@ class TestProviderEnhancements:
         long_system = "You are an expert assistant. " * 200  # Over 1024 tokens
 
         request = LLMRequest(
-            model="balanced",
+            model=get_test_model("anthropic"),
             messages=[
                 Message(
                     role="system",

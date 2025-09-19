@@ -53,7 +53,6 @@ class StreamingToolHandler:
         # Accumulate the response to check for tool calls
         accumulated_content = ""
         accumulated_tool_calls = None
-        accumulated_usage = None
 
         async for chunk in stream:
             # Always yield the chunk to the client

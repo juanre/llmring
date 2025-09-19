@@ -27,11 +27,12 @@ from llmring.net.retry import retry_async
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.net.safe_fetcher import SafeFetchError
 from llmring.net.safe_fetcher import fetch_bytes as safe_fetch_bytes
+from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
 from llmring.registry import RegistryClient
 from llmring.schemas import LLMResponse, Message, StreamChunk
 
 
-class OpenAIProvider(BaseLLMProvider):
+class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggingMixin):
     """Implementation of OpenAI API provider using the official SDK."""
 
     def __init__(
@@ -64,15 +65,19 @@ class OpenAIProvider(BaseLLMProvider):
         )
         super().__init__(config)
 
+        # Initialize registry client BEFORE mixin init
+        self._registry_client = RegistryClient()
+
+        # Now initialize mixins that may use the registry client
+        RegistryModelSelectorMixin.__init__(self)
+        ProviderLoggingMixin.__init__(self, "openai")
+
         # Store for backward compatibility
         self.api_key = api_key
         self.default_model = model  # Will be derived from registry if None
 
         # Initialize the client with the SDK
         self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-
-        # Registry client for model validation
-        self._registry_client = RegistryClient()
 
         # Simple circuit breaker per model
         self._breaker = CircuitBreaker()
@@ -131,77 +136,26 @@ class OpenAIProvider(BaseLLMProvider):
         try:
             models = await self.get_supported_models()
             if models:
-                # Use registry-based selection policy (no hardcoded preferences)
-                selected_model = await self._select_default_from_registry(models)
+                # Use registry-based selection with OpenAI-specific cost range
+                selected_model = await self.select_default_from_registry(
+                    provider_name="openai",
+                    available_models=models,
+                    cost_range=(0.1, 5.0),  # OpenAI's typical range
+                    fallback_model="gpt-4o-mini"
+                )
                 self.default_model = selected_model
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.info(f"OpenAI: Derived default model from registry: {selected_model}")
+                self.log_info(f"Derived default model from registry: {selected_model}")
                 return selected_model
 
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not derive default model from registry: {e}")
+            self.log_warning(f"Could not derive default model from registry: {e}")
 
-        # Ultimate fallback - use a sensible default when registry is unavailable
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning("No default model available from registry, using fallback: gpt-4o-mini")
-        self.default_model = "gpt-4o-mini"  # Reasonable fallback
+        # Ultimate fallback
+        self.default_model = "gpt-4o-mini"
+        self.log_warning("No default model available from registry, using fallback: gpt-4o-mini")
         return self.default_model
 
-    async def _select_default_from_registry(self, available_models: List[str]) -> str:
-        """
-        Select default model from registry using policy (no hardcoded preferences).
-
-        Args:
-            available_models: List of available model names from registry
-
-        Returns:
-            Selected default model
-        """
-        # Policy: Select based on registry metadata if available
-        try:
-            registry_models = await self._registry_client.fetch_current_models("openai")
-            active_models = [m for m in registry_models if m.is_active and m.model_name in available_models]
-
-            if active_models:
-                # Select most balanced: reasonable cost + good capabilities
-                scored_models = []
-                for model in active_models:
-                    score = 0
-                    # Prefer models with moderate cost (not cheapest, not most expensive)
-                    input_cost = model.dollars_per_million_tokens_input or 0
-                    if 0.1 <= input_cost <= 5.0:  # Balanced cost range
-                        score += 10
-
-                    # Prefer models with good capabilities
-                    if model.supports_function_calling:
-                        score += 5
-                    if model.supports_vision:
-                        score += 3
-
-                    scored_models.append((model.model_name, score))
-
-                if scored_models:
-                    # Select highest scoring model
-                    best_model = max(scored_models, key=lambda x: x[1])
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.info(f"OpenAI: Selected default model '{best_model[0]}' with score {best_model[1]} from registry analysis")
-                    return best_model[0]
-
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not use registry metadata for OpenAI selection: {e}")
-
-        # Fallback: first available model
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"OpenAI: Fallback to first available model: {available_models[0]}")
-        return available_models[0]
+    # Legacy method removed - now using RegistryModelSelectorMixin.select_default_from_registry()
 
     async def get_capabilities(self) -> ProviderCapabilities:
         """

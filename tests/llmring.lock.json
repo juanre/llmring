@@ -1,0 +1,134 @@
+{
+  "version": "1.0",
+  "created_at": "2025-01-19T00:00:00.000000+00:00",
+  "updated_at": "2025-01-19T00:00:00.000000+00:00",
+  "profiles": {
+    "default": {
+      "name": "default",
+      "bindings": [
+        {
+          "alias": "fast",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "constraints": null
+        },
+        {
+          "alias": "balanced",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "constraints": null
+        },
+        {
+          "alias": "deep",
+          "provider": "anthropic",
+          "model": "claude-3-5-haiku-20241022",
+          "constraints": null
+        },
+        {
+          "alias": "openai_fast",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "constraints": null
+        },
+        {
+          "alias": "openai_balanced",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "constraints": null
+        },
+        {
+          "alias": "anthropic_fast",
+          "provider": "anthropic",
+          "model": "claude-3-5-haiku-20241022",
+          "constraints": null
+        },
+        {
+          "alias": "anthropic_balanced",
+          "provider": "anthropic",
+          "model": "claude-3-5-haiku-20241022",
+          "constraints": null
+        },
+        {
+          "alias": "anthropic_deep",
+          "provider": "anthropic",
+          "model": "claude-3-opus-20240229",
+          "constraints": null
+        },
+        {
+          "alias": "google_fast",
+          "provider": "google",
+          "model": "gemini-1.5-flash",
+          "constraints": null
+        },
+        {
+          "alias": "google_balanced",
+          "provider": "google",
+          "model": "gemini-1.5-flash",
+          "constraints": null
+        },
+        {
+          "alias": "google_deep",
+          "provider": "google",
+          "model": "gemini-1.5-pro",
+          "constraints": null
+        },
+        {
+          "alias": "vision",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "constraints": null
+        },
+        {
+          "alias": "anthropic_vision",
+          "provider": "anthropic",
+          "model": "claude-3-5-haiku-20241022",
+          "constraints": null
+        },
+        {
+          "alias": "google_vision",
+          "provider": "google",
+          "model": "gemini-1.5-flash",
+          "constraints": null
+        },
+        {
+          "alias": "pdf",
+          "provider": "anthropic",
+          "model": "claude-3-5-haiku-20241022",
+          "constraints": null
+        },
+        {
+          "alias": "multimodal",
+          "provider": "google",
+          "model": "gemini-1.5-flash",
+          "constraints": null
+        },
+        {
+          "alias": "ollama_local",
+          "provider": "ollama",
+          "model": "llama2",
+          "constraints": null
+        },
+        {
+          "alias": "mvp_test",
+          "provider": "anthropic",
+          "model": "claude-opus-4-20250514",
+          "constraints": null
+        },
+        {
+          "alias": "mvp_vision",
+          "provider": "anthropic",
+          "model": "claude-opus-4-20250514",
+          "constraints": null
+        },
+        {
+          "alias": "mvp_deep",
+          "provider": "anthropic",
+          "model": "claude-opus-4-20250514",
+          "constraints": null
+        }
+      ],
+      "registry_versions": {}
+    }
+  },
+  "default_profile": "default"
+}

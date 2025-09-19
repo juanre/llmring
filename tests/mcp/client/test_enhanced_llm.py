@@ -57,11 +57,19 @@ def failing_tool(input_data: str) -> str:
 @pytest.fixture
 def enhanced_llm():
     """Create an Enhanced LLM instance for testing."""
-    return create_enhanced_llm(
-        llm_model="anthropic:claude-3-haiku-20240307",
-        origin="test-enhanced-llm",
-        user_id="test-user-123",
-    )
+    import os
+    # Change to tests directory so lockfile is found
+    original_cwd = os.getcwd()
+    test_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    os.chdir(test_dir)
+    try:
+        return create_enhanced_llm(
+            llm_model="anthropic_fast",
+            origin="test-enhanced-llm",
+            user_id="test-user-123",
+        )
+    finally:
+        os.chdir(original_cwd)
 
 
 @pytest.fixture
@@ -130,7 +138,7 @@ class TestEnhancedLLMBasics:
     def test_creation(self, enhanced_llm):
         """Test Enhanced LLM creation."""
         assert enhanced_llm is not None
-        assert enhanced_llm.llm_model == "anthropic:claude-3-haiku-20240307"
+        assert enhanced_llm.llm_model == "anthropic_fast"
         assert enhanced_llm.origin == "test-enhanced-llm"
         assert enhanced_llm.default_user_id == "test-user-123"
         assert len(enhanced_llm.registered_tools) == 0
@@ -138,10 +146,10 @@ class TestEnhancedLLMBasics:
     def test_create_enhanced_llm_function(self):
         """Test the create_enhanced_llm convenience function."""
         enhanced_llm = create_enhanced_llm(
-            llm_model="openai:gpt-4o-mini", origin="test-module"
+            llm_model="openai_balanced", origin="test-module"
         )
 
-        assert enhanced_llm.llm_model == "openai:gpt-4o-mini"
+        assert enhanced_llm.llm_model == "openai_balanced"
         assert enhanced_llm.origin == "test-module"
         assert enhanced_llm.default_user_id == "enhanced-llm-user"
 

@@ -19,19 +19,25 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-# Load environment variables from .env file
-load_dotenv()
-
 from llmring.mcp.client import MCPClient
 from llmring.mcp.client.chat.styles import PROMPT_STYLE, RICH_THEME
-
-# Database model removed - now using HTTP-based architecture
 from llmring.mcp.client.pool_config import CHAT_APP_POOL
 from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
 
-# Database imports removed - now using HTTP-based architecture
-# from pgdbm import AsyncDatabaseManager, DatabaseConfig, MonitoredAsyncDatabaseManager
+# Load environment variables from .env file
+load_dotenv()
+
+# Database imports - optional, only if database support is needed
+try:
+    from pgdbm import AsyncDatabaseManager, DatabaseConfig, MonitoredAsyncDatabaseManager
+    HAS_DATABASE = True
+except ImportError:
+    # Database support is optional
+    AsyncDatabaseManager = None
+    DatabaseConfig = None
+    MonitoredAsyncDatabaseManager = None
+    HAS_DATABASE = False
 
 
 class CommandCompleter(Completer):
@@ -102,7 +108,7 @@ class MCPChatApp:
         llm_model: str = "balanced",
         db_connection_string: str | None = None,
         session_id: str | None = None,
-        db_manager: AsyncDatabaseManager | None = None,
+        db_manager: Any | None = None,  # AsyncDatabaseManager if database is available
     ):
         """
         Initialize the chat application.
@@ -283,6 +289,9 @@ class MCPChatApp:
                 "DATABASE_URL", "postgresql://postgres:postgres@localhost/postgres"
             )
 
+            if not HAS_DATABASE:
+                raise ImportError("Database support not available. Install pgdbm to use database features.")
+
             config = DatabaseConfig(
                 connection_string=connection_string,
                 min_connections=CHAT_APP_POOL.min_connections,
@@ -290,15 +299,20 @@ class MCPChatApp:
             )
 
             # Create a shared pool
-            self.shared_pool = await AsyncDatabaseManager.create_shared_pool(config)
+            if AsyncDatabaseManager:
+                self.shared_pool = await AsyncDatabaseManager.create_shared_pool(config)
+            else:
+                raise ImportError("Database support not available")
 
             # Create schema-isolated manager for mcp_client and run migrations
-            self.db_manager = AsyncDatabaseManager(
-                pool=self.shared_pool, schema="mcp_client"
-            )
-            mcp_db = MCPClientDB.from_manager(self.db_manager)
-            await mcp_db.initialize()
-            await mcp_db.run_migrations()
+            if AsyncDatabaseManager:
+                self.db_manager = AsyncDatabaseManager(
+                    pool=self.shared_pool, schema="mcp_client"
+                )
+            else:
+                raise ImportError("Database support not available")
+            # MCPClientDB functionality removed - database operations now optional
+            # Database migrations would go here if MCPClientDB was available
         else:
             # In integrated mode, use provided db_manager; do not create a shared_pool here
             self.shared_pool = None  # Will be managed externally
@@ -306,9 +320,12 @@ class MCPChatApp:
         # Create schema-isolated manager for llmring
         if self.shared_pool:
             # We created our own pool
-            llm_db_manager = AsyncDatabaseManager(
-                pool=self.shared_pool, schema="llmring"
-            )
+            if AsyncDatabaseManager:
+                llm_db_manager = AsyncDatabaseManager(
+                    pool=self.shared_pool, schema="llmring"
+                )
+            else:
+                llm_db_manager = None
         elif self._external_db and self.db_manager is not None:
             # We're using an external db_manager - need to share its pool
             # This assumes the external db_manager was created with a pool
@@ -755,8 +772,12 @@ async def run_with_shared_pool(args):
         enable_monitoring=True,
     ) as pool:
         # Create schema-specific managers
-        mcp_db_manager = AsyncDatabaseManager(pool=pool, schema="mcp_client")
-        llm_db_manager = AsyncDatabaseManager(pool=pool, schema="llmring")
+        if AsyncDatabaseManager:
+            mcp_db_manager = AsyncDatabaseManager(pool=pool, schema="mcp_client")
+            llm_db_manager = AsyncDatabaseManager(pool=pool, schema="llmring")
+        else:
+            mcp_db_manager = None
+            llm_db_manager = None
 
         # Create MCP client database with schema-specific manager
         mcp_db = MCPClientDB.from_manager(mcp_db_manager)

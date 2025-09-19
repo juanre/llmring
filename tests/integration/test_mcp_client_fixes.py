@@ -17,14 +17,22 @@ class TestMCPClientFixes:
     @pytest.fixture
     def chat_engine(self):
         """Create chat engine for testing."""
-        return StatelessChatEngine()
+        # Create LLMRing service with test lockfile
+        import os
+        from llmring.service import LLMRing
+        test_lockfile = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            'llmring.lock.json'
+        )
+        llm_service = LLMRing(origin="test", lockfile_path=test_lockfile)
+        return StatelessChatEngine(llmring=llm_service)
 
     @pytest.mark.asyncio
     async def test_id_at_origin_in_metadata(self, chat_engine):
         """Test that id_at_origin is properly stored in metadata instead of passed as kwarg."""
         request = ChatRequest(
             message="Hello, what is 2+2?",
-            model="fast",
+            model="openai_fast",
             auth_context={"user_id": "test-user-123"},
             save_to_db=False,  # Don't save to avoid DB dependency
         )
@@ -67,7 +75,7 @@ class TestMCPClientFixes:
         """Test that streaming also properly handles metadata."""
         request = ChatRequest(
             message="Count to 3",
-            model="fast",
+            model="openai_fast",
             auth_context={"user_id": "stream-user-456"},
             save_to_db=False,
         )
@@ -110,7 +118,7 @@ class TestMCPClientFixes:
         """Test that requests without auth_context work correctly."""
         request = ChatRequest(
             message="Simple test",
-            model="fast",
+            model="openai_fast",
             auth_context=None,  # No auth context
             save_to_db=False,
         )
@@ -151,7 +159,7 @@ class TestMCPClientFixes:
 
         request = ChatRequest(
             message="Integration test",
-            model="fast",
+            model="openai_fast",
             auth_context={"user_id": "integration-user"},
             save_to_db=True,  # This should trigger conversation manager calls
         )

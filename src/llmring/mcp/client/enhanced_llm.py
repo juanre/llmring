@@ -518,16 +518,8 @@ class EnhancedLLM:
                     )
 
             # Add tool results to messages and get final response
-            # Ensure tool call arguments are strings for the message history
-            parsed_tool_calls = []
-            for tc in response.tool_calls:
-                parsed_tc = tc.copy()
-                if "function" in parsed_tc and "arguments" in parsed_tc["function"]:
-                    args = parsed_tc["function"]["arguments"]
-                    # Ensure arguments are strings for the API
-                    if not isinstance(args, str):
-                        parsed_tc["function"]["arguments"] = json.dumps(args)
-                parsed_tool_calls.append(parsed_tc)
+            # Keep tool call arguments as received from providers (JSON strings)
+            parsed_tool_calls = response.tool_calls
 
             formatted_messages.append(
                 Message(

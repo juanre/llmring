@@ -5,7 +5,6 @@ These tools power the intelligent lockfile creation system by providing
 real-time registry data and analysis capabilities to the advisor LLM.
 """
 
-import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -193,7 +192,8 @@ class RegistryAdvisorTools:
             try:
                 models = await self.registry.fetch_current_models(provider)
                 all_models.extend([(provider, model) for model in models if model.is_active])
-            except:
+            except Exception:
+                # Provider might not be available, skip
                 continue
 
         # Score and rank models

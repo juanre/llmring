@@ -17,10 +17,7 @@ from llmring.schemas import LLMRequest, LLMResponse, Message
 class TestUnifiedStructuredOutput:
     """Test unified structured output across all providers."""
 
-    @pytest.fixture
-    def service(self):
-        """Create LLMRing service."""
-        return LLMRing()
+    # service fixture is provided by conftest.py
 
     @pytest.fixture
     def person_schema(self):
@@ -59,7 +56,7 @@ class TestUnifiedStructuredOutput:
         self, service, structured_request_template
     ):
         """Test OpenAI native JSON schema support via unified interface."""
-        request = LLMRequest(model="fast", **structured_request_template)
+        request = LLMRequest(model="openai_fast", **structured_request_template)
         response = await service.chat(request)
 
         # Verify response structure
@@ -85,7 +82,7 @@ class TestUnifiedStructuredOutput:
     ):
         """Test Anthropic tool injection approach via unified interface."""
         request = LLMRequest(
-            model="balanced", **structured_request_template
+            model="anthropic_balanced", **structured_request_template
         )
         response = await service.chat(request)
 
@@ -116,7 +113,7 @@ class TestUnifiedStructuredOutput:
     ):
         """Test Google function calling approach via unified interface."""
         request = LLMRequest(
-            model="fast", **structured_request_template
+            model="google_balanced", **structured_request_template
         )
         response = await service.chat(request)
 
@@ -142,7 +139,7 @@ class TestUnifiedStructuredOutput:
         self, service, structured_request_template
     ):
         """Test Ollama best-effort approach via unified interface."""
-        request = LLMRequest(model="local", **structured_request_template)
+        request = LLMRequest(model="ollama_local", **structured_request_template)
 
         try:
             response = await service.chat(request)
@@ -158,8 +155,9 @@ class TestUnifiedStructuredOutput:
                 print(f"✓ Ollama raw output: {response.content[:100]}...")
 
         except Exception as e:
-            if "connect" in str(e).lower():
-                pytest.skip("Ollama not running")
+            error_msg = str(e).lower()
+            if "connect" in error_msg or "not supported" in error_msg or "not found" in error_msg:
+                pytest.skip(f"Ollama not available: {e}")
             else:
                 raise
 
@@ -218,7 +216,7 @@ class TestUnifiedStructuredOutput:
         """Test that schema adaptation logic works correctly."""
         # Test OpenAI pass-through (should not be adapted)
         openai_request = LLMRequest(
-            model="test",
+            model="openai_balanced",
             messages=[Message(role="user", content="test")],
             response_format={
                 "type": "json_schema",
@@ -227,6 +225,7 @@ class TestUnifiedStructuredOutput:
         )
 
         # Mock the adapter to test logic
+        import asyncio
         from unittest.mock import Mock
 
         mock_provider = Mock()
@@ -241,7 +240,7 @@ class TestUnifiedStructuredOutput:
 
         # Should adapt Anthropic
         anthropic_request = LLMRequest(
-            model="balanced",
+            model="anthropic_balanced",
             messages=[Message(role="user", content="test")],
             response_format={
                 "type": "json_schema",

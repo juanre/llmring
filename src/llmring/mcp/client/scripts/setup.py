@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from llmring.mcp.client import MCPClient
 
 # Database model removed - now using HTTP-based architecture
-# from llmring.mcp.client.models.db import MCPClientDB
+# MCPClientDB functionality has been removed
 
 
 def create_env_file(path: Path) -> None:
@@ -61,22 +61,11 @@ async def setup_database(db_path: str | None = None) -> bool:
     """Set up the database with required tables."""
     print("Setting up MCP Client database...")
 
-    # Initialize database connection
-    db = MCPClientDB(connection_string=db_path)
-
-    # Execute migrations
-    try:
-        await db.initialize()
-        result = await db.run_migrations()
-        print("✅ Database migrations completed successfully")
-        print(f"   Applied: {len(result.get('applied', []))} migrations")
-        print(f"   Skipped: {len(result.get('skipped', []))} migrations")
-        return True
-    except Exception as e:
-        print(f"❌ Error running migrations: {e}")
-        return False
-    finally:
-        await db.close()
+    # Database functionality removed
+    print("❌ Database functionality has been removed.")
+    print("   The MCP client now uses HTTP-based architecture.")
+    print("   Database setup is no longer required.")
+    return False
 
 
 async def check_llmring_setup() -> None:
@@ -205,11 +194,10 @@ async def main():
 
     if args.reset:
         print("\nResetting database...")
-        db = MCPClientDB(connection_string=args.db_path)
-        await db.initialize()
-        await db.reset_database()
-        print("✅ Database reset complete")
-        await db.close()
+        print("❌ Database reset functionality has been removed.")
+        print("   The MCP client now uses HTTP-based architecture.")
+        return
+        # Code removed - database functionality no longer available
     elif not args.skip_db:
         await setup_database(args.db_path)
 

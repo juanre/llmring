@@ -18,19 +18,20 @@ __all__ = [
     "WebSocketServerTransport",
 ]
 
-# Optional HTTP transports - require FastAPI
-try:
-    from .http import HTTPTransport, SessionManager  # Legacy, deprecated
-    from .streamable_http import ResponseMode, StreamableHTTPTransport
-
-    __all__.extend(
-        [
-            "StreamableHTTPTransport",
-            "ResponseMode",
-            "HTTPTransport",  # Legacy, deprecated
-            "SessionManager",  # Legacy, deprecated
-        ]
-    )
-except ImportError:
-    # HTTP transports not available without FastAPI
-    pass
+# Optional HTTP transports - require FastAPI (currently not exposed)
+# These imports are kept for potential future use but not exported
+# try:
+#     from .http import HTTPTransport, SessionManager  # Legacy, deprecated
+#     from .streamable_http import ResponseMode, StreamableHTTPTransport
+#
+#     __all__.extend(
+#         [
+#             "StreamableHTTPTransport",
+#             "ResponseMode",
+#             "HTTPTransport",  # Legacy, deprecated
+#             "SessionManager",  # Legacy, deprecated
+#         ]
+#     )
+# except ImportError:
+#     # HTTP transports not available without FastAPI
+#     pass

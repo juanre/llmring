@@ -174,7 +174,7 @@ class TestGoogleProviderIntegration:
 
         from llmring.exceptions import ModelNotFoundError
 
-        with pytest.raises(ModelNotFoundError, match="Unsupported model"):
+        with pytest.raises(ModelNotFoundError, match="Google model not available"):
             await provider.chat(messages=messages, model="invalid-model-name")
 
     @pytest.mark.asyncio
@@ -202,23 +202,24 @@ class TestGoogleProviderIntegration:
     async def test_model_validation(self, provider):
         """Test model validation methods."""
         # Test valid models
-        assert provider.validate_model("gemini-1.5-pro") is True
-        assert provider.validate_model("gemini-1.5-flash") is True
-        assert provider.validate_model("google:gemini-1.5-pro") is True
+        assert await provider.validate_model("gemini-1.5-pro") is True
+        assert await provider.validate_model("gemini-1.5-flash") is True
+        assert await provider.validate_model("google:gemini-1.5-pro") is True
 
         # Test invalid models
-        assert provider.validate_model("gpt-4") is False
-        assert provider.validate_model("claude-3-opus") is False
-        assert provider.validate_model("invalid-model") is False
+        assert await provider.validate_model("gpt-4") is False
+        assert await provider.validate_model("claude-3-opus") is False
+        assert await provider.validate_model("invalid-model") is False
 
-    def test_supported_models_list(self, provider):
+    @pytest.mark.asyncio
+    async def test_supported_models_list(self, provider):
         """Test that supported models list is comprehensive."""
-        models = provider.get_supported_models()
+        models = await provider.get_supported_models()
 
-        # Should include Gemini models
-        assert "gemini-1.5-pro" in models
+        # Should include Gemini models from registry
+        assert len(models) > 0
         assert "gemini-1.5-flash" in models
-        assert "gemini-pro" in models
+        assert "gemini-1.5-pro" in models
 
     def test_token_counting(self, provider):
         """Test token counting functionality."""

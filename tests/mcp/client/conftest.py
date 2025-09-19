@@ -13,7 +13,12 @@ from llmring.mcp.client.stateless_engine import StatelessChatEngine
 @pytest.fixture
 def llm_service():
     """Create an LLMRing instance for testing."""
-    return LLMRing(origin="test")
+    import os
+    test_lockfile = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        'llmring.lock.json'
+    )
+    return LLMRing(origin="test", lockfile_path=test_lockfile)
 
 
 @pytest.fixture
