@@ -85,46 +85,6 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         self._cached_models = None  # Will be populated from registry
         self._breaker = CircuitBreaker()
 
-    async def validate_model(self, model: str) -> bool:
-        """
-        Check if the model is supported by Anthropic using registry lookup.
-
-        Args:
-            model: Model name to check
-
-        Returns:
-            True if supported, False otherwise
-        """
-        # Strip provider prefix if present
-        if model.lower().startswith("anthropic:"):
-            model = model.split(":", 1)[1]
-
-        try:
-            # Try registry validation
-            return await self._registry_client.validate_model("anthropic", model)
-        except Exception as e:
-            # If registry is unavailable, log warning and allow gracefully
-            import logging
-            logging.warning(f"Registry unavailable for model validation, allowing gracefully: {e}")
-            return True
-
-
-    async def get_supported_models(self) -> List[str]:
-        """
-        Get list of supported Anthropic model names from registry.
-
-        Returns:
-            List of supported model names
-        """
-        try:
-            # Try to fetch from registry
-            models = await self._registry_client.fetch_current_models("anthropic")
-            return [model.model_name for model in models if model.is_active]
-        except Exception as e:
-            # Registry unavailable - return empty list for graceful degradation
-            import logging
-            logging.warning(f"Registry unavailable for supported models, returning empty list: {e}")
-            return []
 
     async def get_default_model(self) -> str:
         """
@@ -138,14 +98,23 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         # Derive from registry using policy-based selection
         try:
-            models = await self.get_supported_models()
+            if self._registry_client:
+                registry_models = await self._registry_client.fetch_current_models("anthropic")
+                if registry_models:
+                    # Extract model names from registry models
+                    models = [m.model_name for m in registry_models]
+                else:
+                    models = []
+            else:
+                models = []
+
             if models:
                 # Use registry-based selection with Anthropic-specific cost range
                 selected_model = await self.select_default_from_registry(
                     provider_name="anthropic",
                     available_models=models,
                     cost_range=(0.1, 20.0),  # Anthropic's typical range
-                    fallback_model="claude-3-haiku-20240307"
+                    fallback_model=None  # No hardcoded fallback
                 )
                 self.default_model = selected_model
                 self.log_info(f"Derived default model from registry: {selected_model}")
@@ -154,10 +123,11 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         except Exception as e:
             self.log_warning(f"Could not derive default model from registry: {e}")
 
-        # Ultimate fallback
-        self.default_model = "claude-3-haiku-20240307"
-        self.log_warning("No default model available from registry, using fallback: claude-3-haiku-20240307")
-        return self.default_model
+        # No hardcoded fallback - require explicit model specification
+        raise ValueError(
+            "Could not determine default model from registry. "
+            "Please specify a model explicitly or check your API configuration."
+        )
 
     # Legacy method removed - now using RegistryModelSelectorMixin.select_default_from_registry()
 
@@ -168,8 +138,15 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         Returns:
             Provider capabilities
         """
-        # Get current models for capabilities
-        supported_models = await self.get_supported_models()
+        # Get models from registry if available
+        supported_models = []
+        if self._registry_client:
+            try:
+                registry_models = await self._registry_client.fetch_current_models("anthropic")
+                if registry_models:
+                    supported_models = [m.model_name for m in registry_models]
+            except Exception:
+                pass  # Registry unavailable
 
         return ProviderCapabilities(
             provider_name="anthropic",
@@ -264,11 +241,15 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         # Note: Model name normalization removed - use exact model names from registry
 
-        # Verify model is supported (warn but don't fail if not in registry)
-        if not await self.validate_model(model):
-            logger.warning(
-                f"Model '{model}' not found in registry, proceeding anyway"
-            )
+        # Log warning if model not in registry (but don't block)
+        try:
+            registry_models = await self._registry_client.fetch_current_models("anthropic")
+            if not any(m.model_name == model and m.is_active for m in registry_models):
+                logger.warning(
+                    f"Model '{model}' not found in registry, proceeding anyway"
+                )
+        except Exception:
+            pass  # Registry unavailable, continue anyway
 
         # Prepare messages and system prompt
         anthropic_messages, system_message, system_cache_control = (
@@ -596,11 +577,15 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         # Note: Model name normalization removed - use exact model names from registry
 
-        # Verify model is supported (warn but don't fail if not in registry)
-        if not await self.validate_model(model):
-            logger.warning(
-                f"Model '{model}' not found in registry, proceeding anyway"
-            )
+        # Log warning if model not in registry (but don't block)
+        try:
+            registry_models = await self._registry_client.fetch_current_models("anthropic")
+            if not any(m.model_name == model and m.is_active for m in registry_models):
+                logger.warning(
+                    f"Model '{model}' not found in registry, proceeding anyway"
+                )
+        except Exception:
+            pass  # Registry unavailable, continue anyway
 
         # Convert messages to Anthropic format using _prepare_messages
         anthropic_messages, system_message, system_cache_control = (

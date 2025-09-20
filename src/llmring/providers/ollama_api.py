@@ -73,73 +73,6 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         self._breaker = CircuitBreaker()
 
-    async def validate_model(self, model: str) -> bool:
-        """
-        Check if the model is supported by Ollama.
-        First checks registry, then falls back to checking actual Ollama instance.
-
-        Args:
-            model: Model name to check
-
-        Returns:
-            True if supported, False otherwise
-        """
-        # Strip provider prefix if present
-        if model.lower().startswith("ollama:"):
-            model = model.split(":", 1)[1]
-
-        try:
-            # Try registry validation first
-            if await self._registry_client.validate_model("ollama", model):
-                return True
-        except Exception as e:
-            # Registry check failed, continue to local check
-            import logging
-            logging.warning(f"Registry unavailable for Ollama model validation: {e}")
-
-        # Fall back to checking actual Ollama instance
-        try:
-            available_models = await self.get_available_models()
-            # Check exact match first
-            if model in available_models:
-                return True
-
-            # Check base model match (e.g., llama3 matches llama3.2:1b)
-            base_model = model.split(":")[0]
-            for available in available_models:
-                available_base = available.split(":")[0]
-                # Match if base names are the same (llama3 == llama3.2)
-                if base_model in available_base or available_base.startswith(base_model):
-                    return True
-
-            return False
-        except Exception:
-            # If we can't check Ollama API, be conservative and return False
-            # for obviously non-Ollama models
-            if any(provider in model.lower() for provider in ["gpt", "claude", "gemini"]):
-                return False
-            # For unknown models, allow gracefully (Ollama is flexible)
-            return True
-
-
-    async def get_supported_models(self) -> List[str]:
-        """
-        Get list of supported Ollama model names from registry.
-        Note: This returns common models, but Ollama can support
-        any model that's installed locally.
-
-        Returns:
-            List of supported model names
-        """
-        try:
-            # Try to fetch from registry
-            models = await self._registry_client.fetch_current_models("ollama")
-            return [model.model_name for model in models if model.is_active]
-        except Exception as e:
-            # Registry unavailable - return empty list for graceful degradation
-            import logging
-            logging.warning(f"Registry unavailable for supported models, returning empty list: {e}")
-            return []
 
     async def get_default_model(self) -> str:
         """
@@ -153,14 +86,30 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Derive from registry using policy-based selection
         try:
-            models = await self.get_supported_models()
+            # For Ollama, try registry first, then fall back to actual available models
+            models = []
+            if self._registry_client:
+                try:
+                    registry_models = await self._registry_client.fetch_current_models("ollama")
+                    if registry_models:
+                        models = [m.model_name for m in registry_models]
+                except Exception:
+                    pass
+
+            # If no models from registry, try to get available models from Ollama
+            if not models:
+                try:
+                    models = await self.get_available_models()
+                except Exception:
+                    pass
+
             if models:
                 # Use registry-based selection with Ollama-specific cost range (usually free local models)
                 selected_model = await self.select_default_from_registry(
                     provider_name="ollama",
                     available_models=models,
                     cost_range=(0.0, 0.1),  # Ollama models are typically free/local
-                    fallback_model="llama3"
+                    fallback_model=None  # No hardcoded fallback
                 )
                 self.default_model = selected_model
                 self.log_info(f"Derived default model from registry: {selected_model}")
@@ -169,77 +118,18 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         except Exception as e:
             self.log_warning(f"Could not derive default model from registry: {e}")
 
-        # Ultimate fallback
-        self.default_model = "llama3"
-        self.log_warning("No default model available from registry, using fallback: llama3")
-        return self.default_model
+        # For Ollama, we can be more lenient since models are local
+        # Just use the first available model if any
+        if models:
+            self.default_model = models[0]
+            self.log_warning(f"Using first available Ollama model: {self.default_model}")
+            return self.default_model
 
-    # Legacy method removed - now using RegistryModelSelectorMixin.select_default_from_registry()
-    async def _select_default_from_registry_legacy(self, available_models: List[str]) -> str:
-        """
-        Select default model from registry using policy (no hardcoded preferences).
+        # No models available at all
+        raise ValueError(
+            "No Ollama models available. Please install a model first using 'ollama pull'."
+        )
 
-        Args:
-            available_models: List of available model names from registry
-
-        Returns:
-            Selected default model
-        """
-        # Policy: Select based on registry metadata if available
-        try:
-            registry_models = await self._registry_client.fetch_current_models("ollama")
-            active_models = [m for m in registry_models if m.is_active and m.model_name in available_models]
-
-            if active_models:
-                # Select most balanced: good capabilities + popularity indicators
-                scored_models = []
-                for model in active_models:
-                    score = 0
-
-                    # Prefer models with good capabilities (Ollama doesn't have function calling yet)
-                    if model.supports_vision:
-                        score += 5
-
-                    # Prefer models with larger context windows
-                    if model.max_input_tokens and model.max_input_tokens >= 32000:
-                        score += 4
-
-                    # Prefer more recent models (if added_date is available)
-                    if model.added_date:
-                        import datetime
-                        days_since_added = (datetime.datetime.now(datetime.timezone.utc) - model.added_date).days
-                        if days_since_added < 180:  # Less than 6 months old
-                            score += 5
-
-                    # For Ollama, prefer stable versions over experimental ones
-                    model_name_lower = model.model_name.lower()
-                    if ":latest" in model_name_lower or ":" not in model_name_lower:
-                        score += 3  # Stable/latest versions
-                    if "llama" in model_name_lower:  # Popular model family
-                        score += 2
-
-                    scored_models.append((model.model_name, score))
-
-                if scored_models:
-                    # Select highest scoring model
-                    best_model = max(scored_models, key=lambda x: x[1])
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.info(f"Ollama: Selected default model '{best_model[0]}' with score {best_model[1]} from registry analysis")
-                    return best_model[0]
-
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not use registry metadata for Ollama selection: {e}")
-
-        # Fallback: first available model
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Ollama: Fallback to first available model: {available_models[0]}")
-        return available_models[0]
-
-    # End of legacy method
 
     async def get_capabilities(self) -> ProviderCapabilities:
         """
@@ -249,7 +139,11 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             Provider capabilities
         """
         # Get current models for capabilities
-        supported_models = await self.get_supported_models()
+        # For Ollama, use actual available models since it's local
+        try:
+            supported_models = await self.get_available_models()
+        except Exception:
+            supported_models = []
 
         return ProviderCapabilities(
             provider_name="ollama",
@@ -389,12 +283,20 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model = model.split(":", 1)[1]
 
         # Validate model (warn but don't fail if not in registry)
-        if not await self.validate_model(model):
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(
-                f"Model '{model}' not found in registry, proceeding anyway"
-            )
+        # For Ollama, just check if model is available locally
+        try:
+            available = await self.get_available_models()
+            if model not in available:
+                # Check with flexible matching (base names)
+                base_model = model.split(":")[0]
+                if not any(base_model in m for m in available):
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        f"Model '{model}' not found locally, proceeding anyway"
+                    )
+        except Exception:
+            pass  # Can't check, continue anyway
 
         # Convert messages to Ollama format (includes tool handling)
         ollama_messages = []
@@ -540,12 +442,20 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Note: We're more lenient with model validation for Ollama
         # since models are user-installed locally
-        if not await self.validate_model(model):
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(
-                f"Model '{model}' not found in registry, proceeding anyway"
-            )
+        # For Ollama, just check if model is available locally
+        try:
+            available = await self.get_available_models()
+            if model not in available:
+                # Check with flexible matching (base names)
+                base_model = model.split(":")[0]
+                if not any(base_model in m for m in available):
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        f"Model '{model}' not found locally, proceeding anyway"
+                    )
+        except Exception:
+            pass  # Can't check, continue anyway
 
         # Convert messages to Ollama format
         ollama_messages = []

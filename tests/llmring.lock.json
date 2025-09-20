@@ -79,6 +79,12 @@
           "constraints": null
         },
         {
+          "alias": "openai_vision",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "constraints": null
+        },
+        {
           "alias": "anthropic_vision",
           "provider": "anthropic",
           "model": "claude-3-5-haiku-20241022",

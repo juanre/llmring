@@ -4,6 +4,7 @@ These tests require a running Ollama instance at localhost:11434.
 """
 
 import asyncio
+import logging
 import os
 
 import aiohttp
@@ -12,6 +13,8 @@ import httpx
 
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.schemas import LLMResponse, Message
+
+logger = logging.getLogger(__name__)
 
 
 def is_ollama_running():
@@ -215,42 +218,27 @@ class TestOllamaProviderIntegration:
             assert len(response.content) > 0
 
     @pytest.mark.asyncio
-    async def test_model_validation(self, provider):
-        """Test model validation methods."""
+    async def test_available_models_api(self, provider):
+        """Test getting available models from Ollama API."""
         # Get actually available models
         available_models = await provider.get_available_models()
-        if not available_models:
-            pytest.skip("No Ollama models available")
 
-        # Test with first available model
-        first_model = available_models[0]
-        base_name = first_model.split(":")[0]
-
-        # Test that we can validate the available models
-        assert await provider.validate_model(first_model) is True
-        assert await provider.validate_model(base_name) is True
-        assert await provider.validate_model(f"ollama:{first_model}") is True
-
-        # Test models that should be in registry
-        assert await provider.validate_model("llama3") is True
-        if len(available_models) > 1:
-            assert await provider.validate_model("llama3.3") is True
-
-        # Test invalid models
-        assert await provider.validate_model("gpt-4") is False
-        assert await provider.validate_model("claude-3-opus") is False
-        assert await provider.validate_model("invalid_model_name!@#") is False
+        # This test just verifies the API works, models may or may not be present
+        if available_models:
+            # Test with first available model
+            first_model = available_models[0]
+            assert isinstance(first_model, str)
+            logger.info(f"Found {len(available_models)} Ollama models: {available_models}")
+        else:
+            logger.info("No Ollama models found (Ollama may not be running or have models installed)")
 
     @pytest.mark.asyncio
-    async def test_supported_models_list(self, provider):
-        """Test that supported models list is comprehensive."""
-        models = await provider.get_supported_models()
-
-        # Should include models from registry
-        assert len(models) > 0
-        # At minimum should include models from registry
-        assert "llama3" in models or "llama3.3" in models
-        # May include more based on local installation
+    async def test_default_model_selection(self, provider):
+        """Test that provider can select a default model."""
+        # Should be able to get a default model
+        default_model = await provider.get_default_model()
+        assert isinstance(default_model, str)
+        logger.info(f"Ollama default model: {default_model}")
 
     def test_token_counting(self, provider):
         """Test token counting functionality."""

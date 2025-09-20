@@ -40,7 +40,7 @@ class TestProviderEnhancements:
     async def test_google_real_streaming_vs_faked(self, service):
         """Test that Google streaming is real (multiple chunks) not faked (single chunk)."""
         request = LLMRequest(
-            model=get_test_model("google"),
+            model="google_fast",  # Use alias from lockfile
             messages=[
                 Message(
                     role="user",
@@ -137,7 +137,7 @@ class TestProviderEnhancements:
         ]
 
         request = LLMRequest(
-            model=f"google:{get_test_model('google')}",  # Use valid registry model
+            model="google_fast",  # Use alias from lockfile
             messages=[
                 Message(
                     role="user",
@@ -188,7 +188,7 @@ class TestProviderEnhancements:
     async def test_openai_json_schema_support(self, service):
         """Test OpenAI JSON schema support (new feature)."""
         request = LLMRequest(
-            model=get_test_model("openai"),
+            model="openai_fast",  # Use alias from lockfile
             messages=[
                 Message(role="user", content="Generate a person with name and age")
             ],
@@ -238,7 +238,7 @@ class TestProviderEnhancements:
         long_system = "You are an expert assistant. " * 200  # Over 1024 tokens
 
         request = LLMRequest(
-            model=get_test_model("anthropic"),
+            model="anthropic_fast",  # Use alias from lockfile
             messages=[
                 Message(
                     role="system",

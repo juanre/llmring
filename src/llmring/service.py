@@ -29,6 +29,8 @@ class LLMRing:
         origin: str = "llmring",
         registry_url: Optional[str] = None,
         lockfile_path: Optional[str] = None,
+        alias_cache_size: int = 100,
+        alias_cache_ttl: int = 3600,
     ):
         """
         Initialize the LLM service.
@@ -37,12 +39,19 @@ class LLMRing:
             origin: Origin identifier for tracking
             registry_url: Optional custom registry URL
             lockfile_path: Optional path to lockfile
+            alias_cache_size: Maximum number of cached alias resolutions (default: 100)
+            alias_cache_ttl: TTL for alias cache entries in seconds (default: 3600)
         """
         self.origin = origin
         self.providers: Dict[str, BaseLLMProvider] = {}
         self._model_cache: Dict[str, Dict[str, Any]] = {}
         self.registry = RegistryClient(registry_url=registry_url)
         self._registry_models: Dict[str, List[RegistryModel]] = {}
+
+        # Alias resolution cache
+        self._alias_cache: Dict[tuple[str, Optional[str]], tuple[str, float]] = {}
+        self._alias_cache_size = alias_cache_size
+        self._alias_cache_ttl = alias_cache_ttl
 
         # Initialize receipt generator (no signer for local mode)
         self.receipt_generator: Optional[ReceiptGenerator] = None
@@ -158,28 +167,23 @@ class LLMRing:
         Parse a model string into provider and model name.
 
         Args:
-            model: Model alias (e.g., "fast", "balanced") or provider:model string (e.g., "anthropic:claude-3-opus")
+            model: Must be in provider:model format (e.g., "anthropic:claude-3-opus")
 
         Returns:
             Tuple of (provider_type, model_name)
+
+        Raises:
+            ValueError: If model string is not in provider:model format
         """
-        if ":" in model:
-            provider_type, model_name = model.split(":", 1)
-            return provider_type, model_name
-        else:
-            # Try to infer provider from model name
-            if model.startswith("gpt"):
-                return "openai", model
-            elif model.startswith("claude"):
-                return "anthropic", model
-            elif model.startswith("gemini"):
-                return "google", model
-            else:
-                # Default to first available provider
-                if self.providers:
-                    return list(self.providers.keys())[0], model
-                else:
-                    raise ProviderNotFoundError("No providers available")
+        if ":" not in model:
+            raise ValueError(
+                f"Invalid model format: '{model}'. "
+                f"Models must be specified as 'provider:model' (e.g., 'openai:gpt-4'). "
+                f"If you meant to use an alias, ensure it's defined in your lockfile."
+            )
+
+        provider_type, model_name = model.split(":", 1)
+        return provider_type, model_name
 
     def resolve_alias(self, alias_or_model: str, profile: Optional[str] = None) -> str:
         """
@@ -196,20 +200,51 @@ class LLMRing:
         if ":" in alias_or_model:
             return alias_or_model
 
+        # Check cache first
+        cache_key = (alias_or_model, profile)
+        if cache_key in self._alias_cache:
+            cached_value, cached_time = self._alias_cache[cache_key]
+            import time
+            if time.time() - cached_time < self._alias_cache_ttl:
+                logger.debug(f"Using cached resolution for alias '{alias_or_model}': '{cached_value}'")
+                return cached_value
+            else:
+                # Cache entry expired, remove it
+                del self._alias_cache[cache_key]
+
         # Try to resolve as alias from lockfile
         if self.lockfile:
             profile_name = profile or os.getenv("LLMRING_PROFILE")
             resolved = self.lockfile.resolve_alias(alias_or_model, profile_name)
             if resolved:
                 logger.debug(f"Resolved alias '{alias_or_model}' to '{resolved}'")
+                # Add to cache
+                self._add_to_alias_cache(cache_key, resolved)
                 return resolved
 
-        # If no lockfile or alias not found, assume it's a model name
-        # and try to infer provider (backwards compatibility)
+        # If no lockfile or alias not found, treat as model name
         logger.debug(
             f"Could not resolve alias '{alias_or_model}', treating as model name"
         )
         return alias_or_model
+
+    def _add_to_alias_cache(self, cache_key: tuple[str, Optional[str]], value: str):
+        """Add an entry to the alias cache, respecting size limits."""
+        import time
+
+        # If cache is at capacity, remove oldest entry
+        if len(self._alias_cache) >= self._alias_cache_size:
+            # Find and remove the oldest entry
+            oldest_key = min(self._alias_cache.keys(), key=lambda k: self._alias_cache[k][1])
+            del self._alias_cache[oldest_key]
+
+        # Add new entry
+        self._alias_cache[cache_key] = (value, time.time())
+
+    def clear_alias_cache(self):
+        """Clear the alias resolution cache."""
+        self._alias_cache.clear()
+        logger.debug("Alias cache cleared")
 
     async def chat(
         self, request: LLMRequest, profile: Optional[str] = None
@@ -236,24 +271,36 @@ class LLMRing:
         # Get provider
         provider = self.get_provider(provider_type)
 
-        # Validate model if provider supports it
-        if hasattr(provider, "validate_model"):
-            # All validate_model methods are now async due to registry integration
-            valid = await provider.validate_model(model_name)
+        # Check if we should use pinned registry version
+        if self.lockfile and profile:
+            profile_config = self.lockfile.get_profile(profile)
+            if provider_type in profile_config.registry_versions:
+                pinned_version = profile_config.registry_versions[provider_type]
+                # Set the pinned version on the provider's registry client
+                if hasattr(provider, '_registry_client') and provider._registry_client:
+                    # Store the pinned version for this validation
+                    provider._registry_client._pinned_version = pinned_version
 
-            if not valid:
-                raise ModelNotFoundError(
-                    f"Model '{model_name}' not supported by {provider_type} provider",
-                    model_name=model_name,
-                    provider=provider_type,
+        # Log warning if model is not in registry (but don't block)
+        try:
+            registry_model = await self.get_model_from_registry(provider_type, model_name)
+            if not registry_model:
+                logger.warning(
+                    f"Model '{provider_type}:{model_name}' not found in registry. "
+                    f"Cost tracking and token limits unavailable."
                 )
+        except Exception as e:
+            logger.debug(f"Could not check registry for model {provider_type}:{model_name}: {e}")
 
         # If no model specified, use provider's default
         if not model_name and hasattr(provider, "get_default_model"):
             model_name = await provider.get_default_model()
 
         # Validate context limits if possible
-        validation_error = await self.validate_context_limit(request)
+        # Create a temporary request with the resolved model for validation
+        validation_request = request.model_copy()
+        validation_request.model = f"{provider_type}:{model_name}"
+        validation_error = await self.validate_context_limit(validation_request)
         if validation_error:
             logger.warning(f"Context validation warning: {validation_error}")
             # We log but don't block - let the provider handle it
@@ -294,6 +341,10 @@ class LLMRing:
         response = await self._post_process_structured_output(
             response, adapted_request, provider_type
         )
+
+        # Ensure response has the full provider:model format
+        if response.model and ":" not in response.model:
+            response.model = f"{provider_type}:{response.model}"
 
         # Calculate and add cost information if available
         if response.usage:
@@ -580,20 +631,6 @@ class LLMRing:
         self.lockfile.save(lockfile_path)
         logger.info(f"Created lockfile at {lockfile_path}")
 
-    async def get_available_models(self) -> Dict[str, List[str]]:
-        """
-        Get all available models from registered providers.
-
-        Returns:
-            Dictionary mapping provider names to their supported models
-        """
-        models = {}
-        for provider_name, provider in self.providers.items():
-            if hasattr(provider, "get_supported_models"):
-                models[provider_name] = await provider.get_supported_models()
-            else:
-                models[provider_name] = []
-        return models
 
     async def get_model_info(self, model: str) -> Dict[str, Any]:
         """
@@ -616,17 +653,22 @@ class LLMRing:
         provider = self.get_provider(provider_type)
 
         # Build model info
+        # Since we removed validation gatekeeping, all models are "supported"
+        # (the provider will fail naturally if it doesn't support the model)
         model_info = {
             "provider": provider_type,
             "model": model_name,
-            "supported": hasattr(provider, "validate_model")
-            and await provider.validate_model(model_name),
+            "supported": True,  # No gatekeeping - providers decide at runtime
         }
 
         # Add default model info if available
         if hasattr(provider, "get_default_model"):
-            default_model = await provider.get_default_model()
-            model_info["is_default"] = model_name == default_model
+            try:
+                default_model = await provider.get_default_model()
+                model_info["is_default"] = model_name == default_model
+            except Exception:
+                # Registry might be unavailable - that's OK
+                model_info["is_default"] = False
 
         # Cache and return
         self._model_cache[cache_key] = model_info

@@ -51,11 +51,7 @@ class TestBaseLLMProvider:
             def get_token_count(self, text):
                 return len(text.split())
 
-            def validate_model(self, model):
-                return model == "test-model"
-
-            def get_supported_models(self):
-                return ["test-model"]
+            # Validation methods removed - we no longer gatekeep models
 
             def get_default_model(self):
                 return "test-model"
@@ -91,11 +87,7 @@ class TestBaseLLMProvider:
             def get_token_count(self, text):
                 return len(text.split())
 
-            def validate_model(self, model):
-                return True
-
-            def get_supported_models(self):
-                return ["model-1", "model-2", "model-3"]
+            # Validation methods removed - we no longer gatekeep models
 
             def get_default_model(self):
                 return "model-1"
@@ -105,7 +97,7 @@ class TestBaseLLMProvider:
 
                 return ProviderCapabilities(
                     provider_name="test",
-                    supported_models=self.get_supported_models(),
+                    supported_models=["model-1", "model-2", "model-3"],
                     supports_streaming=False,
                 )
 
@@ -130,11 +122,7 @@ class TestBaseLLMProvider:
             def get_token_count(self, text):
                 return len(text.split())
 
-            def validate_model(self, model):
-                return False
-
-            def get_supported_models(self):
-                return []
+            # Validation methods removed - we no longer gatekeep models
 
             def get_default_model(self):
                 return "default"

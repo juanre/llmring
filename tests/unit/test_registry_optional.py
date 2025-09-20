@@ -8,41 +8,8 @@ from llmring.schemas import LLMRequest
 from llmring.registry import RegistryClient
 
 
-@pytest.mark.asyncio
-async def test_model_validation_with_unavailable_registry():
-    """Test that models validate successfully when registry is unavailable."""
-
-    # Create LLMRing with an invalid registry URL
-    # Use a cache dir that doesn't exist to avoid cached data
-    with patch.object(RegistryClient, 'CACHE_DIR', Path("/tmp/test-no-cache")):
-        ring = LLMRing(registry_url="http://invalid-registry-url.example.com")
-
-        # Get provider
-        provider = ring.providers.get("openai")
-        if provider:
-            # Test that validation returns True when registry is unavailable
-            is_valid = await provider.validate_model("gpt-4o-mini")
-            assert is_valid, "Model should validate as True when registry is unavailable"
-
-            # Even completely fake models should validate as True
-            is_valid = await provider.validate_model("completely-fake-model")
-            assert is_valid, "Fake model should validate as True when registry is unavailable"
-
-
-@pytest.mark.asyncio
-async def test_registry_client_fallback():
-    """Test that RegistryClient returns True when fetch fails."""
-
-    # Use a non-existent cache directory to ensure no cached data
-    with patch.object(RegistryClient, 'CACHE_DIR', Path("/tmp/test-no-cache")):
-        registry = RegistryClient("http://invalid-url.example.com")
-
-        # Clear any in-memory cache
-        registry._cache.clear()
-
-        # Test validate_model returns True on fetch failure
-        is_valid = await registry.validate_model("openai", "any-model")
-        assert is_valid, "Registry should return True when fetch fails"
+# Validation tests removed - we no longer gatekeep models
+# The philosophy is that providers should fail naturally if they don't support a model
 
 
 @pytest.mark.asyncio

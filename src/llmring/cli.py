@@ -31,12 +31,21 @@ async def cmd_lock_init(args):
         return await cmd_lock_init_intelligent(path)
 
     # Basic creation with recommendation to use intelligent system
-    print("💡 Creating basic lockfile. For optimized recommendations, use:")
-    print("   llmring lock init --interactive")
+    print("💡 Creating lockfile with registry-based recommendations...")
     print()
 
-    # Create basic lockfile
-    lockfile = Lockfile.create_default()
+    # Try to create with registry data
+    try:
+        from llmring.registry import RegistryClient
+        registry_client = RegistryClient()
+        lockfile = await Lockfile.create_default_async(registry_client)
+        print("✅ Using registry data for intelligent defaults")
+    except Exception as e:
+        # Fallback to basic if registry unavailable
+        print(f"⚠️  Could not fetch registry data: {e}")
+        print("   Using basic defaults instead")
+        lockfile = Lockfile.create_default()
+
     lockfile.save(path)
 
     print(f"✅ Created basic lockfile: {path}")

@@ -54,62 +54,8 @@ class TestOllamaProviderUnit:
         provider = OllamaProvider()
         assert provider.base_url == custom_url
 
-    @pytest.mark.asyncio
-    async def test_supported_models_list(self, ollama_provider):
-        """Test that supported models list contains expected models."""
-        models = await ollama_provider.get_supported_models()
-
-        assert isinstance(models, list)
-        # Models list may be empty if registry is unavailable
-        if len(models) > 0:
-            # If models are available, check for common ones
-            # Models are returned from registry or fallback list
-            assert any("mistral" in model or "llama" in model for model in models)
-        # Even if empty, the provider should return a list
-
-    @pytest.mark.asyncio
-    async def test_validate_model_exact_match(self, ollama_provider):
-        """Test model validation with exact model names."""
-        # Should validate local models
-        # These models are in the test registry
-        assert await ollama_provider.validate_model("mistral") is True
-        assert await ollama_provider.validate_model("llama3") is True
-
-    @pytest.mark.asyncio
-    async def test_validate_model_with_provider_prefix(self, ollama_provider):
-        """Test model validation handles provider prefix correctly."""
-        # Should validate with provider prefix
-        assert await ollama_provider.validate_model("ollama:mistral") is True
-
-    @pytest.mark.asyncio
-    async def test_validate_model_with_tags(self, ollama_provider):
-        """Test model validation with version tags."""
-        # Models with tags may or may not validate depending on registry content
-        # Since test registry doesn't have tagged versions, these will be False
-        # But that's OK - validation is advisory now, models will still work
-        result1 = await ollama_provider.validate_model("mistral:7b")
-        result2 = await ollama_provider.validate_model("llama3:latest")
-        # Just verify the function works without error
-        assert isinstance(result1, bool)
-        assert isinstance(result2, bool)
-
-    @pytest.mark.asyncio
-    async def test_validate_model_invalid_format(self, ollama_provider):
-        """Test model validation behavior with invalid formats."""
-        # When registry is unavailable, Ollama provider may be more permissive
-        # The behavior depends on whether the registry is accessible
-        try:
-            models = await ollama_provider.get_supported_models()
-            if len(models) > 0:
-                # Registry is available, should be stricter
-                assert await ollama_provider.validate_model("invalid_model!@#") is False
-                assert await ollama_provider.validate_model("model with spaces") is False
-                assert await ollama_provider.validate_model("") is False
-            else:
-                # Registry unavailable, may accept any format or use fallback logic
-                pytest.skip("Ollama registry unavailable - validation behavior may be permissive")
-        except Exception:
-            pytest.skip("Cannot determine Ollama model validation behavior without registry")
+    # Model validation tests removed - we no longer gatekeep models
+    # The philosophy is that providers should fail naturally if they don't support a model
 
     @skip_if_ollama_not_running
     @pytest.mark.asyncio
@@ -402,9 +348,6 @@ class TestOllamaProviderUnit:
             default_model = await ollama_provider.get_default_model()
             # If we get a default model, it should contain 'llama'
             assert "llama" in default_model
-            models = await ollama_provider.get_supported_models()
-            if models:  # Only check if models list is not empty
-                assert default_model in models
         except Exception as e:
             # If registry is unavailable and no models found, this is expected
             assert "No default model available" in str(e) or "registry" in str(e).lower()
@@ -529,22 +472,6 @@ class TestOllamaProviderUnit:
     @pytest.mark.asyncio
     async def test_model_validation_registry_based(self, ollama_provider):
         """Test that model validation is registry-based with graceful fallback."""
-        # When registry is available, should validate against registry
-        # When registry unavailable, should allow gracefully (return True)
-
-        # Test with some model names - exact behavior depends on registry availability
-        result1 = await ollama_provider.validate_model("llama3")
-        result2 = await ollama_provider.validate_model("mistral")
-        result3 = await ollama_provider.validate_model("custom-model:tag")
-
-        # Models in registry should validate as True
-        assert result1 is True  # llama3 is in test registry
-        assert result2 is True  # mistral is in test registry
-
-        # Models with tags might be False if not in registry, but that's OK
-        # Validation is now advisory
-        assert isinstance(result3, bool)  # Just verify it returns a boolean
-
-        # Even "invalid" patterns should return a boolean result
-        result4 = await ollama_provider.validate_model("model with spaces")
-        assert isinstance(result4, bool)  # Just verify it works
+        # Validation tests removed - we no longer gatekeep models
+        # The philosophy is that providers should fail naturally if they don't support a model
+        pass

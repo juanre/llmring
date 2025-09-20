@@ -71,13 +71,13 @@ class TestGoogleProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model=get_test_model("google"),  # Use faster model for tests
+            model="gemini-1.5-flash",  # Use faster model for tests
             max_tokens=50,
         )
 
         assert isinstance(response, LLMResponse)
         assert "Hello from Gemini" in response.content
-        assert response.model == get_test_model("google")
+        assert response.model == "gemini-1.5-flash"
 
         # Google API might not always provide usage metadata
         if response.usage:
@@ -97,7 +97,7 @@ class TestGoogleProviderIntegration:
         ]
 
         response = await provider.chat(
-            messages=messages, model=get_test_model("google"), max_tokens=100
+            messages=messages, model="gemini-1.5-flash", max_tokens=100
         )
 
         assert isinstance(response, LLMResponse)
@@ -114,12 +114,12 @@ class TestGoogleProviderIntegration:
 
         # Test with low temperature (more deterministic)
         response_low = await provider.chat(
-            messages=messages, model=get_test_model("google"), temperature=0.1, max_tokens=50
+            messages=messages, model="gemini-1.5-flash", temperature=0.1, max_tokens=50
         )
 
         # Test with high temperature (more creative)
         response_high = await provider.chat(
-            messages=messages, model=get_test_model("google"), temperature=0.9, max_tokens=50
+            messages=messages, model="gemini-1.5-flash", temperature=0.9, max_tokens=50
         )
 
         assert isinstance(response_low, LLMResponse)
@@ -139,7 +139,7 @@ class TestGoogleProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model=get_test_model("google"),
+            model="gemini-1.5-flash",
             max_tokens=20,  # Very small limit
         )
 
@@ -161,7 +161,7 @@ class TestGoogleProviderIntegration:
         ]
 
         response = await provider.chat(
-            messages=messages, model=get_test_model("google"), max_tokens=50
+            messages=messages, model="gemini-1.5-flash", max_tokens=50
         )
 
         assert isinstance(response, LLMResponse)
@@ -186,7 +186,7 @@ class TestGoogleProviderIntegration:
         async def make_request(i):
             messages = [Message(role="user", content=f"Count to {i}")]
             return await provider.chat(
-                messages=messages, model=get_test_model("google"), max_tokens=50
+                messages=messages, model="gemini-1.5-flash", max_tokens=50
             )
 
         # Make 3 concurrent requests
@@ -233,7 +233,7 @@ class TestGoogleProviderIntegration:
         try:
             response = await provider.chat(
                 messages=messages,
-                model=get_test_model("google", "vision"),  # Use vision-capable model
+                model="gemini-1.5-pro",  # Use Pro for vision agents
                 max_tokens=100,
             )
 
@@ -261,7 +261,7 @@ class TestGoogleProviderIntegration:
 
         try:
             response = await provider.chat(
-                messages=messages, model=get_test_model("google"), max_tokens=50
+                messages=messages, model="gemini-1.5-flash", max_tokens=50
             )
 
             assert isinstance(response, LLMResponse)
@@ -290,7 +290,7 @@ class TestGoogleProviderIntegration:
 
         try:
             response = await provider.chat(
-                messages=messages, model=get_test_model("google"), max_tokens=100
+                messages=messages, model="gemini-1.5-flash", max_tokens=100
             )
 
             assert isinstance(response, LLMResponse)
@@ -319,7 +319,7 @@ class TestGoogleProviderIntegration:
 
         try:
             response = await provider.chat(
-                messages=messages, model=get_test_model("google"), max_tokens=200
+                messages=messages, model="gemini-1.5-flash", max_tokens=200
             )
 
             assert isinstance(response, LLMResponse)
@@ -346,7 +346,7 @@ class TestGoogleProviderIntegration:
 
         try:
             response = await provider.chat(
-                messages=messages, model=get_test_model("google"), max_tokens=200
+                messages=messages, model="gemini-1.5-flash", max_tokens=200
             )
 
             assert isinstance(response, LLMResponse)

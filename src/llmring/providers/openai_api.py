@@ -82,45 +82,6 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         # Simple circuit breaker per model
         self._breaker = CircuitBreaker()
 
-    async def validate_model(self, model: str) -> bool:
-        """
-        Check if the model is supported by OpenAI using registry lookup.
-
-        Args:
-            model: Model name to check
-
-        Returns:
-            True if supported, False otherwise
-        """
-        # Strip provider prefix if present
-        if model.lower().startswith("openai:"):
-            model = model.split(":", 1)[1]
-
-        try:
-            # Try registry validation
-            return await self._registry_client.validate_model("openai", model)
-        except Exception as e:
-            # If registry is unavailable, log warning and allow gracefully
-            import logging
-            logging.warning(f"Registry unavailable for model validation, allowing gracefully: {e}")
-            return True
-
-    async def get_supported_models(self) -> List[str]:
-        """
-        Get list of supported OpenAI model names from registry.
-
-        Returns:
-            List of supported model names
-        """
-        try:
-            # Try to fetch from registry
-            models = await self._registry_client.fetch_current_models("openai")
-            return [model.model_name for model in models if model.is_active]
-        except Exception as e:
-            # Registry unavailable - return empty list for graceful degradation
-            import logging
-            logging.warning(f"Registry unavailable for supported models, returning empty list: {e}")
-            return []
 
     async def get_default_model(self) -> str:
         """
@@ -134,26 +95,32 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Derive from registry using policy-based selection
         try:
-            models = await self.get_supported_models()
-            if models:
-                # Use registry-based selection with OpenAI-specific cost range
-                selected_model = await self.select_default_from_registry(
-                    provider_name="openai",
-                    available_models=models,
-                    cost_range=(0.1, 5.0),  # OpenAI's typical range
-                    fallback_model="gpt-4o-mini"
-                )
-                self.default_model = selected_model
-                self.log_info(f"Derived default model from registry: {selected_model}")
-                return selected_model
+            # Get models from registry
+            if self._registry_client:
+                registry_models = await self._registry_client.fetch_current_models("openai")
+                if registry_models:
+                    # Extract model names from registry models
+                    models = [m.model_name for m in registry_models]
+
+                    # Use registry-based selection with OpenAI-specific cost range
+                    selected_model = await self.select_default_from_registry(
+                        provider_name="openai",
+                        available_models=models,
+                        cost_range=(0.1, 5.0),  # OpenAI's typical range
+                        fallback_model=None  # No hardcoded fallback
+                    )
+                    self.default_model = selected_model
+                    self.log_info(f"Derived default model from registry: {selected_model}")
+                    return selected_model
 
         except Exception as e:
             self.log_warning(f"Could not derive default model from registry: {e}")
 
-        # Ultimate fallback
-        self.default_model = "gpt-4o-mini"
-        self.log_warning("No default model available from registry, using fallback: gpt-4o-mini")
-        return self.default_model
+        # No hardcoded fallback - require explicit model specification
+        raise ValueError(
+            "Could not determine default model from registry. "
+            "Please specify a model explicitly or check your API configuration."
+        )
 
     # Legacy method removed - now using RegistryModelSelectorMixin.select_default_from_registry()
 
@@ -164,8 +131,15 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         Returns:
             Provider capabilities
         """
-        # Get current models for capabilities
-        supported_models = await self.get_supported_models()
+        # Get models from registry if available
+        supported_models = []
+        if self._registry_client:
+            try:
+                registry_models = await self._registry_client.fetch_current_models("openai")
+                if registry_models:
+                    supported_models = [m.model_name for m in registry_models]
+            except Exception:
+                pass  # Registry unavailable
 
         return ProviderCapabilities(
             provider_name="openai",
@@ -490,12 +464,16 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         if model.lower().startswith("openai:"):
             model = model.split(":", 1)[1]
 
-        # Verify model is supported (warn but don't fail if not in registry)
-        if not await self.validate_model(model):
-            import logging
-            logging.getLogger(__name__).warning(
-                f"Model '{model}' not found in registry, proceeding anyway"
-            )
+        # Log warning if model not in registry (but don't block)
+        try:
+            models = await self._registry_client.fetch_current_models("openai")
+            if not any(m.model_name == model and m.is_active for m in models):
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Model '{model}' not found in registry, proceeding anyway"
+                )
+        except Exception:
+            pass  # Registry unavailable, continue anyway
 
         # o1 models and PDF processing don't support streaming yet
         if model.startswith("o1") or self._contains_pdf_content(messages):
@@ -908,12 +886,16 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         if model.lower().startswith("openai:"):
             model = model.split(":", 1)[1]
 
-        # Verify model is supported (warn but don't fail if not in registry)
-        if not await self.validate_model(model):
-            import logging
-            logging.getLogger(__name__).warning(
-                f"Model '{model}' not found in registry, proceeding anyway"
-            )
+        # Log warning if model not in registry (but don't block)
+        try:
+            models = await self._registry_client.fetch_current_models("openai")
+            if not any(m.model_name == model and m.is_active for m in models):
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Model '{model}' not found in registry, proceeding anyway"
+                )
+        except Exception:
+            pass  # Registry unavailable, continue anyway
 
         # Route o1* models via Responses API
         if model.startswith("o1"):

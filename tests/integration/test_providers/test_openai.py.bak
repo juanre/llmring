@@ -63,7 +63,7 @@ class TestOpenAIProviderIntegration:
         ]
 
         response = await provider.chat(
-            messages=messages, model=get_test_model("openai"), max_tokens=100
+            messages=messages, model="gpt-4o-mini", max_tokens=100
         )
 
         assert isinstance(response, LLMResponse)
@@ -79,12 +79,12 @@ class TestOpenAIProviderIntegration:
 
         # Test with low temperature (more deterministic)
         response_low = await provider.chat(
-            messages=messages, model=get_test_model("openai"), temperature=0.1, max_tokens=50
+            messages=messages, model="gpt-4o-mini", temperature=0.1, max_tokens=50
         )
 
         # Test with high temperature (more creative)
         response_high = await provider.chat(
-            messages=messages, model=get_test_model("openai"), temperature=0.9, max_tokens=50
+            messages=messages, model="gpt-4o-mini", temperature=0.9, max_tokens=50
         )
 
         assert isinstance(response_low, LLMResponse)
@@ -103,7 +103,7 @@ class TestOpenAIProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model=get_test_model("openai"),
+            model="gpt-4o-mini",
             max_tokens=20,  # Very small limit
         )
 
@@ -121,7 +121,7 @@ class TestOpenAIProviderIntegration:
         ]
 
         response = await provider.chat(
-            messages=messages, model=get_test_model("openai"), max_tokens=50
+            messages=messages, model="gpt-4o-mini", max_tokens=50
         )
 
         assert isinstance(response, LLMResponse)
@@ -139,7 +139,7 @@ class TestOpenAIProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model=get_test_model("openai"),
+            model="gpt-4o-mini",
             response_format={"type": "json_object"},
             max_tokens=100,
         )
@@ -185,7 +185,7 @@ class TestOpenAIProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model=get_test_model("openai"),
+            model="gpt-4o-mini",
             tools=tools,
             tool_choice="auto",
             max_tokens=200,
@@ -217,7 +217,7 @@ class TestOpenAIProviderIntegration:
         async def make_request(i):
             messages = [Message(role="user", content=f"Count to {i}")]
             return await provider.chat(
-                messages=messages, model=get_test_model("openai"), max_tokens=50
+                messages=messages, model="gpt-4o-mini", max_tokens=50
             )
 
         # Make 3 concurrent requests
@@ -301,7 +301,7 @@ class TestOpenAIProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model=get_test_model("openai"),
+            model="gpt-4o-mini",
             tools=tools,
             tool_choice="none",
             max_tokens=100,
@@ -410,7 +410,7 @@ startxref
         try:
             response = await provider.chat(
                 messages=messages,
-                model=get_test_model("openai"),  # Use a model that supports Assistants API
+                model="gpt-4o-mini",  # Use a model that supports Assistants API
                 max_tokens=200,
             )
 
@@ -481,4 +481,4 @@ startxref
             ProviderResponseError,
             match="Tools and custom response formats are not supported when processing PDFs",
         ):
-            await provider.chat(messages=messages, model=get_test_model("openai"), tools=tools)
+            await provider.chat(messages=messages, model="gpt-4o-mini", tools=tools)

@@ -126,12 +126,9 @@ class TestSimpleFileProcessing:
     @pytest.mark.asyncio
     async def test_image_analysis_openai(self, service, test_image_path):
         """Test image analysis with OpenAI."""
-        available_models = await service.get_available_models()
-        if (
-            not available_models.get("openai")
-            or "gpt-4o" not in available_models["openai"]
-        ):
-            pytest.skip("OpenAI GPT-4o not available")
+        # Check if OpenAI provider is available
+        if "openai" not in service.providers:
+            pytest.skip("OpenAI provider not available")
 
         # Use utility function to create content
         content = analyze_image(
@@ -141,7 +138,7 @@ class TestSimpleFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="gpt-4o",
+            model="openai_fast",  # Use alias from lockfile
             max_tokens=200,
         )
 
@@ -161,9 +158,9 @@ class TestSimpleFileProcessing:
     @pytest.mark.asyncio
     async def test_image_analysis_anthropic(self, service, test_image_path):
         """Test image analysis with Anthropic."""
-        available_models = await service.get_available_models()
-        if not available_models.get("anthropic"):
-            pytest.skip("Anthropic not available")
+        # Check if Anthropic provider is available
+        if "anthropic" not in service.providers:
+            pytest.skip("Anthropic provider not available")
 
         content = analyze_image(
             test_image_path,
@@ -195,9 +192,9 @@ class TestSimpleFileProcessing:
     @pytest.mark.asyncio
     async def test_image_analysis_google(self, service, test_image_path):
         """Test image analysis with Google."""
-        available_models = await service.get_available_models()
-        if not available_models.get("google"):
-            pytest.skip("Google not available")
+        # Check if Google provider is available
+        if "google" not in service.providers:
+            pytest.skip("Google provider not available")
 
         try:
             content = analyze_image(
@@ -207,7 +204,7 @@ class TestSimpleFileProcessing:
 
             request = LLMRequest(
                 messages=[Message(role="user", content=content)],
-                model="gemini-1.5-pro",
+                model="google_deep",  # Use alias from lockfile
                 max_tokens=200,
             )
 
@@ -243,13 +240,12 @@ class TestSimpleFileProcessing:
     @pytest.mark.asyncio
     async def test_pdf_processing_universal(self, service, test_pdf_path):
         """Test PDF processing using universal file interface."""
-        available_models = await service.get_available_models()
-
+        # Check which providers are available
         # Try Anthropic first, then Google as fallback
         model = None
-        if available_models.get("anthropic"):
+        if "anthropic" in service.providers:
             model = "mvp_vision"
-        elif available_models.get("google"):
+        elif "google" in service.providers:
             model = "google_vision"
         else:
             pytest.skip("No PDF-capable providers available")
@@ -314,12 +310,9 @@ class TestSimpleFileProcessing:
     @pytest.mark.asyncio
     async def test_url_vs_file_path(self, service):
         """Test that URLs and file paths are handled correctly."""
-        available_models = await service.get_available_models()
-        if (
-            not available_models.get("openai")
-            or "gpt-4o" not in available_models["openai"]
-        ):
-            pytest.skip("OpenAI GPT-4o not available")
+        # Check if OpenAI provider is available
+        if "openai" not in service.providers:
+            pytest.skip("OpenAI provider not available")
 
         # Test with a public image URL
         test_url = "https://httpbin.org/image/png"
@@ -352,7 +345,7 @@ class TestSimpleFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="gpt-4o-mini",
+            model="openai_fast",  # Use alias from lockfile
             max_tokens=100,
         )
 

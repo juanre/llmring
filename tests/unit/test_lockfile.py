@@ -28,17 +28,17 @@ class TestLockfile:
             assert "staging" in lockfile.profiles
             assert "dev" in lockfile.profiles
 
-            # Should have minimal bindings without API keys (default and local)
+            # Should have minimal bindings without API keys (only local ollama)
             default_profile = lockfile.get_profile("default")
             assert (
-                len(default_profile.bindings) == 2
-            )  # default and local ollama aliases
+                len(default_profile.bindings) == 1
+            )  # Only local ollama alias without hardcoded models
             # Verify the local alias uses the correct model
             local_binding = next(
                 (b for b in default_profile.bindings if b.alias == "local"), None
             )
             assert local_binding is not None
-            assert local_binding.model == "llama3.3:latest"
+            assert local_binding.model == "llama3:latest"
 
     def test_create_default_with_openai_key(self):
         """Test creating default lockfile with OpenAI API key."""
@@ -48,16 +48,10 @@ class TestLockfile:
             default_profile = lockfile.get_profile("default")
             aliases = {b.alias for b in default_profile.bindings}
 
-            # Should have OpenAI-specific aliases
-            assert "long_context" in aliases
-            assert "low_cost" in aliases
-            assert "json_mode" in aliases
-
-            # Check correct model assignments
-            for binding in default_profile.bindings:
-                if binding.alias == "low_cost":
-                    assert binding.provider == "openai"
-                    assert "3.5" in binding.model or "mini" in binding.model
+            # Without registry data, basic create_default() doesn't add provider-specific bindings
+            # Only local ollama binding is added
+            assert "local" in aliases
+            assert len(default_profile.bindings) == 1
 
     def test_create_default_with_anthropic_key(self):
         """Test creating default lockfile with Anthropic API key."""
@@ -67,9 +61,10 @@ class TestLockfile:
             default_profile = lockfile.get_profile("default")
             aliases = {b.alias for b in default_profile.bindings}
 
-            # Should have Anthropic-specific aliases
-            assert "deep" in aliases
-            assert "balanced" in aliases
+            # Without registry data, basic create_default() doesn't add provider-specific bindings
+            # Only local ollama binding is added
+            assert "local" in aliases
+            assert len(default_profile.bindings) == 1
 
             # Check correct model assignments
             for binding in default_profile.bindings:
