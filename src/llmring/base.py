@@ -3,24 +3,33 @@ Base class for LLM providers.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
-from llmring.schemas import LLMResponse, Message
+from pydantic import BaseModel, Field
+
+from llmring.schemas import LLMResponse, Message, StreamChunk
+
+
+class ProviderConfig(BaseModel):
+    """Configuration for an LLM provider."""
+
+    api_key: Optional[str] = Field(None, description="API key for the provider")
+    base_url: Optional[str] = Field(None, description="Base URL for the API")
+    default_model: Optional[str] = Field(None, description="Default model to use")
+    timeout_seconds: float = Field(60.0, description="Request timeout in seconds")
 
 
 class BaseLLMProvider(ABC):
     """Base class for LLM providers."""
 
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+    def __init__(self, config: ProviderConfig):
         """
         Initialize the LLM provider.
 
         Args:
-            api_key: API key for the provider
-            base_url: Optional base URL for the API
+            config: Provider configuration
         """
-        self.api_key = api_key
-        self.base_url = base_url
+        self.config = config
 
     @abstractmethod
     async def chat(
@@ -34,55 +43,75 @@ class BaseLLMProvider(ABC):
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-    ) -> LLMResponse:
+        stream: Optional[bool] = False,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the LLM provider.
 
         Args:
             messages: List of messages in the conversation
-            model: The model to use
-            temperature: Optional temperature parameter
-            max_tokens: Optional max tokens parameter
-            response_format: Optional response format parameters
-            tools: Optional list of tools to make available
-            tool_choice: Optional tool choice configuration
+            model: Model identifier to use
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            response_format: Optional response format specification
+            tools: Optional list of tools/functions available
+            tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
+            stream: Whether to stream the response
+            extra_params: Provider-specific parameters to pass through
 
         Returns:
-            LLM response
+            LLM response or async iterator of stream chunks if streaming
         """
         pass
 
     @abstractmethod
-    def validate_model(self, model: str) -> bool:
+    async def get_capabilities(self) -> "ProviderCapabilities":
         """
-        Check if the model is supported by this provider.
-
-        Args:
-            model: Model name to check
+        Get the capabilities of this provider.
 
         Returns:
-            True if supported, False otherwise
+            Provider capabilities including supported models and features
         """
         pass
 
-    @abstractmethod
-    def get_supported_models(self) -> List[str]:
+    async def aclose(self) -> None:
         """
-        Get list of supported model names.
+        Clean up provider resources.
 
-        Returns:
-            List of supported model names
+        This should be called when the provider is no longer needed to properly
+        close any open connections (e.g., httpx clients).
         """
-        pass
+        pass  # Default implementation does nothing
 
-    @abstractmethod
-    def get_default_model(self) -> str:
-        """
-        Get the default model for this provider.
 
-        Returns:
-            Default model name
-        """
-        pass
+class ProviderCapabilities(BaseModel):
+    """Capabilities of an LLM provider."""
+
+    provider_name: str = Field(..., description="Name of the provider")
+    supported_models: List[str] = Field(..., description="List of supported model IDs")
+    supports_streaming: bool = Field(True, description="Whether streaming is supported")
+    supports_tools: bool = Field(
+        True, description="Whether function calling is supported"
+    )
+    supports_vision: bool = Field(
+        False, description="Whether image inputs are supported"
+    )
+    supports_audio: bool = Field(
+        False, description="Whether audio inputs are supported"
+    )
+    supports_documents: bool = Field(
+        False, description="Whether document inputs are supported"
+    )
+    supports_json_mode: bool = Field(
+        False, description="Whether JSON mode is supported"
+    )
+    supports_caching: bool = Field(
+        False, description="Whether prompt caching is supported"
+    )
+    max_context_window: Optional[int] = Field(
+        None, description="Maximum context window size"
+    )
+    default_model: str = Field(..., description="Default model for this provider")

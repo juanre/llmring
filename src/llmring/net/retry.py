@@ -7,7 +7,39 @@ from typing import Awaitable, Callable, Optional
 
 
 class RetryError(Exception):
-    pass
+    """Retry wrapper that preserves root-cause messages in __str__."""
+
+    def __init__(self, message: str = None, attempts: int = 0, total_delay: float = 0.0):
+        # Use a more informative message by default
+        if not message and attempts > 0:
+            message = f"Failed after {attempts} retry attempts over {total_delay:.1f}s"
+        elif not message:
+            message = "Retry failed"
+        super().__init__(message)
+        self.attempts = attempts
+        self.total_delay = total_delay
+
+    def __str__(self) -> str:  # pragma: no cover - trivial accessor
+        # Prefer our own message if set
+        base = super().__str__()
+        if base and base != "unknown error":
+            return base
+        # Walk the cause/context chain for a meaningful message
+        seen = set()
+
+        def _walk(e: BaseException | None) -> str:
+            if e is None or id(e) in seen:
+                return ""
+            seen.add(id(e))
+            msg = str(e) or ""
+            if msg.strip():
+                return msg
+            return _walk(getattr(e, "__cause__", None)) or _walk(
+                getattr(e, "__context__", None)
+            )
+
+        msg = _walk(self.__cause__) or _walk(self.__context__)
+        return msg or "Retry failed"
 
 
 def _get_int_env(name: str, default: int) -> int:
@@ -70,17 +102,24 @@ async def retry_async(
     )
 
     last_exc: Optional[BaseException] = None
+    total_delay = 0.0
     for attempt in range(1, attempts + 1):
         try:
             return await op_factory()
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             if attempt >= attempts or not is_retryable(exc):
+                # If not retryable, raise the original exception immediately
+                if not is_retryable(exc):
+                    raise
                 break
             # exponential backoff with jitter
             delay = min(max_delay, base * (2 ** (attempt - 1)))
             if jitter:
                 delay = delay * (0.5 + random.random() * 0.5)
+            total_delay += delay
             await asyncio.sleep(delay)
 
-    raise RetryError(str(last_exc) if last_exc else "unknown error") from last_exc
+    # Preserve the last exception as the cause with better context
+    # The RetryError.__str__ will surface the root cause if present.
+    raise RetryError(attempts=attempts, total_delay=total_delay) from last_exc

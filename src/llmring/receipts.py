@@ -12,7 +12,7 @@ Receipts are issued when connected to server/SaaS and include:
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from cryptography.hazmat.primitives import serialization
@@ -30,7 +30,8 @@ class Receipt(BaseModel):
     # Identity
     receipt_id: str = Field(..., description="Unique receipt identifier")
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Receipt timestamp"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Receipt timestamp",
     )
 
     # Request info

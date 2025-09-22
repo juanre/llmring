@@ -10,6 +10,8 @@ import pytest
 
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.schemas import LLMResponse, Message
+from tests.conftest_models import get_test_model
+from llmring.exceptions import ModelNotFoundError
 
 
 @pytest.mark.llm
@@ -34,13 +36,13 @@ class TestAnthropicProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model="claude-3-5-haiku-20241022",  # Use faster/cheaper model for tests
+            model=get_test_model("anthropic"),  # Use faster/cheaper model for tests
             max_tokens=50,
         )
 
         assert isinstance(response, LLMResponse)
         assert "Hello from Claude" in response.content
-        assert response.model == "claude-3-5-haiku-20241022"
+        assert response.model == get_test_model("anthropic")
         assert response.usage is not None
         assert response.usage["prompt_tokens"] > 0
         assert response.usage["completion_tokens"] > 0
@@ -58,7 +60,7 @@ class TestAnthropicProviderIntegration:
         ]
 
         response = await provider.chat(
-            messages=messages, model="claude-3-5-haiku-20241022", max_tokens=100
+            messages=messages, model=get_test_model("anthropic"), max_tokens=100
         )
 
         assert isinstance(response, LLMResponse)
@@ -75,7 +77,7 @@ class TestAnthropicProviderIntegration:
         # Test with low temperature (more deterministic)
         response_low = await provider.chat(
             messages=messages,
-            model="claude-3-5-haiku-20241022",
+            model=get_test_model("anthropic"),
             temperature=0.1,
             max_tokens=50,
         )
@@ -83,7 +85,7 @@ class TestAnthropicProviderIntegration:
         # Test with high temperature (more creative)
         response_high = await provider.chat(
             messages=messages,
-            model="claude-3-5-haiku-20241022",
+            model=get_test_model("anthropic"),
             temperature=0.9,
             max_tokens=50,
         )
@@ -104,7 +106,7 @@ class TestAnthropicProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model="claude-3-5-haiku-20241022",
+            model=get_test_model("anthropic"),
             max_tokens=20,  # Very small limit
         )
 
@@ -125,7 +127,7 @@ class TestAnthropicProviderIntegration:
         ]
 
         response = await provider.chat(
-            messages=messages, model="claude-3-5-haiku-20241022", max_tokens=50
+            messages=messages, model=get_test_model("anthropic"), max_tokens=50
         )
 
         assert isinstance(response, LLMResponse)
@@ -157,7 +159,7 @@ class TestAnthropicProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model="claude-3-5-haiku-20241022",
+            model=get_test_model("anthropic"),
             tools=tools,
             max_tokens=200,
         )
@@ -185,7 +187,7 @@ class TestAnthropicProviderIntegration:
         """Test error handling with invalid model."""
         messages = [Message(role="user", content="Hello")]
 
-        with pytest.raises(ValueError, match="Unsupported model"):
+        with pytest.raises(ModelNotFoundError, match="Model.*not (found|available)"):
             await provider.chat(messages=messages, model="invalid-model-name")
 
     @pytest.mark.asyncio
@@ -195,7 +197,7 @@ class TestAnthropicProviderIntegration:
         async def make_request(i):
             messages = [Message(role="user", content=f"Count to {i}")]
             return await provider.chat(
-                messages=messages, model="claude-3-5-haiku-20241022", max_tokens=50
+                messages=messages, model=get_test_model("anthropic"), max_tokens=50
             )
 
         # Make 3 concurrent requests
@@ -207,34 +209,8 @@ class TestAnthropicProviderIntegration:
             assert isinstance(response, LLMResponse)
             assert len(response.content) > 0
 
-    @pytest.mark.asyncio
-    async def test_model_validation(self, provider):
-        """Test model validation methods."""
-        # Test valid models
-        assert provider.validate_model("claude-3-5-haiku-20241022") is True
-        assert provider.validate_model("claude-3-5-sonnet-20241022") is True
-        assert provider.validate_model("anthropic:claude-3-5-haiku-20241022") is True
-
-        # Test invalid models
-        assert provider.validate_model("gpt-4") is False
-        assert provider.validate_model("invalid-model") is False
-
-    def test_supported_models_list(self, provider):
-        """Test that supported models list is comprehensive."""
-        models = provider.get_supported_models()
-
-        # Should include Claude 3.7 models
-        assert "claude-3-7-sonnet-20250219" in models
-        assert "claude-3-7-sonnet" in models
-
-        # Should include Claude 3.5 models
-        assert "claude-3-5-sonnet-20241022" in models
-        assert "claude-3-5-haiku-20241022" in models
-
-        # Should include Claude 3 models
-        assert "claude-3-opus-20240229" in models
-        assert "claude-3-sonnet-20240229" in models
-        assert "claude-3-haiku-20240307" in models
+    # Model validation tests removed - we no longer gatekeep models
+    # The philosophy is that providers should fail naturally if they don't support a model
 
     def test_token_counting(self, provider):
         """Test token counting functionality."""
@@ -253,7 +229,7 @@ class TestAnthropicProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model="claude-3-5-haiku-20241022",
+            model=get_test_model("anthropic"),
             response_format={"type": "json_object"},
             max_tokens=100,
         )

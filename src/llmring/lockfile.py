@@ -102,14 +102,53 @@ class Lockfile(BaseModel):
 
     @classmethod
     def create_default(cls) -> "Lockfile":
-        """Create a default lockfile with sensible defaults based on available API keys."""
+        """Create a default lockfile with sensible defaults based on available API keys.
+
+        Note: This creates a basic lockfile. For intelligent recommendations based on
+        the registry, use create_default_async() instead.
+        """
         lockfile = cls()
 
         # Create default profile
         default_profile = ProfileConfig(name="default")
 
-        # Auto-detect available providers and suggest defaults
-        defaults = cls._suggest_defaults()
+        # Create basic defaults without hardcoded models
+        defaults = cls._suggest_defaults_basic()
+        for alias, model_ref in defaults.items():
+            default_profile.set_binding(alias, model_ref)
+
+        lockfile.profiles["default"] = default_profile
+
+        # Create additional profiles
+        lockfile.profiles["prod"] = ProfileConfig(name="prod")
+        lockfile.profiles["staging"] = ProfileConfig(name="staging")
+        lockfile.profiles["dev"] = ProfileConfig(name="dev")
+
+        return lockfile
+
+    @classmethod
+    async def create_default_async(cls, registry_client=None) -> "Lockfile":
+        """Create a default lockfile with intelligent defaults from registry.
+
+        Args:
+            registry_client: Optional RegistryClient instance. If not provided,
+                           creates a new one.
+
+        Returns:
+            Lockfile with intelligent alias bindings based on registry data.
+        """
+        from llmring.registry import RegistryClient
+
+        if registry_client is None:
+            registry_client = RegistryClient()
+
+        lockfile = cls()
+
+        # Create default profile
+        default_profile = ProfileConfig(name="default")
+
+        # Get registry-based suggestions
+        defaults = await cls._suggest_defaults_from_registry(registry_client)
         for alias, model_ref in defaults.items():
             default_profile.set_binding(alias, model_ref)
 
@@ -123,45 +162,170 @@ class Lockfile(BaseModel):
         return lockfile
 
     @staticmethod
-    def _suggest_defaults() -> Dict[str, str]:
-        """Suggest default bindings based on available API keys."""
+    def _suggest_defaults_basic() -> Dict[str, str]:
+        """Suggest basic default bindings without hardcoded models.
+
+        Returns minimal defaults that don't rely on specific model IDs.
+        For intelligent suggestions, use _suggest_defaults_from_registry().
+        """
         defaults = {}
 
-        # Check available providers
+        # Only add Ollama local option as it doesn't require API keys
+        # and user can specify any local model
+        defaults["local"] = "ollama:llama3:latest"
+
+        return defaults
+
+    @staticmethod
+    async def _suggest_defaults_from_registry(registry_client) -> Dict[str, str]:
+        """Suggest default bindings based on registry data and available API keys.
+
+        Args:
+            registry_client: RegistryClient instance for querying model data
+
+        Returns:
+            Dictionary of alias to model bindings based on capabilities
+        """
+        defaults = {}
+
+        # Check available providers and query registry for each
         if os.environ.get("OPENAI_API_KEY"):
-            defaults["long_context"] = "openai:gpt-4-turbo-preview"
-            defaults["low_cost"] = "openai:gpt-3.5-turbo"
-            defaults["json_mode"] = "openai:gpt-4-turbo-preview"
-            defaults["fast"] = "openai:gpt-3.5-turbo"
+            try:
+                models = await registry_client.fetch_current_models("openai")
+                active_models = [m for m in models if m.is_active]
+
+                if active_models:
+                    # Find long_context: highest max_input_tokens
+                    long_context = max(
+                        active_models,
+                        key=lambda m: m.max_input_tokens or 0
+                    )
+                    if long_context.max_input_tokens and long_context.max_input_tokens > 0:
+                        defaults["long_context"] = f"openai:{long_context.model_name}"
+
+                    # Find low_cost: lowest input price
+                    models_with_price = [m for m in active_models if m.dollars_per_million_tokens_input]
+                    if models_with_price:
+                        low_cost = min(
+                            models_with_price,
+                            key=lambda m: m.dollars_per_million_tokens_input or float('inf')
+                        )
+                        defaults["low_cost"] = f"openai:{low_cost.model_name}"
+                        defaults["fast"] = f"openai:{low_cost.model_name}"
+
+                    # Find json_mode: supports_json_mode=True
+                    json_models = [m for m in active_models if m.supports_json_mode]
+                    if json_models:
+                        # Prefer one with good balance of capability and cost
+                        json_model = json_models[0]  # Simple selection for now
+                        defaults["json_mode"] = f"openai:{json_model.model_name}"
+
+                    # Add mcp_agent if not set by Anthropic (prefer most capable OpenAI model)
+                    if "mcp_agent" not in defaults and active_models:
+                        # Find the most capable model (usually the one with highest tokens)
+                        capable_model = max(
+                            active_models,
+                            key=lambda m: m.max_input_tokens or 0
+                        )
+                        defaults["mcp_agent"] = f"openai:{capable_model.model_name}"
+
+            except Exception as e:
+                # Log but don't fail - registry might be unavailable
+                import logging
+                logging.warning(f"Could not fetch OpenAI models from registry: {e}")
 
         if os.environ.get("ANTHROPIC_API_KEY"):
-            defaults["deep"] = "anthropic:claude-3-opus-20240229"
-            defaults["balanced"] = "anthropic:claude-3-sonnet-20240229"
-            defaults["pdf_reader"] = (
-                "anthropic:claude-3-sonnet-20240229"  # Claude is good at PDFs
-            )
-            if "low_cost" not in defaults:
-                defaults["low_cost"] = "anthropic:claude-3-haiku-20240307"
-            if "fast" not in defaults:
-                defaults["fast"] = "anthropic:claude-3-haiku-20240307"
+            try:
+                models = await registry_client.fetch_current_models("anthropic")
+                active_models = [m for m in models if m.is_active]
+
+                if active_models:
+                    # Find deep: balance of capability (prefer higher tokens) and reasonable cost
+                    models_with_tokens = [m for m in active_models if m.max_input_tokens]
+                    if models_with_tokens:
+                        # Sort by max_input_tokens descending
+                        sorted_models = sorted(
+                            models_with_tokens,
+                            key=lambda m: m.max_input_tokens or 0,
+                            reverse=True
+                        )
+                        # Take the most capable model
+                        if sorted_models:
+                            defaults["deep"] = f"anthropic:{sorted_models[0].model_name}"
+                            # MCP agent should use the most capable model for complex reasoning
+                            defaults["mcp_agent"] = f"anthropic:{sorted_models[0].model_name}"
+                        # Take a mid-tier model for balanced
+                        if len(sorted_models) > 1:
+                            mid_idx = len(sorted_models) // 2
+                            defaults["balanced"] = f"anthropic:{sorted_models[mid_idx].model_name}"
+
+                    # Find low_cost if not already set
+                    if "low_cost" not in defaults:
+                        models_with_price = [m for m in active_models if m.dollars_per_million_tokens_input]
+                        if models_with_price:
+                            low_cost = min(
+                                models_with_price,
+                                key=lambda m: m.dollars_per_million_tokens_input or float('inf')
+                            )
+                            defaults["low_cost"] = f"anthropic:{low_cost.model_name}"
+
+                    # PDF reader - prefer models with good context length
+                    if "pdf_reader" not in defaults and models_with_tokens:
+                        pdf_model = max(
+                            models_with_tokens,
+                            key=lambda m: m.max_input_tokens or 0
+                        )
+                        defaults["pdf_reader"] = f"anthropic:{pdf_model.model_name}"
+
+            except Exception as e:
+                import logging
+                logging.warning(f"Could not fetch Anthropic models from registry: {e}")
 
         if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
-            defaults["vision"] = "google:gemini-1.5-pro"
-            defaults["multimodal"] = "google:gemini-1.5-pro"
-            if "long_context" not in defaults:
-                defaults["long_context"] = "google:gemini-1.5-pro"
-            if "pdf_reader" not in defaults:
-                defaults["pdf_reader"] = (
-                    "google:gemini-1.5-pro"  # Gemini also handles PDFs well
-                )
+            try:
+                models = await registry_client.fetch_current_models("google")
+                active_models = [m for m in models if m.is_active]
 
-        # Ollama is always available locally
-        if not defaults:
-            defaults["default"] = "ollama:llama3.3:latest"
-            defaults["local"] = "ollama:llama3.3:latest"
-        else:
-            # Add a local option if Ollama is available
-            defaults["local"] = "ollama:llama3.3:latest"
+                if active_models:
+                    # Find vision: supports_vision=True
+                    vision_models = [m for m in active_models if m.supports_vision]
+                    if vision_models:
+                        # Prefer one with good context length
+                        vision_models_sorted = sorted(
+                            vision_models,
+                            key=lambda m: m.max_input_tokens or 0,
+                            reverse=True
+                        )
+                        if vision_models_sorted:
+                            defaults["vision"] = f"google:{vision_models_sorted[0].model_name}"
+                            defaults["multimodal"] = f"google:{vision_models_sorted[0].model_name}"
+
+                    # Long context if not set
+                    if "long_context" not in defaults:
+                        models_with_tokens = [m for m in active_models if m.max_input_tokens]
+                        if models_with_tokens:
+                            long_context = max(
+                                models_with_tokens,
+                                key=lambda m: m.max_input_tokens or 0
+                            )
+                            defaults["long_context"] = f"google:{long_context.model_name}"
+
+                    # PDF reader if not set
+                    if "pdf_reader" not in defaults:
+                        models_with_tokens = [m for m in active_models if m.max_input_tokens]
+                        if models_with_tokens:
+                            pdf_model = max(
+                                models_with_tokens,
+                                key=lambda m: m.max_input_tokens or 0
+                            )
+                            defaults["pdf_reader"] = f"google:{pdf_model.model_name}"
+
+            except Exception as e:
+                import logging
+                logging.warning(f"Could not fetch Google models from registry: {e}")
+
+        # Always add local option
+        defaults["local"] = "ollama:llama3:latest"
 
         return defaults
 

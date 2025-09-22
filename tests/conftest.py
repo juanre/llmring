@@ -28,7 +28,7 @@ try:
     from llmring_server.main import app as _server_app
     from pgdbm.fixtures.conftest import test_db_factory  # noqa: F401
     from pgdbm.migrations import AsyncMigrationManager
-    
+
     LLMRING_SERVER_AVAILABLE = True
 except ImportError:
     LLMRING_SERVER_AVAILABLE = False
@@ -37,39 +37,38 @@ except ImportError:
 @pytest_asyncio.fixture
 async def llmring_server_client(test_db_factory) -> AsyncGenerator[AsyncClient, None]:
     """Run the llmring-server FastAPI app in-process with isolated test database.
-    
+
     This fixture creates a fresh database for each test, applies migrations,
     and provides an HTTP client to interact with the server.
     """
     if not LLMRING_SERVER_AVAILABLE:
         pytest.skip("llmring-server not installed, skipping integration tests")
-    
+
     # Import inside fixture to avoid import errors when server not available
     from llmring_server.main import app as server_app
     from pathlib import Path
-    
+
     # Create isolated test database with schema
     db = await test_db_factory.create_db(suffix="llmring", schema="llmring_test")
-    
+
     # Apply llmring-server migrations
     # We locate the migrations relative to the llmring_server module
     import llmring_server
+
     server_path = Path(llmring_server.__file__).parent
     migrations_path = server_path / "migrations"
-    
+
     if not migrations_path.exists():
         pytest.fail(f"Migrations not found at {migrations_path}")
-    
+
     migrations = AsyncMigrationManager(
-        db, 
-        migrations_path=str(migrations_path), 
-        module_name="llmring_test"
+        db, migrations_path=str(migrations_path), module_name="llmring_test"
     )
     await migrations.apply_pending_migrations()
-    
+
     # Inject the test database into the app
     server_app.state.db = db
-    
+
     # Create ASGI transport and client
     transport = ASGITransport(app=server_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -86,15 +85,15 @@ def project_headers():
 async def seeded_server(llmring_server_client, project_headers):
     """Seed the server with a couple of aliases and one usage log.
 
-    - Creates aliases: summarizer → openai:gpt-4o-mini, cheap → openai:gpt-3.5-turbo
+    - Creates aliases: summarizer → fast, cheap → fast
     - Logs one usage entry (with explicit cost to avoid live registry dependency)
     """
     c = llmring_server_client
 
     # Seed aliases
     for alias, model in [
-        ("summarizer", "openai:gpt-4o-mini"),
-        ("cheap", "openai:gpt-3.5-turbo"),
+        ("summarizer", "fast"),
+        ("cheap", "fast"),
     ]:
         r = await c.post(
             "/api/v1/aliases/bind",
@@ -107,7 +106,7 @@ async def seeded_server(llmring_server_client, project_headers):
     r = await c.post(
         "/api/v1/log",
         json={
-            "model": "gpt-4o-mini",
+            "model": "fast",
             "provider": "openai",
             "input_tokens": 100,
             "output_tokens": 20,
@@ -132,7 +131,16 @@ def openai_provider():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         pytest.skip("OPENAI_API_KEY not found in environment")
-    return OpenAIProvider(api_key=api_key)
+    provider = OpenAIProvider(api_key=api_key)
+    # Use test registry for unit tests
+    from pathlib import Path
+    from llmring.registry import RegistryClient
+    test_registry_path = Path(__file__).parent / "resources" / "registry"
+    if test_registry_path.exists():
+        provider._registry_client = RegistryClient(
+            registry_url=f"file://{test_registry_path}"
+        )
+    return provider
 
 
 @pytest.fixture
@@ -141,22 +149,55 @@ def anthropic_provider():
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         pytest.skip("ANTHROPIC_API_KEY not found in environment")
-    return AnthropicProvider(api_key=api_key)
+    provider = AnthropicProvider(api_key=api_key)
+    # Use test registry for unit tests
+    from pathlib import Path
+    from llmring.registry import RegistryClient
+    test_registry_path = Path(__file__).parent / "resources" / "registry"
+    if test_registry_path.exists():
+        provider._registry_client = RegistryClient(
+            registry_url=f"file://{test_registry_path}"
+        )
+    return provider
 
 
 @pytest.fixture
 def google_provider():
     """Create Google provider instance, skip if no API key"""
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+    api_key = (
+        os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or os.getenv("GOOGLE_GEMINI_API_KEY")
+    )
     if not api_key:
-        pytest.skip("GOOGLE_API_KEY or GEMINI_API_KEY not found in environment")
-    return GoogleProvider(api_key=api_key)
+        pytest.skip(
+            "GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GEMINI_API_KEY not found in environment"
+        )
+    provider = GoogleProvider(api_key=api_key)
+    # Use test registry for unit tests
+    from pathlib import Path
+    from llmring.registry import RegistryClient
+    test_registry_path = Path(__file__).parent / "resources" / "registry"
+    if test_registry_path.exists():
+        provider._registry_client = RegistryClient(
+            registry_url=f"file://{test_registry_path}"
+        )
+    return provider
 
 
 @pytest.fixture
 def ollama_provider():
     """Create Ollama provider instance"""
-    return OllamaProvider()
+    provider = OllamaProvider()
+    # Use test registry for unit tests
+    from pathlib import Path
+    from llmring.registry import RegistryClient
+    test_registry_path = Path(__file__).parent / "resources" / "registry"
+    if test_registry_path.exists():
+        provider._registry_client = RegistryClient(
+            registry_url=f"file://{test_registry_path}"
+        )
+    return provider
 
 
 # Test data fixtures
@@ -250,8 +291,17 @@ def sample_llm_response():
 # Service fixtures
 @pytest.fixture
 async def llmring():
-    """Create LLMRing instance"""
-    service = LLMRing()
+    """Create LLMRing instance with test lockfile"""
+    from pathlib import Path
+    test_lockfile = Path(__file__).parent / "llmring.lock.json"
+    test_registry_path = Path(__file__).parent / "resources" / "registry"
+    if test_registry_path.exists():
+        service = LLMRing(
+            registry_url=f"file://{test_registry_path}",
+            lockfile_path=str(test_lockfile)
+        )
+    else:
+        service = LLMRing(lockfile_path=str(test_lockfile))
     yield service
     await service.close()
 

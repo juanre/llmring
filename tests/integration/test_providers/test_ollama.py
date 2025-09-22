@@ -4,16 +4,36 @@ These tests require a running Ollama instance at localhost:11434.
 """
 
 import asyncio
+import logging
 import os
 
 import aiohttp
 import pytest
+import httpx
 
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.schemas import LLMResponse, Message
 
+logger = logging.getLogger(__name__)
 
-@pytest.mark.skip(reason="Ollama tests take too long - skipping for faster test runs")
+
+def is_ollama_running():
+    """Check if Ollama is running at localhost:11434."""
+    try:
+        with httpx.Client() as client:
+            response = client.get("http://localhost:11434/api/version", timeout=2.0)
+            return response.status_code == 200
+    except:
+        return False
+
+
+# Skip decorator that checks if Ollama is actually running
+skip_if_ollama_not_running = pytest.mark.skipif(
+    not is_ollama_running(), reason="Ollama service not running at localhost:11434"
+)
+
+
+@skip_if_ollama_not_running
 @pytest.mark.llm
 @pytest.mark.integration
 @pytest.mark.slow
@@ -48,10 +68,25 @@ class TestOllamaProviderIntegration:
                 pytest.skip("No models available in Ollama")
 
             # Skip large models that are too slow for integration testing
-            large_models = ["llama3.3", "deepseek-r1:32b", "llama3.2"]
+            # Allow small variants like :1b, :0.5b
+            small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
+
             for model in models:
-                if not any(large_model in model for large_model in large_models):
-                    return model  # Return first small model
+                # Check if it's a small variant
+                is_small = any(
+                    indicator in model for indicator in small_model_indicators
+                )
+
+                # Check if it's a large base model
+                large_patterns = ["llama3.3", "deepseek-r1:32b"]
+                is_large_base = any(pattern in model for pattern in large_patterns)
+
+                # Allow small models or models that aren't in the large list
+                if is_small or not is_large_base:
+                    # Additional check for llama3.2 - only allow if it's small
+                    if "llama3.2" in model and not is_small:
+                        continue  # Skip large 3.2 models
+                    return model
 
             # If only large models available, skip tests
             pytest.skip(
@@ -158,7 +193,9 @@ class TestOllamaProviderIntegration:
         """Test error handling with invalid model."""
         messages = [Message(role="user", content="Hello")]
 
-        with pytest.raises(ValueError, match="Invalid model name format"):
+        from llmring.exceptions import ModelNotFoundError
+
+        with pytest.raises(ModelNotFoundError, match="Model.*not available"):
             await provider.chat(messages=messages, model="invalid_model_name!@#")
 
     @pytest.mark.asyncio
@@ -181,31 +218,27 @@ class TestOllamaProviderIntegration:
             assert len(response.content) > 0
 
     @pytest.mark.asyncio
-    async def test_model_validation(self, provider):
-        """Test model validation methods."""
-        # Test valid models (based on supported list)
-        assert provider.validate_model("llama3") is True
-        assert provider.validate_model("mistral") is True
-        assert provider.validate_model("ollama:llama3") is True
+    async def test_available_models_api(self, provider):
+        """Test getting available models from Ollama API."""
+        # Get actually available models
+        available_models = await provider.get_available_models()
 
-        # Test with tags
-        assert provider.validate_model("llama3:latest") is True
-        assert provider.validate_model("mistral:7b") is True
+        # This test just verifies the API works, models may or may not be present
+        if available_models:
+            # Test with first available model
+            first_model = available_models[0]
+            assert isinstance(first_model, str)
+            logger.info(f"Found {len(available_models)} Ollama models: {available_models}")
+        else:
+            logger.info("No Ollama models found (Ollama may not be running or have models installed)")
 
-        # Test invalid models
-        assert provider.validate_model("gpt-4") is False
-        assert provider.validate_model("claude-3-opus") is False
-        assert provider.validate_model("invalid_model_name!@#") is False
-
-    def test_supported_models_list(self, provider):
-        """Test that supported models list is comprehensive."""
-        models = provider.get_supported_models()
-
-        # Should include popular models
-        assert "llama3" in models
-        assert "mistral" in models
-        assert "codellama" in models
-        assert "phi3" in models
+    @pytest.mark.asyncio
+    async def test_default_model_selection(self, provider):
+        """Test that provider can select a default model."""
+        # Should be able to get a default model
+        default_model = await provider.get_default_model()
+        assert isinstance(default_model, str)
+        logger.info(f"Ollama default model: {default_model}")
 
     def test_token_counting(self, provider):
         """Test token counting functionality."""

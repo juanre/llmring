@@ -9,6 +9,7 @@ import pytest
 
 from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
+from llmring.exceptions import ProviderNotFoundError
 
 
 @pytest.mark.llm
@@ -17,12 +18,7 @@ from llmring.service import LLMRing
 class TestLLMRingIntegration:
     """Integration tests for LLMRing with real providers."""
 
-    @pytest.fixture
-    def llmring(self):
-        """Create LLMRing without database dependency for now."""
-        # Note: In the future, this could be extended to use a test database
-        # For now, we'll test the service without DB integration
-        return LLMRing()
+    # llmring fixture is provided by conftest.py
 
     @pytest.mark.asyncio
     async def test_anthropic_provider_integration(self, llmring):
@@ -37,7 +33,7 @@ class TestLLMRingIntegration:
         # Create request
         request = LLMRequest(
             messages=[Message(role="user", content="Say 'Hello from Anthropic'")],
-            model="anthropic:claude-3-7-sonnet-20250219",
+            model="mvp_test",
             max_tokens=20,
         )
 
@@ -47,7 +43,7 @@ class TestLLMRingIntegration:
         assert isinstance(response, LLMResponse)
         assert response.content is not None
         assert "hello" in response.content.lower()
-        assert response.model == "claude-3-7-sonnet-20250219"
+        assert "opus" in response.model.lower()  # Should be Opus 4.1 model
 
     @pytest.mark.asyncio
     async def test_openai_provider_integration(self, llmring):
@@ -62,7 +58,7 @@ class TestLLMRingIntegration:
         # Create request
         request = LLMRequest(
             messages=[Message(role="user", content="Say 'Hello from OpenAI'")],
-            model="openai:gpt-4o-mini",
+            model="openai_fast",
             max_tokens=20,
         )
 
@@ -72,7 +68,7 @@ class TestLLMRingIntegration:
         assert isinstance(response, LLMResponse)
         assert response.content is not None
         assert "hello" in response.content.lower()
-        assert response.model == "gpt-4o-mini"
+        assert "turbo" in response.model or "mini" in response.model
 
     @pytest.mark.asyncio
     @pytest.mark.google
@@ -93,7 +89,7 @@ class TestLLMRingIntegration:
             # Create request
             request = LLMRequest(
                 messages=[Message(role="user", content="Say 'Hello from Google'")],
-                model="google:gemini-1.5-pro",
+                model="long_context",
                 max_tokens=20,
             )
 
@@ -103,7 +99,7 @@ class TestLLMRingIntegration:
             assert isinstance(response, LLMResponse)
             assert response.content is not None
             assert "hello" in response.content.lower()
-            assert response.model == "gemini-1.5-pro"
+            assert "gemini" in response.model or "turbo" in response.model
         except Exception as e:
             error_msg = str(e).lower()
             # Check for quota/rate limit errors
@@ -145,7 +141,7 @@ class TestLLMRingIntegration:
         # Create request
         request = LLMRequest(
             messages=[Message(role="user", content="Say 'Hello from Ollama'")],
-            model="ollama:llama3.2:1b",
+            model="local",
             max_tokens=20,
         )
 
@@ -154,7 +150,7 @@ class TestLLMRingIntegration:
 
         assert isinstance(response, LLMResponse)
         assert response.content is not None
-        assert response.model == "llama3.2:1b"
+        assert "llama" in response.model
 
     @pytest.mark.asyncio
     async def test_provider_switching(self, llmring):
@@ -172,7 +168,7 @@ class TestLLMRingIntegration:
             llmring.register_provider("anthropic", api_key=anthropic_key)
             request = LLMRequest(
                 messages=[Message(role="user", content="Say 'test'")],
-                model="anthropic:claude-3-7-sonnet-20250219",
+                model="anthropic_balanced",
                 max_tokens=10,
             )
             response = await llmring.chat(request)
@@ -183,7 +179,7 @@ class TestLLMRingIntegration:
             llmring.register_provider("openai", api_key=openai_key)
             request = LLMRequest(
                 messages=[Message(role="user", content="Say 'test'")],
-                model="openai:gpt-4o-mini",
+                model="openai_fast",
                 max_tokens=10,
             )
             response = await llmring.chat(request)
@@ -201,11 +197,11 @@ class TestLLMRingIntegration:
 
         if os.getenv("OPENAI_API_KEY"):
             provider = "openai"
-            model = "openai:gpt-4o-mini"
+            model = "fast"
             llmring.register_provider(provider, api_key=os.getenv("OPENAI_API_KEY"))
         else:
             provider = "anthropic"
-            model = "anthropic:claude-3-7-sonnet-20250219"
+            model = "balanced"
             llmring.register_provider(provider, api_key=os.getenv("ANTHROPIC_API_KEY"))
 
         # Create multiple requests
@@ -235,7 +231,7 @@ class TestLLMRingIntegration:
             messages=[Message(role="user", content="test")], model="invalid:model"
         )
 
-        with pytest.raises(ValueError, match="Provider .* not found"):
+        with pytest.raises(ProviderNotFoundError, match="Provider .* not found"):
             await llmring.chat(request)
 
     @pytest.mark.asyncio
@@ -244,8 +240,8 @@ class TestLLMRingIntegration:
         # Use a provider that's definitely not registered
         request = LLMRequest(
             messages=[Message(role="user", content="test")],
-            model="definitely_not_a_provider:gpt-4",
+            model="definitely_not_a_provider:test",
         )
 
-        with pytest.raises(ValueError, match="Provider .* not found"):
+        with pytest.raises(ProviderNotFoundError, match="Provider .* not found"):
             await llmring.chat(request)

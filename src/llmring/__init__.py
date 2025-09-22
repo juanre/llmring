@@ -1,8 +1,19 @@
 """The llmring package."""
 
-__version__ = "0.3.0"
+__version__ = "1.0.0"
 
 from .base import BaseLLMProvider
+
+# Import exceptions
+from .exceptions import (
+    ConfigurationError,
+    ConversationNotFoundError,
+    LLMRingError,
+    ModelNotFoundError,
+    ProviderError,
+    ProviderNotFoundError,
+    ServerConnectionError,
+)
 
 # Import file utilities
 from .file_utils import (  # Core functions; Content creation; Convenience functions
@@ -21,11 +32,22 @@ from .schemas import LLMRequest, LLMResponse, Message
 
 # Import main components
 from .service import LLMRing
+from .service_extended import ConversationManager, LLMRingExtended
 
 __all__ = [
     # Core classes
     "LLMRing",
+    "LLMRingExtended",
+    "ConversationManager",
     "BaseLLMProvider",
+    # Exceptions
+    "LLMRingError",
+    "ConfigurationError",
+    "ProviderError",
+    "ProviderNotFoundError",
+    "ModelNotFoundError",
+    "ConversationNotFoundError",
+    "ServerConnectionError",
     # Schemas
     "LLMRequest",
     "LLMResponse",

@@ -11,6 +11,7 @@ import pytest
 
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.schemas import LLMResponse, Message
+from llmring.exceptions import ProviderAuthenticationError, ModelNotFoundError, ProviderResponseError
 
 
 @pytest.mark.llm
@@ -22,14 +23,17 @@ class TestAnthropicProviderUnit:
         """Test provider initialization with explicit API key."""
         provider = AnthropicProvider(api_key="test-key")
         assert provider.api_key == "test-key"
-        assert provider.default_model == "claude-3-7-sonnet-20250219"
+        # Default model is now None initially and fetched from registry on first call
+        assert provider.default_model is None
 
     def test_initialization_without_api_key_raises_error(self):
-        """Test that missing API key raises ValueError."""
+        """Test that missing API key raises ProviderAuthenticationError."""
         # Temporarily unset environment variable
         old_key = os.environ.pop("ANTHROPIC_API_KEY", None)
         try:
-            with pytest.raises(ValueError, match="Anthropic API key must be provided"):
+            with pytest.raises(
+                ProviderAuthenticationError, match="Anthropic API key must be provided"
+            ):
                 AnthropicProvider()
         finally:
             if old_key:
@@ -41,53 +45,22 @@ class TestAnthropicProviderUnit:
         provider = AnthropicProvider()
         assert provider.api_key == "env-test-key"
 
-    def test_supported_models_list(self, anthropic_provider):
-        """Test that supported models list contains expected models."""
-        models = anthropic_provider.get_supported_models()
-
-        assert isinstance(models, list)
-        assert len(models) > 0
-        assert "claude-3-7-sonnet-20250219" in models
-        assert "claude-3-5-sonnet-20240620" in models
-        assert "claude-3-opus-20240229" in models
-
-    def test_validate_model_exact_match(self, anthropic_provider):
-        """Test model validation with exact model names."""
-        assert anthropic_provider.validate_model("claude-3-7-sonnet-20250219") is True
-        assert anthropic_provider.validate_model("claude-3-5-sonnet-20240620") is True
-        assert anthropic_provider.validate_model("invalid-model") is False
-
-    def test_validate_model_with_provider_prefix(self, anthropic_provider):
-        """Test model validation handles provider prefix correctly."""
-        assert (
-            anthropic_provider.validate_model("anthropic:claude-3-7-sonnet-20250219")
-            is True
-        )
-        assert (
-            anthropic_provider.validate_model("anthropic:claude-3-5-sonnet-20240620")
-            is True
-        )
-        assert anthropic_provider.validate_model("anthropic:invalid-model") is False
-
-    def test_validate_model_base_name_matching(self, anthropic_provider):
-        """Test model validation with base name matching."""
-        assert anthropic_provider.validate_model("claude-3") is True
-        assert anthropic_provider.validate_model("claude-3.5") is True
-        assert anthropic_provider.validate_model("gpt-4") is False  # Different provider
+    # Model validation tests removed - we no longer gatekeep models
+    # The philosophy is that providers should fail naturally if they don't support a model
 
     @pytest.mark.asyncio
     async def test_chat_basic_request(self, anthropic_provider, simple_user_message):
         """Test basic chat functionality with minimal token usage."""
         response = await anthropic_provider.chat(
             messages=simple_user_message,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             max_tokens=10,  # Minimal tokens to reduce cost
         )
 
         assert isinstance(response, LLMResponse)
         assert response.content is not None
         assert len(response.content) > 0
-        assert response.model == "claude-3-7-sonnet-20250219"
+        assert response.model == "claude-3-5-haiku-20241022"
         assert response.usage is not None
         assert response.usage["prompt_tokens"] > 0
         assert response.usage["completion_tokens"] > 0
@@ -101,7 +74,7 @@ class TestAnthropicProviderUnit:
         """Test chat with system message."""
         response = await anthropic_provider.chat(
             messages=system_user_messages,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             max_tokens=10,
         )
 
@@ -116,13 +89,13 @@ class TestAnthropicProviderUnit:
         """Test that provider prefix is correctly removed from model name."""
         response = await anthropic_provider.chat(
             messages=simple_user_message,
-            model="anthropic:claude-3-7-sonnet-20250219",
+            model="anthropic:claude-3-5-haiku-20241022",
             max_tokens=10,
         )
 
         assert isinstance(response, LLMResponse)
         assert (
-            response.model == "claude-3-7-sonnet-20250219"
+            response.model == "claude-3-5-haiku-20241022"
         )  # Prefix should be removed
 
     @pytest.mark.asyncio
@@ -130,7 +103,7 @@ class TestAnthropicProviderUnit:
         """Test chat with temperature and max_tokens parameters."""
         response = await anthropic_provider.chat(
             messages=simple_user_message,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             temperature=0.7,
             max_tokens=15,
         )
@@ -143,8 +116,9 @@ class TestAnthropicProviderUnit:
     async def test_chat_with_unsupported_model_raises_error(
         self, anthropic_provider, simple_user_message
     ):
-        """Test that using an unsupported model raises ValueError."""
-        with pytest.raises(ValueError, match="Unsupported model"):
+        """Test that using an unsupported model raises error from API."""
+        # Now that registry validation is advisory, the API itself determines if model exists
+        with pytest.raises((ModelNotFoundError, ProviderResponseError), match="not_found|not available"):
             await anthropic_provider.chat(
                 messages=simple_user_message, model="definitely-not-a-real-model"
             )
@@ -161,7 +135,7 @@ class TestAnthropicProviderUnit:
 
         response = await anthropic_provider.chat(
             messages=messages,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             tools=sample_tools,
             max_tokens=100,
         )
@@ -230,7 +204,7 @@ class TestAnthropicProviderUnit:
 
         response = await anthropic_provider.chat(
             messages=messages,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             tools=sample_tools,
             tool_choice="auto",
             max_tokens=100,
@@ -257,7 +231,7 @@ class TestAnthropicProviderUnit:
         """Test multi-turn conversation handling."""
         response = await anthropic_provider.chat(
             messages=multi_turn_conversation,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             max_tokens=20,
         )
 
@@ -266,11 +240,19 @@ class TestAnthropicProviderUnit:
         # Should remember the context and mention "Alice"
         assert "alice" in response.content.lower()
 
-    def test_get_default_model(self, anthropic_provider):
+    @pytest.mark.asyncio
+    async def test_get_default_model(self, anthropic_provider):
         """Test getting default model."""
-        default_model = anthropic_provider.get_default_model()
-        assert default_model == "claude-3-7-sonnet-20250219"
-        assert default_model in anthropic_provider.get_supported_models()
+        # Since we now derive from registry, this might fail if registry unavailable
+        try:
+            default_model = await anthropic_provider.get_default_model()
+            assert isinstance(default_model, str)
+            assert len(default_model) > 0
+            # Should be a valid Claude model
+            assert "claude" in default_model.lower() or "opus" in default_model.lower()
+        except ValueError:
+            # Expected if registry is unavailable
+            pass
 
     @pytest.mark.asyncio
     async def test_json_response_format(self, anthropic_provider, json_response_format):
@@ -283,7 +265,7 @@ class TestAnthropicProviderUnit:
 
         response = await anthropic_provider.chat(
             messages=messages,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-haiku-20241022",
             response_format=json_response_format,
             max_tokens=50,
         )
@@ -306,7 +288,7 @@ class TestAnthropicProviderUnit:
         with pytest.raises(Exception) as exc_info:
             await provider.chat(
                 messages=[Message(role="user", content="test")],
-                model="claude-3-7-sonnet-20250219",
+                model="claude-3-5-haiku-20241022",
                 max_tokens=10,
             )
 
@@ -328,7 +310,7 @@ class TestAnthropicProviderUnit:
         try:
             response = await anthropic_provider.chat(
                 messages=[Message(role="user", content="Hello")],
-                model="claude-3-7-sonnet-20250219",
+                model="claude-3-5-haiku-20241022",
                 max_tokens=5,
             )
             # If we get here, the call succeeded

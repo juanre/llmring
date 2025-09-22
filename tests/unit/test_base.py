@@ -36,7 +36,10 @@ class TestBaseLLMProvider:
             """Complete provider implementation for testing."""
 
             def __init__(self, api_key=None, base_url=None):
-                super().__init__(api_key, base_url)
+                from llmring.base import ProviderConfig
+
+                config = ProviderConfig(api_key=api_key, base_url=base_url)
+                super().__init__(config)
 
             async def chat(self, messages, model, **kwargs):
                 return LLMResponse(
@@ -48,18 +51,23 @@ class TestBaseLLMProvider:
             def get_token_count(self, text):
                 return len(text.split())
 
-            def validate_model(self, model):
-                return model == "test-model"
-
-            def get_supported_models(self):
-                return ["test-model"]
+            # Validation methods removed - we no longer gatekeep models
 
             def get_default_model(self):
                 return "test-model"
 
+            async def get_capabilities(self):
+                from llmring.base import ProviderCapabilities
+
+                return ProviderCapabilities(
+                    provider_name="test",
+                    supported_models=["test-model"],
+                    supports_streaming=False,
+                )
+
         provider = CompleteProvider(api_key="test-key")
-        assert provider.api_key == "test-key"
-        assert provider.base_url is None
+        assert provider.config.api_key == "test-key"
+        assert provider.config.base_url is None
 
     def test_get_default_model_fallback(self):
         """Test that get_default_model falls back to first supported model."""
@@ -68,7 +76,10 @@ class TestBaseLLMProvider:
             """Test provider for default model testing."""
 
             def __init__(self):
-                super().__init__(api_key="test")
+                from llmring.base import ProviderConfig
+
+                config = ProviderConfig(api_key="test")
+                super().__init__(config)
 
             async def chat(self, messages, model, **kwargs):
                 return LLMResponse(content="test", model=model)
@@ -76,14 +87,19 @@ class TestBaseLLMProvider:
             def get_token_count(self, text):
                 return len(text.split())
 
-            def validate_model(self, model):
-                return True
-
-            def get_supported_models(self):
-                return ["model-1", "model-2", "model-3"]
+            # Validation methods removed - we no longer gatekeep models
 
             def get_default_model(self):
                 return "model-1"
+
+            async def get_capabilities(self):
+                from llmring.base import ProviderCapabilities
+
+                return ProviderCapabilities(
+                    provider_name="test",
+                    supported_models=["model-1", "model-2", "model-3"],
+                    supports_streaming=False,
+                )
 
         provider = TestProvider()
         assert provider.get_default_model() == "model-1"
@@ -95,7 +111,10 @@ class TestBaseLLMProvider:
             """Provider with no supported models."""
 
             def __init__(self):
-                super().__init__(api_key="test")
+                from llmring.base import ProviderConfig
+
+                config = ProviderConfig(api_key="test")
+                super().__init__(config)
 
             async def chat(self, messages, model, **kwargs):
                 return LLMResponse(content="test", model=model)
@@ -103,14 +122,17 @@ class TestBaseLLMProvider:
             def get_token_count(self, text):
                 return len(text.split())
 
-            def validate_model(self, model):
-                return False
-
-            def get_supported_models(self):
-                return []
+            # Validation methods removed - we no longer gatekeep models
 
             def get_default_model(self):
                 return "default"
+
+            async def get_capabilities(self):
+                from llmring.base import ProviderCapabilities
+
+                return ProviderCapabilities(
+                    provider_name="test", supported_models=[], supports_streaming=False
+                )
 
         provider = EmptyProvider()
         assert provider.get_default_model() == "default"

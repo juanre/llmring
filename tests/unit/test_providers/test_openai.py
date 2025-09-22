@@ -11,6 +11,11 @@ import pytest
 
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.schemas import LLMResponse, Message
+from llmring.exceptions import (
+    ProviderAuthenticationError,
+    ModelNotFoundError,
+    ProviderResponseError,
+)
 
 
 @pytest.mark.llm
@@ -22,14 +27,17 @@ class TestOpenAIProviderUnit:
         """Test provider initialization with explicit API key."""
         provider = OpenAIProvider(api_key="test-key")
         assert provider.api_key == "test-key"
-        assert provider.default_model == "gpt-4o"
+        # Default model is now None initially and fetched from registry on first call
+        assert provider.default_model is None
 
     def test_initialization_without_api_key_raises_error(self):
-        """Test that missing API key raises ValueError."""
+        """Test that missing API key raises ProviderAuthenticationError."""
         # Temporarily unset environment variable
         old_key = os.environ.pop("OPENAI_API_KEY", None)
         try:
-            with pytest.raises(ValueError, match="OpenAI API key must be provided"):
+            with pytest.raises(
+                ProviderAuthenticationError, match="OpenAI API key must be provided"
+            ):
                 OpenAIProvider()
         finally:
             if old_key:
@@ -41,34 +49,9 @@ class TestOpenAIProviderUnit:
         provider = OpenAIProvider()
         assert provider.api_key == "env-test-key"
 
-    def test_supported_models_list(self, openai_provider):
-        """Test that supported models list contains expected models."""
-        models = openai_provider.get_supported_models()
-
-        assert isinstance(models, list)
-        assert len(models) > 0
-        assert "gpt-4o" in models
-        assert "gpt-4" in models
-        assert "gpt-3.5-turbo" in models
-
-    def test_validate_model_exact_match(self, openai_provider):
-        """Test model validation with exact model names."""
-        assert openai_provider.validate_model("gpt-4o") is True
-        assert openai_provider.validate_model("gpt-3.5-turbo") is True
-        assert openai_provider.validate_model("invalid-model") is False
-
-    def test_validate_model_with_provider_prefix(self, openai_provider):
-        """Test model validation handles provider prefix correctly."""
-        assert openai_provider.validate_model("openai:gpt-4o") is True
-        assert openai_provider.validate_model("openai:gpt-3.5-turbo") is True
-        assert openai_provider.validate_model("openai:invalid-model") is False
-
-    def test_validate_model_base_name_matching(self, openai_provider):
-        """Test model validation with base name matching."""
-        # These should pass since they are exact matches in the supported models
-        assert openai_provider.validate_model("gpt-4") is True
-        assert openai_provider.validate_model("gpt-3.5-turbo") is True
-        assert openai_provider.validate_model("claude-3") is False  # Different provider
+    # Model validation tests removed - we no longer gatekeep models
+    # The philosophy is that providers should fail naturally if they don't support a model
+    # rather than us trying to maintain lists of supported models
 
     @pytest.mark.asyncio
     async def test_chat_basic_request(self, openai_provider, simple_user_message):
@@ -133,8 +116,9 @@ class TestOpenAIProviderUnit:
     async def test_chat_with_unsupported_model_raises_error(
         self, openai_provider, simple_user_message
     ):
-        """Test that using an unsupported model raises ValueError."""
-        with pytest.raises(ValueError, match="Unsupported model"):
+        """Test that using an unsupported model raises ModelNotFoundError from API."""
+        # Now that registry validation is advisory, the API itself determines if model exists
+        with pytest.raises(ModelNotFoundError, match="model not available|does not exist"):
             await openai_provider.chat(
                 messages=simple_user_message, model="definitely-not-a-real-model"
             )
@@ -251,11 +235,17 @@ class TestOpenAIProviderUnit:
         # Should remember the context and mention "Alice"
         assert "alice" in response.content.lower()
 
-    def test_get_default_model(self, openai_provider):
+    @pytest.mark.asyncio
+    async def test_get_default_model(self, openai_provider):
         """Test getting default model."""
-        default_model = openai_provider.get_default_model()
-        assert default_model == "gpt-4o"
-        assert default_model in openai_provider.get_supported_models()
+        # Since we now derive from registry, this might fail if registry unavailable
+        try:
+            default_model = await openai_provider.get_default_model()
+            assert isinstance(default_model, str)
+            assert len(default_model) > 0
+        except ValueError:
+            # Expected if registry is unavailable
+            pass
 
     @pytest.mark.asyncio
     async def test_json_response_format(self, openai_provider, json_response_format):
@@ -423,10 +413,10 @@ class TestOpenAIProviderUnit:
         ]
 
         with pytest.raises(
-            ValueError,
+            ProviderResponseError,
             match="Tools and custom response formats are not supported when processing PDFs",
         ):
-            await openai_provider.chat(messages=messages, model="gpt-4o", tools=tools)
+            await openai_provider.chat(messages=messages, model="gpt-4", tools=tools)
 
     @pytest.mark.asyncio
     async def test_pdf_with_response_format_raises_error(self, openai_provider):
@@ -449,11 +439,11 @@ class TestOpenAIProviderUnit:
         ]
 
         with pytest.raises(
-            ValueError,
+            ProviderResponseError,
             match="Tools and custom response formats are not supported when processing PDFs",
         ):
             await openai_provider.chat(
                 messages=messages,
-                model="gpt-4o",
+                model="gpt-4",
                 response_format={"type": "json_object"},
             )

@@ -85,6 +85,25 @@ class RegistryClient:
         # In-memory cache
         self._cache: Dict[str, Any] = {}
 
+    async def fetch_models(self, provider: str, version: Optional[int] = None) -> List[RegistryModel]:
+        """
+        Fetch models for a provider, either current or a specific version.
+
+        Args:
+            provider: Provider name (e.g., 'openai', 'anthropic')
+            version: Optional specific version to fetch. If None, fetches current.
+
+        Returns:
+            List of models
+        """
+        # If version specified, fetch that version
+        if version is not None:
+            version_data = await self.fetch_version(provider, version)
+            return version_data.models
+
+        # Otherwise fetch current
+        return await self.fetch_current_models(provider)
+
     async def fetch_current_models(self, provider: str) -> List[RegistryModel]:
         """
         Fetch current models for a provider.
@@ -334,17 +353,18 @@ class RegistryClient:
                 if "provider" not in model_data:
                     model_data["provider"] = provider
 
-                # Add model_name if not present (handle model_id field)
-                if "model_name" not in model_data:
-                    if "model_id" in model_data:
-                        model_data["model_name"] = model_data["model_id"]
-                    else:
-                        model_data["model_name"] = model_name
-
                 # Validate required fields
+                if "model_name" not in model_data:
+                    print(
+                        f"Warning: Model '{model_key}' missing required field 'model_name'"
+                    )
+                    continue
+
                 if not model_data.get("display_name"):
-                    print(f"Warning: Model '{model_key}' missing display_name")
-                    model_data["display_name"] = model_name
+                    print(
+                        f"Warning: Model '{model_key}' missing required field 'display_name'"
+                    )
+                    continue
 
                 model = RegistryModel(**model_data)
                 models.append(model)
@@ -378,23 +398,36 @@ class RegistryClient:
         for cache_file in self.cache_dir.glob("*.json"):
             cache_file.unlink()
 
-    async def validate_model(self, provider: str, model_name: str) -> bool:
+    async def validate_model(self, provider: str, model_name: str, version: Optional[int] = None) -> bool:
         """
-        Validate that a model exists in the current registry.
+        Validate that a model exists in the registry.
 
         Args:
             provider: Provider name
             model_name: Model name to validate
+            version: Optional specific version to validate against. If None, uses current.
 
         Returns:
             True if model exists and is active
         """
         try:
-            models = await self.fetch_current_models(provider)
+            # Use pinned version if set as an attribute (set by service)
+            if version is None and hasattr(self, '_pinned_version'):
+                version = self._pinned_version
+
+            models = await self.fetch_models(provider, version)
             for model in models:
                 if model.model_name == model_name and model.is_active:
                     return True
             return False
-        except Exception:
-            # If we can't fetch registry, assume model is valid
+        except Exception as e:
+            # Fail-open per design: treat model as valid if registry is unavailable
+            # but emit an explicit warning so callers can distinguish outage from success.
+            import logging
+            logging.getLogger(__name__).warning(
+                "Registry validate_model fail-open: provider=%s model=%s error=%s",
+                provider,
+                model_name,
+                str(e),
+            )
             return True

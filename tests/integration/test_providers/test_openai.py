@@ -12,6 +12,8 @@ import pytest
 
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.schemas import LLMResponse, Message
+from llmring.exceptions import ModelNotFoundError, ProviderResponseError
+from tests.conftest_models import get_test_model
 
 
 @pytest.mark.llm
@@ -33,16 +35,17 @@ class TestOpenAIProviderIntegration:
     async def test_simple_chat(self, provider):
         """Test simple chat with GPT."""
         messages = [Message(role="user", content="Say exactly 'Hello from GPT!'")]
+        test_model = get_test_model("openai")
 
         response = await provider.chat(
             messages=messages,
-            model="gpt-3.5-turbo",  # Use cheaper model for tests
+            model=test_model,
             max_tokens=50,
         )
 
         assert isinstance(response, LLMResponse)
         assert "Hello from GPT" in response.content
-        assert response.model == "gpt-3.5-turbo"
+        assert test_model in response.model
         assert response.usage is not None
         assert response.usage["prompt_tokens"] > 0
         assert response.usage["completion_tokens"] > 0
@@ -60,7 +63,7 @@ class TestOpenAIProviderIntegration:
         ]
 
         response = await provider.chat(
-            messages=messages, model="gpt-3.5-turbo", max_tokens=100
+            messages=messages, model=get_test_model("openai"), max_tokens=100
         )
 
         assert isinstance(response, LLMResponse)
@@ -76,12 +79,12 @@ class TestOpenAIProviderIntegration:
 
         # Test with low temperature (more deterministic)
         response_low = await provider.chat(
-            messages=messages, model="gpt-3.5-turbo", temperature=0.1, max_tokens=50
+            messages=messages, model=get_test_model("openai"), temperature=0.1, max_tokens=50
         )
 
         # Test with high temperature (more creative)
         response_high = await provider.chat(
-            messages=messages, model="gpt-3.5-turbo", temperature=0.9, max_tokens=50
+            messages=messages, model=get_test_model("openai"), temperature=0.9, max_tokens=50
         )
 
         assert isinstance(response_low, LLMResponse)
@@ -100,7 +103,7 @@ class TestOpenAIProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model="gpt-3.5-turbo",
+            model=get_test_model("openai"),
             max_tokens=20,  # Very small limit
         )
 
@@ -118,7 +121,7 @@ class TestOpenAIProviderIntegration:
         ]
 
         response = await provider.chat(
-            messages=messages, model="gpt-3.5-turbo", max_tokens=50
+            messages=messages, model=get_test_model("openai"), max_tokens=50
         )
 
         assert isinstance(response, LLMResponse)
@@ -136,7 +139,7 @@ class TestOpenAIProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model="gpt-3.5-turbo",
+            model=get_test_model("openai"),
             response_format={"type": "json_object"},
             max_tokens=100,
         )
@@ -182,7 +185,7 @@ class TestOpenAIProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model="gpt-3.5-turbo",
+            model=get_test_model("openai"),
             tools=tools,
             tool_choice="auto",
             max_tokens=200,
@@ -204,7 +207,7 @@ class TestOpenAIProviderIntegration:
         """Test error handling with invalid model."""
         messages = [Message(role="user", content="Hello")]
 
-        with pytest.raises(ValueError, match="Unsupported model"):
+        with pytest.raises(ModelNotFoundError, match="Model.*not found"):
             await provider.chat(messages=messages, model="invalid-model-name")
 
     @pytest.mark.asyncio
@@ -214,7 +217,7 @@ class TestOpenAIProviderIntegration:
         async def make_request(i):
             messages = [Message(role="user", content=f"Count to {i}")]
             return await provider.chat(
-                messages=messages, model="gpt-3.5-turbo", max_tokens=50
+                messages=messages, model=get_test_model("openai"), max_tokens=50
             )
 
         # Make 3 concurrent requests
@@ -226,29 +229,8 @@ class TestOpenAIProviderIntegration:
             assert isinstance(response, LLMResponse)
             assert len(response.content) > 0
 
-    @pytest.mark.asyncio
-    async def test_model_validation(self, provider):
-        """Test model validation methods."""
-        # Test valid models
-        assert provider.validate_model("gpt-4o") is True
-        assert provider.validate_model("gpt-3.5-turbo") is True
-        assert provider.validate_model("openai:gpt-4o") is True
-
-        # Test invalid models
-        assert provider.validate_model("claude-3-opus") is False
-        assert provider.validate_model("invalid-model") is False
-
-    def test_supported_models_list(self, provider):
-        """Test that supported models list is comprehensive."""
-        models = provider.get_supported_models()
-
-        # Should include GPT-4 models
-        assert "gpt-4o" in models
-        assert "gpt-4-turbo" in models
-        assert "gpt-4" in models
-
-        # Should include GPT-3.5 models
-        assert "gpt-3.5-turbo" in models
+    # Model validation tests removed - we no longer gatekeep models
+    # The philosophy is that providers should fail naturally if they don't support a model
 
     def test_token_counting(self, provider):
         """Test token counting functionality."""
@@ -263,9 +245,7 @@ class TestOpenAIProviderIntegration:
     @pytest.mark.asyncio
     async def test_chat_with_image_content(self, provider):
         """Test chat with image content (vision)."""
-        # Skip if not GPT-4o (which supports vision)
-        if not provider.validate_model("gpt-4o"):
-            pytest.skip("GPT-4o not available for vision testing")
+        # No validation - just try to use the model and skip if it fails
 
         messages = [
             Message(
@@ -283,8 +263,10 @@ class TestOpenAIProviderIntegration:
         ]
 
         try:
+            # Use the vision-capable test model from configuration
+            vision_model = get_test_model("openai", "vision")
             response = await provider.chat(
-                messages=messages, model="gpt-4o", max_tokens=100
+                messages=messages, model=vision_model, max_tokens=100
             )
 
             assert isinstance(response, LLMResponse)
@@ -319,7 +301,7 @@ class TestOpenAIProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model="gpt-3.5-turbo",
+            model=get_test_model("openai"),
             tools=tools,
             tool_choice="none",
             max_tokens=100,
@@ -428,13 +410,13 @@ startxref
         try:
             response = await provider.chat(
                 messages=messages,
-                model="gpt-4o",  # Use a model that supports Assistants API
+                model=get_test_model("openai"),  # Use a model that supports Assistants API
                 max_tokens=200,
             )
 
             assert isinstance(response, LLMResponse)
             assert len(response.content) > 0
-            assert response.model == "gpt-4o"
+            assert "gpt" in response.model
 
             # The response should contain information about the PDF content
             # Since our test PDF contains "Hello World", check for that or related terms
@@ -496,7 +478,7 @@ startxref
 
         # Should raise error about tools not being supported with PDF processing
         with pytest.raises(
-            ValueError,
+            ProviderResponseError,
             match="Tools and custom response formats are not supported when processing PDFs",
         ):
-            await provider.chat(messages=messages, model="gpt-4o", tools=tools)
+            await provider.chat(messages=messages, model=get_test_model("openai"), tools=tools)

@@ -177,7 +177,7 @@ async def demo_llm_integration():
             f"content = analyze_image(base64_data, 'Describe this image', '{mime_type}')"
         )
         print(
-            "request = LLMRequest(messages=[Message(role='user', content=content)], model='gpt-4o')"
+            "request = LLMRequest(messages=[Message(role='user', content=content)], model='balanced')"
         )
         print("response = await service.chat(request)")
         print("# response.content would contain the LLM's description")

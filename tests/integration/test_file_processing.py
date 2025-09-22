@@ -16,6 +16,12 @@ from llmring.file_utils import analyze_image, create_image_content
 from llmring.schemas import LLMRequest, Message
 from llmring.service import LLMRing
 
+# Import test model helpers
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from conftest_models import get_test_model
+
 
 def create_test_image_with_text() -> str:
     """Create a test image with readable text and return the file path."""
@@ -100,10 +106,7 @@ def create_test_pdf_with_text() -> str:
 class TestFileProcessing:
     """Clean integration tests for file processing across providers."""
 
-    @pytest.fixture
-    def service(self):
-        """Create LLM service for testing."""
-        return LLMRing()
+    # service fixture is provided by conftest.py
 
     @pytest.fixture
     def test_image_path(self):
@@ -126,12 +129,9 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_image_analysis_with_openai(self, service, test_image_path):
         """Test image analysis with OpenAI GPT-4o."""
-        available_models = service.get_available_models()
-        if (
-            not available_models.get("openai")
-            or "gpt-4o" not in available_models["openai"]
-        ):
-            pytest.skip("OpenAI GPT-4o not available")
+        # Check if OpenAI provider is available
+        if "openai" not in service.providers:
+            pytest.skip("OpenAI provider not available")
 
         # Use a neutral prompt that won't trigger content filters
         content = analyze_image(
@@ -141,7 +141,7 @@ class TestFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="gpt-4o",
+            model="vision",  # Use alias from lockfile
             max_tokens=200,
         )
 
@@ -161,9 +161,9 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_image_analysis_with_anthropic(self, service, test_image_path):
         """Test image analysis with Anthropic Claude."""
-        available_models = service.get_available_models()
-        if not available_models.get("anthropic"):
-            pytest.skip("Anthropic not available")
+        # Check if Anthropic provider is available
+        if "anthropic" not in service.providers:
+            pytest.skip("Anthropic provider not available")
 
         content = analyze_image(
             test_image_path,
@@ -172,7 +172,7 @@ class TestFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="claude-3-5-sonnet-20241022",
+            model="anthropic_vision",  # Use alias from lockfile
             max_tokens=200,
         )
 
@@ -192,9 +192,9 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_image_analysis_with_google(self, service, test_image_path):
         """Test image analysis with Google Gemini."""
-        available_models = service.get_available_models()
-        if not available_models.get("google"):
-            pytest.skip("Google not available")
+        # Check if Google provider is available
+        if "google" not in service.providers:
+            pytest.skip("Google provider not available")
 
         try:
             content = analyze_image(
@@ -204,7 +204,7 @@ class TestFileProcessing:
 
             request = LLMRequest(
                 messages=[Message(role="user", content=content)],
-                model="gemini-1.5-flash",
+                model="google_vision",  # Use alias from lockfile
                 max_tokens=200,
             )
 
@@ -241,9 +241,9 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_pdf_processing_anthropic(self, service, test_pdf_path):
         """Test PDF processing with Anthropic using universal file interface."""
-        available_models = service.get_available_models()
-        if not available_models.get("anthropic"):
-            pytest.skip("Anthropic not available")
+        # Check if Anthropic provider is available
+        if "anthropic" not in service.providers:
+            pytest.skip("Anthropic provider not available")
 
         # Use the universal file interface
         from llmring.file_utils import analyze_file
@@ -255,7 +255,7 @@ class TestFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="claude-3-5-sonnet-20241022",
+            model="pdf",  # Use alias from lockfile
             max_tokens=300,
         )
 
@@ -275,9 +275,9 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_pdf_processing_google(self, service, test_pdf_path):
         """Test PDF processing with Google using universal file interface."""
-        available_models = service.get_available_models()
-        if not available_models.get("google"):
-            pytest.skip("Google not available")
+        # Check if Google provider is available
+        if "google" not in service.providers:
+            pytest.skip("Google provider not available")
 
         try:
             # Use the universal file interface
@@ -290,7 +290,7 @@ class TestFileProcessing:
 
             request = LLMRequest(
                 messages=[Message(role="user", content=content)],
-                model="gemini-1.5-flash",
+                model="multimodal",  # Use alias from lockfile (Google multimodal handles PDFs)
                 max_tokens=300,
             )
 
@@ -327,9 +327,9 @@ class TestFileProcessing:
     @pytest.mark.asyncio
     async def test_pdf_processing_openai(self, service, test_pdf_path):
         """Test PDF processing with OpenAI using Assistants API automatically."""
-        available_models = service.get_available_models()
-        if not available_models.get("openai"):
-            pytest.skip("OpenAI not available")
+        # Check if OpenAI provider is available
+        if "openai" not in service.providers:
+            pytest.skip("OpenAI provider not available")
 
         # Use the universal file interface
         from llmring.file_utils import analyze_file
@@ -341,7 +341,7 @@ class TestFileProcessing:
 
         request = LLMRequest(
             messages=[Message(role="user", content=content)],
-            model="gpt-4o",  # Will automatically use Assistants API for PDFs
+            model="vision",  # Use alias from lockfile (OpenAI vision model for PDFs)
             max_tokens=300,
         )
 
@@ -350,15 +350,7 @@ class TestFileProcessing:
 
             # Verify response contains key information
             content_lower = response.content.lower()
-            # Skip if model refuses or cannot process PDFs in this environment
-            if (
-                "unable to directly read" in content_lower
-                or "can’t assist" in content_lower
-                or "can't assist" in content_lower
-            ):
-                pytest.skip(
-                    "OpenAI model refused to transcribe PDF in this environment"
-                )
+            # With gpt-4o, PDF processing should always work
             assert (
                 "doc-test-001" in content_lower
                 or "test-001" in content_lower

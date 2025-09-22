@@ -1,6 +1,7 @@
 """Integration tests for receipt generation."""
 
 import os
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -88,7 +89,8 @@ class TestReceiptGeneration:
             {"OPENAI_API_KEY": "sk-test"},
             clear=False,
         ):
-            ring = LLMRing()
+            test_lockfile = Path(__file__).parent.parent / "llmring.lock.json"
+            ring = LLMRing(lockfile_path=str(test_lockfile))
 
             # Mock the provider's chat method without usage
             mock_response = MagicMock()

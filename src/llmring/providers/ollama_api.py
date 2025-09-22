@@ -5,18 +5,24 @@ Ollama API provider implementation using the official SDK.
 import asyncio
 import json
 import os
-import re
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from ollama import AsyncClient, ResponseError
 
-from llmring.base import BaseLLMProvider
+from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
+from llmring.exceptions import (
+    CircuitBreakerError,
+    ProviderResponseError,
+    ProviderTimeoutError,
+)
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
-from llmring.schemas import LLMResponse, Message
+from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
+from llmring.registry import RegistryClient
+from llmring.schemas import LLMResponse, Message, StreamChunk
 
 
-class OllamaProvider(BaseLLMProvider):
+class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggingMixin):
     """Implementation of Ollama API provider using the official SDK."""
 
     def __init__(
@@ -25,7 +31,7 @@ class OllamaProvider(BaseLLMProvider):
             str
         ] = None,  # Not used for Ollama, included for API compatibility
         base_url: Optional[str] = None,
-        model: str = "llama3.3:latest",
+        model: Optional[str] = None,
     ):
         """
         Initialize the Ollama provider.
@@ -35,98 +41,128 @@ class OllamaProvider(BaseLLMProvider):
             base_url: Base URL for the Ollama API server
             model: Default model to use
         """
-        super().__init__(api_key=None, base_url=base_url)
-        self.base_url = base_url or os.environ.get(
+        # Get base URL from parameter or environment
+        base_url = base_url or os.environ.get(
             "OLLAMA_BASE_URL", "http://localhost:11434"
         )
-        self.default_model = model
+
+        # Create config for base class (no API key needed for Ollama)
+        config = ProviderConfig(
+            api_key=None,
+            base_url=base_url,
+            default_model=model,
+            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60")),
+        )
+        super().__init__(config)
+
+        # Initialize registry client BEFORE mixin init
+        self._registry_client = RegistryClient()
+
+        # Now initialize mixins that may use the registry client
+        RegistryModelSelectorMixin.__init__(self)
+        ProviderLoggingMixin.__init__(self, "ollama")
+
+        # Store for backward compatibility
+        self.base_url = base_url
+        self.default_model = model  # Will be derived from registry if None
 
         # Initialize the client with the SDK
-        self.client = AsyncClient(host=self.base_url)
+        self.client = AsyncClient(host=base_url)
 
-        # List of commonly supported models
-        self.supported_models = [
-            "llama3.3:latest",
-            "llama3.3",
-            "llama3.2",
-            "llama3.1",
-            "llama3",
-            "mistral",
-            "mixtral",
-            "codellama",
-            "phi3",
-            "gemma2",
-            "gemma",
-            "qwen2.5",
-            "qwen",
-        ]
+        # Registry client already initialized before mixins
+
         self._breaker = CircuitBreaker()
 
-    def validate_model(self, model: str) -> bool:
+
+    async def get_default_model(self) -> str:
         """
-        Check if the model is supported by Ollama.
-        This is a best-effort check since Ollama can support any
-        model that's installed locally.
-
-        Args:
-            model: Model name to check
-
-        Returns:
-            True if supported, False otherwise
-        """
-        # Strip provider prefix if present
-        if model.lower().startswith("ollama:"):
-            model = model.split(":", 1)[1]
-
-        # Check if it's exactly in our supported models list
-        if model in self.supported_models:
-            return True
-
-        # Allow any model that starts with a known model name
-        for known_model in self.supported_models:
-            if model.startswith(known_model):
-                return True
-
-        # Check for common Ollama model patterns but reject non-Ollama models
-        ollama_patterns = [
-            r"^llama\d*",  # llama, llama2, llama3, etc.
-            r"^mistral",  # mistral variations
-            r"^mixtral",  # mixtral variations
-            r"^codellama",  # codellama variations
-            r"^phi\d*",  # phi, phi3, etc.
-            r"^gemma",  # gemma variations
-            r"^qwen",  # qwen variations
-            r"^deepseek",  # deepseek variations
-            r"^[a-z][a-z0-9\-_]*[:]",  # custom models with tags
-        ]
-
-        # Only allow models that match Ollama patterns and look valid
-        if re.match(r"^[a-zA-Z0-9\-_:.]+$", model):
-            for pattern in ollama_patterns:
-                if re.match(pattern, model.lower()):
-                    return True
-
-        return False
-
-    def get_supported_models(self) -> List[str]:
-        """
-        Get list of supported Ollama model names.
-        Note: This returns common models, but Ollama can support
-        any model that's installed locally.
-
-        Returns:
-            List of supported model names
-        """
-        return self.supported_models.copy()
-
-    def get_default_model(self) -> str:
-        """
-        Get the default model to use.
+        Get the default model to use, derived from registry if not specified.
 
         Returns:
             Default model name
         """
-        return self.default_model
+        if self.default_model:
+            return self.default_model
+
+        # Derive from registry using policy-based selection
+        try:
+            # For Ollama, try registry first, then fall back to actual available models
+            models = []
+            if self._registry_client:
+                try:
+                    registry_models = await self._registry_client.fetch_current_models("ollama")
+                    if registry_models:
+                        models = [m.model_name for m in registry_models]
+                except Exception:
+                    pass
+
+            # If no models from registry, try to get available models from Ollama
+            if not models:
+                try:
+                    models = await self.get_available_models()
+                except Exception:
+                    pass
+
+            if models:
+                # Use registry-based selection with Ollama-specific cost range (usually free local models)
+                selected_model = await self.select_default_from_registry(
+                    provider_name="ollama",
+                    available_models=models,
+                    cost_range=(0.0, 0.1),  # Ollama models are typically free/local
+                    fallback_model=None  # No hardcoded fallback
+                )
+                self.default_model = selected_model
+                self.log_info(f"Derived default model from registry: {selected_model}")
+                return selected_model
+
+        except Exception as e:
+            self.log_warning(f"Could not derive default model from registry: {e}")
+
+        # For Ollama, we can be more lenient since models are local
+        # Just use the first available model if any
+        if models:
+            self.default_model = models[0]
+            self.log_warning(f"Using first available Ollama model: {self.default_model}")
+            return self.default_model
+
+        # No models available at all
+        raise ValueError(
+            "No Ollama models available. Please install a model first using 'ollama pull'."
+        )
+
+
+    async def aclose(self) -> None:
+        """Clean up provider resources."""
+        # Ollama AsyncClient doesn't have a close method
+        pass
+
+    async def get_capabilities(self) -> ProviderCapabilities:
+        """
+        Get the capabilities of this provider.
+
+        Returns:
+            Provider capabilities
+        """
+        # Get current models for capabilities
+        # For Ollama, use actual available models since it's local
+        try:
+            supported_models = await self.get_available_models()
+        except Exception:
+            supported_models = []
+
+        return ProviderCapabilities(
+            provider_name="ollama",
+            supported_models=supported_models,
+            supports_streaming=True,
+            supports_tools=False,  # Ollama doesn't support function calling yet
+            supports_vision=True,  # Some models like llava support vision
+            supports_audio=False,
+            supports_documents=False,
+            supports_json_mode=True,  # Via format parameter
+            supports_caching=False,
+            max_context_window=32768,  # Varies by model
+            default_model=await self.get_default_model(),
+        )
 
     def get_token_count(self, text: str) -> int:
         """
@@ -173,8 +209,8 @@ class OllamaProvider(BaseLLMProvider):
                         models.append(model_name)
             return models
         except Exception:
-            # If we can't get the list, return our supported models list
-            return self.supported_models.copy()
+            # If we can't get the list, return empty list for graceful degradation
+            return []
 
     async def chat(
         self,
@@ -187,7 +223,9 @@ class OllamaProvider(BaseLLMProvider):
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-    ) -> LLMResponse:
+        stream: Optional[bool] = False,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
         """
         Send a chat request to the Ollama API using the official SDK.
 
@@ -201,16 +239,228 @@ class OllamaProvider(BaseLLMProvider):
             tool_choice: Optional tool choice parameter (implemented through prompt engineering)
 
         Returns:
-            LLM response
+            LLM response or async iterator of stream chunks if streaming
         """
+        # Implement real streaming using Ollama SDK
+        if stream:
+            return self._stream_chat(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
+                json_response=json_response,
+                cache=cache,
+                extra_params=extra_params,
+            )
+
+        return await self._chat_non_streaming(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
+            json_response=json_response,
+            cache=cache,
+            extra_params=extra_params,
+        )
+
+    async def _stream_chat(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """Real streaming implementation using Ollama SDK."""
+        # Strip provider prefix if present
+        if model.lower().startswith("ollama:"):
+            model = model.split(":", 1)[1]
+
+        # Validate model (warn but don't fail if not in registry)
+        # For Ollama, just check if model is available locally
+        try:
+            available = await self.get_available_models()
+            if model not in available:
+                # Check with flexible matching (base names)
+                base_model = model.split(":")[0]
+                if not any(base_model in m for m in available):
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        f"Model '{model}' not found locally, proceeding anyway"
+                    )
+        except Exception:
+            pass  # Can't check, continue anyway
+
+        # Convert messages to Ollama format (includes tool handling)
+        ollama_messages = []
+        for msg in messages:
+            # Handle different message types
+            if msg.role == "system":
+                # System messages become assistant messages in Ollama
+                ollama_messages.append(
+                    {"role": "assistant", "content": f"System: {msg.content}"}
+                )
+            elif msg.role in ["user", "assistant"]:
+                ollama_messages.append({"role": msg.role, "content": str(msg.content)})
+
+        # Handle tools through prompt engineering (Ollama doesn't have native function calling)
+        if tools:
+            tools_prompt = self._create_tools_prompt(tools)
+            if ollama_messages and ollama_messages[0]["role"] == "assistant":
+                ollama_messages[0]["content"] += f"\n\n{tools_prompt}"
+            else:
+                ollama_messages.insert(
+                    0, {"role": "assistant", "content": tools_prompt}
+                )
+
+        # Handle JSON response format
+        if json_response or (
+            response_format and response_format.get("type") in ["json_object", "json"]
+        ):
+            json_instruction = "\n\nIMPORTANT: Respond only with valid JSON."
+            if ollama_messages:
+                ollama_messages[-1]["content"] += json_instruction
+
+        # Build request parameters for streaming
+        options = {}
+        if temperature is not None:
+            options["temperature"] = temperature
+        if max_tokens is not None:
+            options["num_predict"] = max_tokens
+
+        request_params = {
+            "model": model,
+            "messages": ollama_messages,
+            "stream": True,  # Enable real streaming
+            "options": options,
+        }
+
+        # Apply extra parameters
+        # Supports Ollama-specific options: mirostat, penalty_*, num_ctx, seed, etc.
+        # Can be passed as {"options": {"seed": 123}} or {"seed": 123}
+        if extra_params:
+            if "options" in extra_params:
+                # Merge with existing options
+                options.update(extra_params["options"])
+                request_params["options"] = options
+            else:
+                # Apply directly to request
+                request_params.update(extra_params)
+
+        try:
+            float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+
+            key = f"ollama:{model}"
+            if not await self._breaker.allow(key):
+                raise CircuitBreakerError(
+                    "Ollama circuit breaker is open - too many recent failures",
+                    provider="ollama",
+                )
+
+            # Use real streaming API (returns async generator directly)
+            stream_response = self.client.chat(**request_params)
+            await self._breaker.record_success(key)
+
+            # Process the streaming response
+            accumulated_content = ""
+            async for chunk in stream_response:
+                if hasattr(chunk, "message") and chunk.message:
+                    delta_content = chunk.message.get("content", "")
+                    if delta_content:
+                        accumulated_content += delta_content
+                        yield StreamChunk(
+                            delta=delta_content,
+                            model=model,
+                            finish_reason=None,
+                        )
+
+                # Check if this is the final chunk
+                if hasattr(chunk, "done") and chunk.done:
+                    # Final chunk with usage estimation
+                    yield StreamChunk(
+                        delta="",
+                        model=model,
+                        finish_reason="stop",
+                        usage={
+                            "prompt_tokens": self.get_token_count(str(ollama_messages)),
+                            "completion_tokens": self.get_token_count(
+                                accumulated_content
+                            ),
+                            "total_tokens": self.get_token_count(str(ollama_messages))
+                            + self.get_token_count(accumulated_content),
+                        },
+                    )
+
+        except Exception as e:
+            # If it's already a typed LLMRing exception, just re-raise it
+            from llmring.exceptions import LLMRingError
+
+            if isinstance(e, LLMRingError):
+                raise
+
+            await self._breaker.record_failure(key)
+            error_msg = str(e)
+
+            if "connect" in error_msg.lower():
+                raise ProviderResponseError(
+                    f"Failed to connect to Ollama at http://localhost:11434: {error_msg}",
+                    provider="ollama",
+                ) from e
+            elif "timeout" in error_msg.lower():
+                raise ProviderTimeoutError(
+                    f"Ollama request timed out: {error_msg}", provider="ollama"
+                ) from e
+            else:
+                raise ProviderResponseError(
+                    f"Ollama error: {error_msg}", provider="ollama"
+                ) from e
+
+    async def _chat_non_streaming(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> LLMResponse:
+        """Non-streaming chat implementation."""
         # Strip provider prefix if present
         if model.lower().startswith("ollama:"):
             model = model.split(":", 1)[1]
 
         # Note: We're more lenient with model validation for Ollama
         # since models are user-installed locally
-        if not self.validate_model(model):
-            raise ValueError(f"Invalid model name format: {model}")
+        # For Ollama, just check if model is available locally
+        try:
+            available = await self.get_available_models()
+            if model not in available:
+                # Check with flexible matching (base names)
+                base_model = model.split(":")[0]
+                if not any(base_model in m for m in available):
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        f"Model '{model}' not found locally, proceeding anyway"
+                    )
+        except Exception:
+            pass  # Can't check, continue anyway
 
         # Convert messages to Ollama format
         ollama_messages = []
@@ -287,21 +537,33 @@ class OllamaProvider(BaseLLMProvider):
             # Use the Ollama SDK's chat method with a total deadline and retries
             timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
 
+            # Build request parameters
+            request_params = {
+                "model": model,
+                "messages": ollama_messages,
+                "stream": False,
+                "options": options,
+            }
+
+            if format_param:
+                request_params["format"] = format_param
+
+            # Apply extra parameters if provided
+            if extra_params:
+                request_params.update(extra_params)
+
             async def _do_call():
                 return await asyncio.wait_for(
-                    self.client.chat(
-                        model=model,
-                        messages=ollama_messages,
-                        stream=False,
-                        options=options,
-                        format=format_param,
-                    ),
+                    self.client.chat(**request_params),
                     timeout=timeout_s,
                 )
 
             key = f"ollama:{model}"
             if not await self._breaker.allow(key):
-                raise Exception("Ollama circuit open for model")
+                raise CircuitBreakerError(
+                    "Ollama circuit breaker is open - too many recent failures",
+                    provider="ollama",
+                )
             response = await retry_async(_do_call)
             await self._breaker.record_success(key)
 
@@ -365,12 +627,89 @@ class OllamaProvider(BaseLLMProvider):
             return llm_response
 
         except ResponseError as e:
-            # Handle Ollama-specific errors
-            raise Exception(f"Ollama API error: {e.error}")
+            # Ollama SDK ResponseError - wrap minimally with context preservation
+            await self._breaker.record_failure(f"ollama:{model}")
+
+            # Let the error message guide categorization, but don't over-analyze
+            error_msg = str(getattr(e, 'error', e))
+            if "model" in error_msg.lower():
+                from llmring.exceptions import ModelNotFoundError
+                raise ModelNotFoundError(
+                    f"Model '{model}' not available",
+                    provider="ollama",
+                    model_name=model,
+                    original=e,
+                ) from e
+
+            # Default to generic provider error with full context
+            raise ProviderResponseError(
+                "Ollama API error",
+                provider="ollama",
+                original=e,
+            ) from e
         except Exception as e:
+            # Already wrapped? Just re-raise
+            from llmring.exceptions import LLMRingError
+            if isinstance(e, LLMRingError):
+                raise
+
+            # Record failure (non-blocking)
             try:
                 await self._breaker.record_failure(f"ollama:{model}")
             except Exception:
                 pass
-            # Handle general errors
-            raise Exception(f"Failed to connect to Ollama at {self.base_url}: {str(e)}")
+
+            # Handle RetryError - check the root cause
+            from llmring.net.retry import RetryError
+            if isinstance(e, RetryError):
+                root = e.__cause__ if hasattr(e, '__cause__') else e
+
+                # Timeout after retries
+                if isinstance(root, asyncio.TimeoutError):
+                    raise ProviderTimeoutError(
+                        f"Request timed out after {getattr(e, 'attempts', 0)} attempts",
+                        provider="ollama",
+                        original=e,
+                    ) from e
+
+                # Ollama ResponseError after retries
+                if "ResponseError" in type(root).__name__:
+                    error_msg = str(getattr(root, 'error', root))
+                    if "model" in error_msg.lower():
+                        from llmring.exceptions import ModelNotFoundError
+                        raise ModelNotFoundError(
+                            f"Model '{model}' not available",
+                            provider="ollama",
+                            model_name=model,
+                            original=e,
+                        ) from e
+
+                # Generic retry exhaustion
+                raise ProviderResponseError(
+                    f"Request failed after {getattr(e, 'attempts', 0)} attempts",
+                    provider="ollama",
+                    original=e,
+                ) from e
+
+            # Direct timeout (no retry)
+            if isinstance(e, asyncio.TimeoutError):
+                raise ProviderTimeoutError(
+                    "Request timed out",
+                    provider="ollama",
+                    original=e,
+                ) from e
+
+            # Connection errors
+            if isinstance(e, (ConnectionError, OSError)):
+                raise ProviderResponseError(
+                    f"Cannot connect to Ollama at {self.base_url}",
+                    provider="ollama",
+                    original=e,
+                ) from e
+
+            # Unknown error - wrap minimally
+            raise ProviderResponseError(
+                "Unexpected error",
+                provider="ollama",
+                original=e,
+            ) from e

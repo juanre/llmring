@@ -1,0 +1,7 @@
+{
+        "example-server": {
+            "command": "python",
+            "args": ["-m", "example_server"],
+            "env": {}
+        }
+    }
