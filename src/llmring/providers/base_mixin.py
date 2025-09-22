@@ -18,7 +18,7 @@ class RegistryModelSelectorMixin:
         """Initialize the mixin - should be called by provider __init__."""
         # Don't initialize _registry_client here - let providers set it
         # before calling this __init__
-        if not hasattr(self, '_registry_client'):
+        if not hasattr(self, "_registry_client"):
             self._registry_client: Optional[RegistryClient] = None
         self.default_model: Optional[str] = None
 
@@ -27,7 +27,7 @@ class RegistryModelSelectorMixin:
         provider_name: str,
         available_models: List[str],
         cost_range: Tuple[float, float] = (0.1, 10.0),
-        fallback_model: Optional[str] = None
+        fallback_model: Optional[str] = None,
     ) -> str:
         """
         Select default model from registry using a consistent scoring policy.
@@ -47,8 +47,7 @@ class RegistryModelSelectorMixin:
 
             registry_models = await self._registry_client.fetch_current_models(provider_name)
             active_models = [
-                m for m in registry_models
-                if m.is_active and m.model_name in available_models
+                m for m in registry_models if m.is_active and m.model_name in available_models
             ]
 
             if active_models:
@@ -64,9 +63,7 @@ class RegistryModelSelectorMixin:
                     return best_model[0]
 
         except Exception as e:
-            logger.warning(
-                f"Could not use registry metadata for {provider_name} selection: {e}"
-            )
+            logger.warning(f"Could not use registry metadata for {provider_name} selection: {e}")
 
         # Fallback to first available or specified fallback
         if available_models:
@@ -84,9 +81,7 @@ class RegistryModelSelectorMixin:
         raise ValueError(f"No models available for {provider_name}")
 
     def _score_models(
-        self,
-        models: List[RegistryModel],
-        cost_range: Tuple[float, float]
+        self, models: List[RegistryModel], cost_range: Tuple[float, float]
     ) -> List[Tuple[str, int]]:
         """
         Score models based on cost, capabilities, and recency.
@@ -116,7 +111,7 @@ class RegistryModelSelectorMixin:
                 score += 5
             if model.supports_vision:
                 score += 3
-            if hasattr(model, 'supports_audio') and model.supports_audio:
+            if hasattr(model, "supports_audio") and model.supports_audio:
                 score += 2
 
             # Prefer more recent models (if added_date is available)

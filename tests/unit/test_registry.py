@@ -27,9 +27,7 @@ class TestRegistryClient:
     @pytest.fixture
     def registry_client(self, test_registry_url, tmp_path):
         """Create registry client with test data."""
-        return RegistryClient(
-            registry_url=test_registry_url, cache_dir=tmp_path / "cache"
-        )
+        return RegistryClient(registry_url=test_registry_url, cache_dir=tmp_path / "cache")
 
     async def test_fetch_models_from_test_registry(self, registry_client):
         """Test fetching models from test registry files."""
@@ -247,7 +245,9 @@ class TestServiceWithRegistry:
         """Test enhanced model info when registry is unavailable."""
         # Use a non-existent registry URL to simulate unavailable registry
         test_lockfile = Path(__file__).parent.parent / "llmring.lock.json"
-        service = LLMRing(registry_url="file:///non/existent/path", lockfile_path=str(test_lockfile))
+        service = LLMRing(
+            registry_url="file:///non/existent/path", lockfile_path=str(test_lockfile)
+        )
 
         # Clear any cached registry models from previous tests
         service._registry_models = {}

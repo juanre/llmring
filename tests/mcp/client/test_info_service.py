@@ -29,9 +29,7 @@ class TestInfoServiceBasics:
         """Test info service creation with parameters."""
         mock_llm_service = Mock()
 
-        info_service = create_info_service(
-            llm_service=mock_llm_service, origin="test-module"
-        )
+        info_service = create_info_service(llm_service=mock_llm_service, origin="test-module")
 
         assert info_service.llm_service == mock_llm_service
         assert info_service.origin == "test-module"
@@ -116,12 +114,8 @@ class TestModelInformation:
         mock_model.supports_function_calling = True
         mock_model.supports_json_mode = True
         mock_model.supports_parallel_tool_calls = True
-        mock_model.cost_per_token_input = (
-            0.000003  # Actual Claude Sonnet cost per token
-        )
-        mock_model.cost_per_token_output = (
-            0.000015  # Actual Claude Sonnet cost per token
-        )
+        mock_model.cost_per_token_input = 0.000003  # Actual Claude Sonnet cost per token
+        mock_model.cost_per_token_output = 0.000015  # Actual Claude Sonnet cost per token
         mock_model.is_active = True
 
         mock_db.list_models.return_value = [mock_model]
@@ -149,12 +143,8 @@ class TestModelInformation:
         mock_model.provider = "anthropic"
         mock_model.model_name = "claude-3-sonnet"
         mock_model.display_name = "Claude 3 Sonnet"
-        mock_model.cost_per_token_input = (
-            0.000003  # Actual Claude Sonnet cost per token
-        )
-        mock_model.cost_per_token_output = (
-            0.000015  # Actual Claude Sonnet cost per token
-        )
+        mock_model.cost_per_token_input = 0.000003  # Actual Claude Sonnet cost per token
+        mock_model.cost_per_token_output = 0.000015  # Actual Claude Sonnet cost per token
         mock_model.max_context = 200000
         mock_model.supports_function_calling = True
         mock_model.supports_vision = True

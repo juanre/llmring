@@ -30,12 +30,8 @@ sys.path.insert(0, "/Users/juanre/prj/mcpp/mcp-server/llm_service/src")
 import builtins
 import contextlib
 
+from llmring.exceptions import FileAccessError, FileProcessingError, InvalidFileFormatError
 from llmring.mcp.client.enhanced_llm import create_enhanced_llm
-from llmring.exceptions import (
-    InvalidFileFormatError,
-    FileProcessingError,
-    FileAccessError,
-)
 
 
 class FileCreator:
@@ -250,11 +246,7 @@ class TestFileProcessingIntegration:
         assert len(response.content) > 0
         # The response should mention some of the text from the image
         content_lower = response.content.lower()
-        assert (
-            "hello" in content_lower
-            or "world" in content_lower
-            or "123" in content_lower
-        )
+        assert "hello" in content_lower or "world" in content_lower or "123" in content_lower
 
         print(f"✓ OCR Test Response: {response.content[:100]}...")
 
@@ -288,10 +280,7 @@ class TestFileProcessingIntegration:
         assert response.content is not None
         content_lower = response.content.lower()
         # Should mention chart/data concepts
-        assert any(
-            word in content_lower
-            for word in ["chart", "data", "bar", "sales", "quarter"]
-        )
+        assert any(word in content_lower for word in ["chart", "data", "bar", "sales", "quarter"])
 
         print(f"✓ Chart Analysis Response: {response.content[:100]}...")
 
@@ -401,8 +390,7 @@ class TestFileProcessingIntegration:
         content_lower = response.content.lower()
         # Should mention business concepts from the document
         assert any(
-            word in content_lower
-            for word in ["revenue", "quarter", "customer", "growth", "report"]
+            word in content_lower for word in ["revenue", "quarter", "customer", "growth", "report"]
         )
 
         print(f"✓ Document Analysis Response: {response.content[:150]}...")
@@ -449,9 +437,7 @@ class TestFileProcessingIntegration:
     async def test_error_handling(self, enhanced_llm):
         """Test error handling for invalid file processing."""
         # Test invalid base64
-        with pytest.raises(
-            (InvalidFileFormatError, FileProcessingError), match="Invalid base64"
-        ):
+        with pytest.raises((InvalidFileFormatError, FileProcessingError), match="Invalid base64"):
             await enhanced_llm.process_file_from_source(
                 source_type="base64",
                 source_data="invalid-base64-data",
@@ -459,9 +445,7 @@ class TestFileProcessingIntegration:
             )
 
         # Test invalid source type
-        with pytest.raises(
-            (ValueError, FileProcessingError), match="Unsupported source type"
-        ):
+        with pytest.raises((ValueError, FileProcessingError), match="Unsupported source type"):
             await enhanced_llm.process_file_from_source(
                 source_type="invalid_source",
                 source_data="some_data",
@@ -469,9 +453,7 @@ class TestFileProcessingIntegration:
             )
 
         # Test non-existent file
-        with pytest.raises(
-            (FileAccessError, FileProcessingError), match="File not found"
-        ):
+        with pytest.raises((FileAccessError, FileProcessingError), match="File not found"):
             await enhanced_llm.process_file_from_source(
                 source_type="upload",
                 source_data="/nonexistent/path/file.txt",
@@ -484,9 +466,7 @@ class TestFileProcessingIntegration:
     async def test_content_type_detection(self, enhanced_llm, file_creator):
         """Test automatic content type detection."""
         # Create image without explicit content type
-        image_path = file_creator.create_test_image(
-            "detection_test.png", "DETECTION TEST"
-        )
+        image_path = file_creator.create_test_image("detection_test.png", "DETECTION TEST")
 
         attachment = await enhanced_llm.process_file_from_source(
             source_type="upload",

@@ -49,9 +49,7 @@ class LLMRingExtended(LLMRing):
             self.server_client = ServerClient(
                 base_url=server_url or "https://api.llmring.ai", api_key=api_key
             )
-            logger.info(
-                f"Connected to llmring-server at {server_url or 'api.llmring.ai'}"
-            )
+            logger.info(f"Connected to llmring-server at {server_url or 'api.llmring.ai'}")
 
     async def create_conversation(
         self,
@@ -152,9 +150,7 @@ class LLMRingExtended(LLMRing):
                             "model_used": response.model,
                             "finish_reason": response.finish_reason,
                             "tool_calls": (
-                                response.tool_calls
-                                if hasattr(response, "tool_calls")
-                                else None
+                                response.tool_calls if hasattr(response, "tool_calls") else None
                             ),
                         },
                     }

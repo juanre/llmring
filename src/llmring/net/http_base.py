@@ -133,8 +133,7 @@ class BaseHTTPClient:
             return response
         except httpx.HTTPStatusError as e:
             logger.error(
-                f"HTTP {e.response.status_code} error for {method} {path}: "
-                f"{e.response.text}"
+                f"HTTP {e.response.status_code} error for {method} {path}: " f"{e.response.text}"
             )
             raise
         except Exception as e:

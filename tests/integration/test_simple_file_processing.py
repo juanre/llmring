@@ -12,7 +12,6 @@ import pytest
 
 from llmring.file_utils import analyze_image, create_image_content
 from llmring.schemas import LLMRequest, Message
-from llmring.service import LLMRing
 
 
 def create_simple_test_image() -> str:
@@ -183,9 +182,9 @@ class TestSimpleFileProcessing:
         content_lower = response.content.lower()
         assert "pdf-test-001" in content_lower
         # Opus 4.1 should extract the name properly, but allow for content moderation
-        assert ("john doe" in content_lower or
-                "name:" in content_lower or
-                "redacted" in content_lower)
+        assert (
+            "john doe" in content_lower or "name:" in content_lower or "redacted" in content_lower
+        )
 
         print(f"Anthropic MVP (Opus 4.1) extracted: {response.content}")
 

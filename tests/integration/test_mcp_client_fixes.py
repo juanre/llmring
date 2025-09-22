@@ -5,10 +5,11 @@ Tests that the fixed id_at_origin handling (now uses metadata instead of invalid
 works correctly with actual API calls.
 """
 
-import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
-from llmring.mcp.client.stateless_engine import StatelessChatEngine, ChatRequest
+import pytest
+
+from llmring.mcp.client.stateless_engine import ChatRequest, StatelessChatEngine
 
 
 class TestMCPClientFixes:
@@ -19,10 +20,11 @@ class TestMCPClientFixes:
         """Create chat engine for testing."""
         # Create LLMRing service with test lockfile
         import os
+
         from llmring.service import LLMRing
+
         test_lockfile = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            'llmring.lock.json'
+            os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json"
         )
         llm_service = LLMRing(origin="test", lockfile_path=test_lockfile)
         return StatelessChatEngine(llmring=llm_service)
@@ -54,21 +56,17 @@ class TestMCPClientFixes:
         assert captured_request is not None, "chat() should have been called"
         assert hasattr(captured_request, "metadata"), "Request should have metadata"
         assert captured_request.metadata is not None, "Metadata should not be None"
-        assert "id_at_origin" in captured_request.metadata, (
-            "id_at_origin should be in metadata"
-        )
-        assert captured_request.metadata["id_at_origin"] == "test-user-123", (
-            "id_at_origin should match user_id"
-        )
+        assert "id_at_origin" in captured_request.metadata, "id_at_origin should be in metadata"
+        assert (
+            captured_request.metadata["id_at_origin"] == "test-user-123"
+        ), "id_at_origin should match user_id"
 
         # Verify response structure
         assert hasattr(response, "message"), "Response should have message attribute"
         assert hasattr(response.message, "content"), "Message should have content"
         assert isinstance(response.message.content, str), "Content should be string"
 
-        print(
-            f"✓ id_at_origin properly stored in metadata: {captured_request.metadata}"
-        )
+        print(f"✓ id_at_origin properly stored in metadata: {captured_request.metadata}")
 
     @pytest.mark.asyncio
     async def test_streaming_with_metadata(self, chat_engine):
@@ -96,17 +94,13 @@ class TestMCPClientFixes:
                 chunks.append(chunk)
 
         # Verify metadata was set correctly for streaming
-        assert captured_request is not None, (
-            "chat() should have been called for streaming"
-        )
+        assert captured_request is not None, "chat() should have been called for streaming"
         assert hasattr(captured_request, "metadata"), "Request should have metadata"
         assert captured_request.metadata is not None, "Metadata should not be None"
-        assert "id_at_origin" in captured_request.metadata, (
-            "id_at_origin should be in metadata"
-        )
-        assert captured_request.metadata["id_at_origin"] == "stream-user-456", (
-            "id_at_origin should match user_id"
-        )
+        assert "id_at_origin" in captured_request.metadata, "id_at_origin should be in metadata"
+        assert (
+            captured_request.metadata["id_at_origin"] == "stream-user-456"
+        ), "id_at_origin should match user_id"
 
         # Verify streaming worked
         assert len(chunks) > 0, "Should have received streaming chunks"
@@ -168,6 +162,7 @@ class TestMCPClientFixes:
         with patch.object(chat_engine.llmring, "chat") as mock_chat:
             # Create a real LLMResponse object instead of AsyncMock
             from llmring.schemas import LLMResponse
+
             mock_response = LLMResponse(
                 content="Integration response",
                 model="fast",
@@ -177,7 +172,7 @@ class TestMCPClientFixes:
                     "total_tokens": 15,
                 },
                 finish_reason="stop",
-                tool_calls=None
+                tool_calls=None,
             )
             mock_chat.return_value = mock_response
 

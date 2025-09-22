@@ -118,9 +118,7 @@ def stdio_client(real_stdio_server):
         async def connect(self):
             self._state = ConnectionState.CONNECTED
 
-        async def send_request(
-            self, method: str, params: dict[str, Any] | None = None
-        ) -> Any:
+        async def send_request(self, method: str, params: dict[str, Any] | None = None) -> Any:
             request_id = self._next_id
             self._next_id += 1
 
@@ -181,9 +179,7 @@ async def async_stdio_client(real_stdio_server):
         async def connect(self):
             self._state = ConnectionState.CONNECTED
 
-        async def send_request(
-            self, method: str, params: dict[str, Any] | None = None
-        ) -> Any:
+        async def send_request(self, method: str, params: dict[str, Any] | None = None) -> Any:
             request_id = self._next_id
             self._next_id += 1
 

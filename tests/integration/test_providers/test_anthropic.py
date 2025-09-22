@@ -8,10 +8,10 @@ import os
 
 import pytest
 
+from llmring.exceptions import ModelNotFoundError
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.schemas import LLMResponse, Message
 from tests.conftest_models import get_test_model
-from llmring.exceptions import ModelNotFoundError
 
 
 @pytest.mark.llm
@@ -70,9 +70,7 @@ class TestAnthropicProviderIntegration:
     @pytest.mark.asyncio
     async def test_chat_with_temperature(self, provider):
         """Test chat with different temperature settings."""
-        messages = [
-            Message(role="user", content="Write a creative opening line for a story.")
-        ]
+        messages = [Message(role="user", content="Write a creative opening line for a story.")]
 
         # Test with low temperature (more deterministic)
         response_low = await provider.chat(
@@ -99,9 +97,7 @@ class TestAnthropicProviderIntegration:
     async def test_chat_with_max_tokens(self, provider):
         """Test chat with max_tokens limit."""
         messages = [
-            Message(
-                role="user", content="Write a long essay about artificial intelligence."
-            )
+            Message(role="user", content="Write a long essay about artificial intelligence.")
         ]
 
         response = await provider.chat(
@@ -136,9 +132,7 @@ class TestAnthropicProviderIntegration:
     @pytest.mark.asyncio
     async def test_chat_with_tools(self, provider):
         """Test chat with function calling."""
-        messages = [
-            Message(role="user", content="What's the weather like in San Francisco?")
-        ]
+        messages = [Message(role="user", content="What's the weather like in San Francisco?")]
 
         tools = [
             {

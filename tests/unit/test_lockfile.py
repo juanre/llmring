@@ -34,9 +34,7 @@ class TestLockfile:
                 len(default_profile.bindings) == 1
             )  # Only local ollama alias without hardcoded models
             # Verify the local alias uses the correct model
-            local_binding = next(
-                (b for b in default_profile.bindings if b.alias == "local"), None
-            )
+            local_binding = next((b for b in default_profile.bindings if b.alias == "local"), None)
             assert local_binding is not None
             assert local_binding.model == "llama3:latest"
 
@@ -335,9 +333,7 @@ class TestAliasBinding:
 
     def test_alias_binding_creation(self):
         """Test creating an alias binding."""
-        binding = AliasBinding(
-            alias="summarizer", provider="openai", model="gpt-3.5-turbo"
-        )
+        binding = AliasBinding(alias="summarizer", provider="openai", model="gpt-3.5-turbo")
 
         assert binding.alias == "summarizer"
         assert binding.provider == "openai"
@@ -356,9 +352,7 @@ class TestAliasBinding:
 
     def test_from_model_ref(self):
         """Test creating binding from model reference."""
-        binding = AliasBinding.from_model_ref(
-            "test_alias", "anthropic:claude-3-opus-20240229"
-        )
+        binding = AliasBinding.from_model_ref("test_alias", "anthropic:claude-3-opus-20240229")
 
         assert binding.alias == "test_alias"
         assert binding.provider == "anthropic"
@@ -368,9 +362,7 @@ class TestAliasBinding:
     def test_from_model_ref_with_constraints(self):
         """Test creating binding from model ref with constraints."""
         constraints = {"temperature": 0.5}
-        binding = AliasBinding.from_model_ref(
-            "precise", "openai:gpt-4", constraints=constraints
-        )
+        binding = AliasBinding.from_model_ref("precise", "openai:gpt-4", constraints=constraints)
 
         assert binding.constraints == constraints
 

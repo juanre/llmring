@@ -7,8 +7,8 @@ including tool registration, LLM-compatible messaging, and intelligent tool usag
 
 import pytest
 
-from llmring.schemas import LLMResponse, Message
 from llmring.mcp.client.enhanced_llm import create_enhanced_llm
+from llmring.schemas import LLMResponse, Message
 
 
 # Test tool implementations
@@ -30,9 +30,7 @@ async def async_weather_lookup(location: str) -> dict:
         "Tokyo": {"temperature": "25°C", "condition": "Rainy"},
     }
 
-    return weather_data.get(
-        location, {"temperature": "Unknown", "condition": "Data not available"}
-    )
+    return weather_data.get(location, {"temperature": "Unknown", "condition": "Data not available"})
 
 
 def text_analyzer(text: str) -> dict:
@@ -43,9 +41,7 @@ def text_analyzer(text: str) -> dict:
         "character_count": len(text),
         "character_count_no_spaces": len(text.replace(" ", "")),
         "sentence_count": text.count(".") + text.count("!") + text.count("?"),
-        "average_word_length": sum(len(word) for word in words) / len(words)
-        if words
-        else 0,
+        "average_word_length": (sum(len(word) for word in words) / len(words) if words else 0),
     }
 
 
@@ -58,10 +54,10 @@ def failing_tool(input_data: str) -> str:
 def enhanced_llm():
     """Create an Enhanced LLM instance for testing."""
     import os
+
     # Get the lockfile path from the tests directory
     test_lockfile = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        'llmring.lock.json'
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "llmring.lock.json"
     )
     return create_enhanced_llm(
         llm_model="anthropic_fast",
@@ -117,9 +113,7 @@ def enhanced_llm_with_tools(enhanced_llm):
         description="Analyze text and provide statistics",
         parameters={
             "type": "object",
-            "properties": {
-                "text": {"type": "string", "description": "Text to analyze"}
-            },
+            "properties": {"text": {"type": "string", "description": "Text to analyze"}},
             "required": ["text"],
         },
         handler=text_analyzer,
@@ -144,9 +138,7 @@ class TestEnhancedLLMBasics:
 
     def test_create_enhanced_llm_function(self):
         """Test the create_enhanced_llm convenience function."""
-        enhanced_llm = create_enhanced_llm(
-            llm_model="openai_balanced", origin="test-module"
-        )
+        enhanced_llm = create_enhanced_llm(llm_model="openai_balanced", origin="test-module")
 
         assert enhanced_llm.llm_model == "openai_balanced"
         assert enhanced_llm.origin == "test-module"
@@ -411,15 +403,15 @@ class TestToolExecution:
             )
 
             # At least one task should show evidence of being addressed
-            assert calculation_evidence or weather_evidence or text_evidence, (
-                f"Response doesn't show evidence of addressing any task: {response.content[:200]}"
-            )
+            assert (
+                calculation_evidence or weather_evidence or text_evidence
+            ), f"Response doesn't show evidence of addressing any task: {response.content[:200]}"
         else:
             # If no content, check if tool_calls were made at least
             # This is still a valid test case - the LLM tried to use tools
-            assert response.usage is not None, (
-                "Response should have usage information even if content is empty"
-            )
+            assert (
+                response.usage is not None
+            ), "Response should have usage information even if content is empty"
 
 
 class TestErrorHandling:
@@ -517,13 +509,15 @@ class TestModuleIntegrationPattern:
         class TestModule:
             def __init__(self):
                 import os
+
                 test_lockfile = os.path.join(
                     os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                    'llmring.lock.json'
+                    "llmring.lock.json",
                 )
                 self.llm = create_enhanced_llm(
-                    origin="test-module", user_id="module-user",
-                    lockfile_path=test_lockfile
+                    origin="test-module",
+                    user_id="module-user",
+                    lockfile_path=test_lockfile,
                 )
                 self._register_tools()
 

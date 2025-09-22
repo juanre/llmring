@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, Optional, Union, Tuple
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, Union
 
 from llmring.base import BaseLLMProvider
 from llmring.exceptions import ProviderNotFoundError
@@ -116,9 +116,7 @@ class LLMRing:
         except Exception as e:
             logger.error(f"Failed to initialize Ollama provider: {e}")
 
-        logger.info(
-            f"Initialized {len(self.providers)} providers: {list(self.providers.keys())}"
-        )
+        logger.info(f"Initialized {len(self.providers)} providers: {list(self.providers.keys())}")
 
     def register_provider(self, provider_type: str, **kwargs):
         """
@@ -141,7 +139,7 @@ class LLMRing:
             raise ProviderNotFoundError(f"Unknown provider type: {provider_type}")
 
         # Set the registry client to use the same one as the service
-        if hasattr(provider, '_registry_client'):
+        if hasattr(provider, "_registry_client"):
             provider._registry_client = self.registry
 
         self.providers[provider_type] = provider
@@ -208,8 +206,11 @@ class LLMRing:
         if cache_key in self._alias_cache:
             cached_value, cached_time = self._alias_cache[cache_key]
             import time
+
             if time.time() - cached_time < self._alias_cache_ttl:
-                logger.debug(f"Using cached resolution for alias '{alias_or_model}': '{cached_value}'")
+                logger.debug(
+                    f"Using cached resolution for alias '{alias_or_model}': '{cached_value}'"
+                )
                 return cached_value
             else:
                 # Cache entry expired, remove it
@@ -282,7 +283,7 @@ class LLMRing:
             if provider_type in profile_config.registry_versions:
                 pinned_version = profile_config.registry_versions[provider_type]
                 # Set the pinned version on the provider's registry client
-                if hasattr(provider, '_registry_client') and provider._registry_client:
+                if hasattr(provider, "_registry_client") and provider._registry_client:
                     # Store the pinned version for this validation
                     provider._registry_client._pinned_version = pinned_version
 
@@ -377,16 +378,12 @@ class LLMRing:
 
                 # Determine profile used
                 profile_name = (
-                    profile
-                    or os.getenv("LLMRING_PROFILE")
-                    or self.lockfile.default_profile
+                    profile or os.getenv("LLMRING_PROFILE") or self.lockfile.default_profile
                 )
 
                 # Generate receipt
                 receipt = self.receipt_generator.generate_receipt(
-                    alias=(
-                        original_alias if ":" not in original_alias else "direct_model"
-                    ),
+                    alias=(original_alias if ":" not in original_alias else "direct_model"),
                     profile=profile_name,
                     lock_digest=lock_digest,
                     provider=provider_type,
@@ -483,16 +480,12 @@ class LLMRing:
 
                 # Determine profile used
                 profile_name = (
-                    profile
-                    or os.getenv("LLMRING_PROFILE")
-                    or self.lockfile.default_profile
+                    profile or os.getenv("LLMRING_PROFILE") or self.lockfile.default_profile
                 )
 
                 # Generate receipt
                 receipt = self.receipt_generator.generate_receipt(
-                    alias=(
-                        original_alias if ":" not in original_alias else "direct_model"
-                    ),
+                    alias=(original_alias if ":" not in original_alias else "direct_model"),
                     profile=profile_name,
                     lock_digest=lock_digest,
                     provider=provider_type,
@@ -630,14 +623,11 @@ class LLMRing:
         lockfile_path = Path("llmring.lock")
 
         if lockfile_path.exists() and not force:
-            raise FileExistsError(
-                "Lockfile already exists. Use force=True to overwrite."
-            )
+            raise FileExistsError("Lockfile already exists. Use force=True to overwrite.")
 
         self.lockfile = Lockfile.create_default()
         self.lockfile.save(lockfile_path)
         logger.info(f"Created lockfile at {lockfile_path}")
-
 
     async def get_model_info(self, model: str) -> Dict[str, Any]:
         """
@@ -815,9 +805,7 @@ class LLMRing:
                 non_null_types = [t for t in node_type if t != "null"]
                 if len(non_null_types) == 1:
                     result["type"] = non_null_types[0]
-                    notes.append(
-                        f"{path or '<root>'}: removed 'null' from union type {node_type}"
-                    )
+                    notes.append(f"{path or '<root>'}: removed 'null' from union type {node_type}")
                 elif len(non_null_types) == 0:
                     # Only null provided; fallback to string
                     result["type"] = "string"
@@ -835,7 +823,19 @@ class LLMRing:
 
             # Copy supported basic fields cautiously
             # Preserve description/title/default/enum when present
-            for key in ["title", "description", "default", "enum", "const", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"]:
+            for key in [
+                "title",
+                "description",
+                "default",
+                "enum",
+                "const",
+                "minimum",
+                "maximum",
+                "minLength",
+                "maxLength",
+                "minItems",
+                "maxItems",
+            ]:
                 if key in node:
                     result[key] = node[key]
 
@@ -858,9 +858,7 @@ class LLMRing:
                 if key in node:
                     removed_keywords.append(key)
             if removed_keywords:
-                notes.append(
-                    f"{path or '<root>'}: removed unsupported keywords {removed_keywords}"
-                )
+                notes.append(f"{path or '<root>'}: removed unsupported keywords {removed_keywords}")
 
             # Object handling
             effective_type = result.get("type") or node.get("type")
@@ -871,7 +869,8 @@ class LLMRing:
                     norm_props: Dict[str, Any] = {}
                     for prop_name, prop_schema in properties.items():
                         norm_props[prop_name] = normalize(
-                            prop_schema, f"{path + '.' if path else ''}properties.{prop_name}"
+                            prop_schema,
+                            f"{path + '.' if path else ''}properties.{prop_name}",
                         )
                     result["properties"] = norm_props
 
@@ -907,9 +906,7 @@ class LLMRing:
         import json
 
         # Only process if request was adapted
-        if not request.metadata or not request.metadata.get(
-            "_structured_output_adapted"
-        ):
+        if not request.metadata or not request.metadata.get("_structured_output_adapted"):
             return response
 
         original_schema = request.metadata.get("_original_schema", {})
@@ -922,9 +919,7 @@ class LLMRing:
                     response.parsed = parsed_data
 
                     # Validate against schema if strict mode
-                    if request.response_format and request.response_format.get(
-                        "strict"
-                    ):
+                    if request.response_format and request.response_format.get("strict"):
                         self._validate_json_schema(parsed_data, original_schema)
 
                 except json.JSONDecodeError:
@@ -946,9 +941,7 @@ class LLMRing:
                         response.parsed = parsed_data
 
                         # Validate against schema if strict mode
-                        if request.response_format and request.response_format.get(
-                            "strict"
-                        ):
+                        if request.response_format and request.response_format.get("strict"):
                             self._validate_json_schema(parsed_data, original_schema)
 
                         break
@@ -960,9 +953,7 @@ class LLMRing:
                     response.parsed = parsed_data
 
                     # Validate against schema if strict mode
-                    if request.response_format and request.response_format.get(
-                        "strict"
-                    ):
+                    if request.response_format and request.response_format.get("strict"):
                         self._validate_json_schema(parsed_data, original_schema)
 
                 except json.JSONDecodeError:
@@ -972,9 +963,7 @@ class LLMRing:
                         and request.response_format.get("strict")
                         and request.extra_params.get("retry_on_json_failure", True)
                     ):
-                        logger.info(
-                            f"JSON parsing failed for {provider_type}, attempting repair"
-                        )
+                        logger.info(f"JSON parsing failed for {provider_type}, attempting repair")
 
                         # Single retry with repair prompt
                         from copy import deepcopy
@@ -984,9 +973,7 @@ class LLMRing:
                         repair_request = deepcopy(request)
                         repair_prompt = f"The previous response was not valid JSON. Please provide ONLY valid JSON matching this schema:\n{json.dumps(original_schema, indent=2)}\n\nOriginal content to fix:\n{response.content}"
 
-                        repair_request.messages = [
-                            Message(role="user", content=repair_prompt)
-                        ]
+                        repair_request.messages = [Message(role="user", content=repair_prompt)]
                         repair_request.metadata["_retry_attempt"] = True
 
                         try:
@@ -1010,30 +997,20 @@ class LLMRing:
                                 repaired_data = json.loads(repair_response.content)
                                 response.content = repair_response.content
                                 response.parsed = repaired_data
-                                self._validate_json_schema(
-                                    repaired_data, original_schema
-                                )
-                                logger.info(
-                                    f"JSON repair successful for {provider_type}"
-                                )
+                                self._validate_json_schema(repaired_data, original_schema)
+                                logger.info(f"JSON repair successful for {provider_type}")
 
                         except Exception as repair_error:
-                            logger.warning(
-                                f"JSON repair attempt failed: {repair_error}"
-                            )
+                            logger.warning(f"JSON repair attempt failed: {repair_error}")
                     else:
-                        logger.warning(
-                            f"Failed to parse JSON from {provider_type} response"
-                        )
+                        logger.warning(f"Failed to parse JSON from {provider_type} response")
 
         except Exception as e:
             logger.warning(f"Structured output post-processing failed: {e}")
 
         return response
 
-    def _validate_json_schema(
-        self, data: Dict[str, Any], schema: Dict[str, Any]
-    ) -> None:
+    def _validate_json_schema(self, data: Dict[str, Any], schema: Dict[str, Any]) -> None:
         """
         Validate data against JSON schema.
 
@@ -1134,9 +1111,7 @@ class LLMRing:
                     msg_dict["content"] = str(message.content)
                 message_dicts.append(msg_dict)
 
-            estimated_input_tokens = count_tokens(
-                message_dicts, provider_type, model_name
-            )
+            estimated_input_tokens = count_tokens(message_dicts, provider_type, model_name)
 
         # Check input limit
         if estimated_input_tokens > registry_model.max_input_tokens:
@@ -1155,9 +1130,7 @@ class LLMRing:
 
         return None
 
-    async def calculate_cost(
-        self, response: "LLMResponse"
-    ) -> Optional[Dict[str, float]]:
+    async def calculate_cost(self, response: "LLMResponse") -> Optional[Dict[str, float]]:
         """
         Calculate the cost of an API call from the response.
 
@@ -1190,9 +1163,7 @@ class LLMRing:
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
 
-        input_cost = (
-            prompt_tokens / 1_000_000
-        ) * registry_model.dollars_per_million_tokens_input
+        input_cost = (prompt_tokens / 1_000_000) * registry_model.dollars_per_million_tokens_input
         output_cost = (
             completion_tokens / 1_000_000
         ) * registry_model.dollars_per_million_tokens_output
@@ -1248,5 +1219,5 @@ class LLMRing:
         self.registry.clear_cache()
         # Close all providers to clean up httpx clients
         for provider in self.providers.values():
-            if hasattr(provider, 'aclose'):
+            if hasattr(provider, "aclose"):
                 await provider.aclose()

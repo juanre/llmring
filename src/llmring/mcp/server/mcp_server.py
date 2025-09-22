@@ -14,11 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from llmring.mcp.server.interfaces import AuthProvider, MCPMiddleware, StorageProvider
 from llmring.mcp.server.protocol import JSONRPCError, JSONRPCRouter
 from llmring.mcp.server.protocol.handlers import ProtocolError, ProtocolHandlers
-from llmring.mcp.server.registries import (
-    FunctionRegistry,
-    PromptRegistry,
-    ResourceRegistry,
-)
+from llmring.mcp.server.registries import FunctionRegistry, PromptRegistry, ResourceRegistry
 from llmring.mcp.server.transport.base import Transport
 
 logger = logging.getLogger(__name__)
@@ -314,9 +310,7 @@ class MCPServer:
         except ProtocolError as e:
             raise JSONRPCError(e.code, e.message, e.data)
 
-    async def _handle_initialized(
-        self, params: Dict[str, Any], context: SimpleNamespace
-    ) -> None:
+    async def _handle_initialized(self, params: Dict[str, Any], context: SimpleNamespace) -> None:
         """Handle initialized notification."""
         await self.handlers.handle_initialized(params, context)
 
@@ -342,8 +336,7 @@ class MCPServer:
                 {
                     "name": name,
                     "description": self.function_registry.get_description(name) or "",
-                    "inputSchema": self.function_registry.get_schema(name)
-                    or {"type": "object"},
+                    "inputSchema": self.function_registry.get_schema(name) or {"type": "object"},
                 }
             )
 
@@ -361,15 +354,11 @@ class MCPServer:
         try:
             tool_name = params.get("name")
             if not tool_name:
-                raise ProtocolError(
-                    JSONRPCError.INVALID_PARAMS, "Tool name is required"
-                )
+                raise ProtocolError(JSONRPCError.INVALID_PARAMS, "Tool name is required")
 
             func = self.function_registry.get_function(tool_name)
             if not func:
-                raise ProtocolError(
-                    JSONRPCError.INVALID_PARAMS, f"Tool not found: {tool_name}"
-                )
+                raise ProtocolError(JSONRPCError.INVALID_PARAMS, f"Tool not found: {tool_name}")
 
             # Get tool schema and validate arguments
             tool_args = params.get("arguments", {})
@@ -444,17 +433,13 @@ class MCPServer:
         try:
             uri = params.get("uri")
             if not uri:
-                raise ProtocolError(
-                    JSONRPCError.INVALID_PARAMS, "Resource URI is required"
-                )
+                raise ProtocolError(JSONRPCError.INVALID_PARAMS, "Resource URI is required")
 
             content = await self.resource_registry.read_resource(uri)
             info = self.resource_registry.get_resource_info(uri)
 
             if not info:
-                raise ProtocolError(
-                    JSONRPCError.INVALID_PARAMS, f"Resource not found: {uri}"
-                )
+                raise ProtocolError(JSONRPCError.INVALID_PARAMS, f"Resource not found: {uri}")
 
             # Handle binary vs text
             import base64
@@ -464,9 +449,7 @@ class MCPServer:
                     "contents": [
                         {
                             "uri": uri,
-                            "mimeType": info.get(
-                                "mimeType", "application/octet-stream"
-                            ),
+                            "mimeType": info.get("mimeType", "application/octet-stream"),
                             "blob": base64.b64encode(content).decode("utf-8"),
                         }
                     ]
@@ -486,9 +469,7 @@ class MCPServer:
             raise
         except Exception as e:
             logger.error(f"Resource read error: {e}", exc_info=True)
-            raise ProtocolError(
-                JSONRPCError.INTERNAL_ERROR, f"Failed to read resource: {str(e)}"
-            )
+            raise ProtocolError(JSONRPCError.INTERNAL_ERROR, f"Failed to read resource: {str(e)}")
 
     async def _handle_prompts_list(
         self, params: Dict[str, Any], context: SimpleNamespace
@@ -523,9 +504,7 @@ class MCPServer:
         try:
             name = params.get("name")
             if not name:
-                raise ProtocolError(
-                    JSONRPCError.INVALID_PARAMS, "Prompt name is required"
-                )
+                raise ProtocolError(JSONRPCError.INVALID_PARAMS, "Prompt name is required")
 
             arguments = params.get("arguments", {})
             result = await self.prompt_registry.get_prompt(name, arguments)
@@ -536,9 +515,7 @@ class MCPServer:
             raise
         except Exception as e:
             logger.error(f"Prompt generation error: {e}", exc_info=True)
-            raise ProtocolError(
-                JSONRPCError.INTERNAL_ERROR, f"Failed to generate prompt: {str(e)}"
-            )
+            raise ProtocolError(JSONRPCError.INTERNAL_ERROR, f"Failed to generate prompt: {str(e)}")
 
     async def _handle_roots_list(
         self, params: Dict[str, Any], context: SimpleNamespace
@@ -559,9 +536,7 @@ class MCPServer:
             return {"roots": roots}
         except Exception as e:
             logger.error(f"Error listing roots: {e}")
-            raise ProtocolError(
-                JSONRPCError.INTERNAL_ERROR, f"Failed to list roots: {str(e)}"
-            )
+            raise ProtocolError(JSONRPCError.INTERNAL_ERROR, f"Failed to list roots: {str(e)}")
 
     async def _handle_logging_set_level(
         self, params: Dict[str, Any], context: SimpleNamespace
@@ -625,9 +600,7 @@ class MCPServer:
             mime_type: MIME type of the resource
             handler: Function to get resource content
         """
-        self.resource_registry.register_resource(
-            uri, name, description, mime_type, handler
-        )
+        self.resource_registry.register_resource(uri, name, description, mime_type, handler)
 
     def register_static_resource(
         self,
@@ -647,9 +620,7 @@ class MCPServer:
             content: Static content of the resource
             mime_type: MIME type of the resource
         """
-        self.resource_registry.register_static_resource(
-            uri, name, description, content, mime_type
-        )
+        self.resource_registry.register_static_resource(uri, name, description, content, mime_type)
 
     def register_prompt(
         self,
@@ -685,9 +656,7 @@ class MCPServer:
             content: Static content template
             arguments: List of argument definitions
         """
-        self.prompt_registry.register_static_prompt(
-            name, description, content, arguments
-        )
+        self.prompt_registry.register_static_prompt(name, description, content, arguments)
 
     def _validate_tool_arguments(
         self, arguments: Dict[str, Any], schema: Dict[str, Any]
@@ -728,9 +697,7 @@ class MCPServer:
 
         return None
 
-    def _validate_value(
-        self, value: Any, schema: Dict[str, Any], path: str
-    ) -> Optional[str]:
+    def _validate_value(self, value: Any, schema: Dict[str, Any], path: str) -> Optional[str]:
         """
         Validate a single value against a schema.
 
@@ -746,29 +713,19 @@ class MCPServer:
 
         if expected_type == "string":
             if not isinstance(value, str):
-                return (
-                    f"Parameter '{path}' must be a string, got {type(value).__name__}"
-                )
+                return f"Parameter '{path}' must be a string, got {type(value).__name__}"
         elif expected_type == "number":
             if not isinstance(value, (int, float)):
-                return (
-                    f"Parameter '{path}' must be a number, got {type(value).__name__}"
-                )
+                return f"Parameter '{path}' must be a number, got {type(value).__name__}"
         elif expected_type == "integer":
             if not isinstance(value, int):
-                return (
-                    f"Parameter '{path}' must be an integer, got {type(value).__name__}"
-                )
+                return f"Parameter '{path}' must be an integer, got {type(value).__name__}"
         elif expected_type == "boolean":
             if not isinstance(value, bool):
-                return (
-                    f"Parameter '{path}' must be a boolean, got {type(value).__name__}"
-                )
+                return f"Parameter '{path}' must be a boolean, got {type(value).__name__}"
         elif expected_type == "array":
             if not isinstance(value, list):
-                return (
-                    f"Parameter '{path}' must be an array, got {type(value).__name__}"
-                )
+                return f"Parameter '{path}' must be an array, got {type(value).__name__}"
             # Validate array items if schema is provided
             items_schema = schema.get("items")
             if items_schema:
@@ -778,9 +735,7 @@ class MCPServer:
                         return error
         elif expected_type == "object":
             if not isinstance(value, dict):
-                return (
-                    f"Parameter '{path}' must be an object, got {type(value).__name__}"
-                )
+                return f"Parameter '{path}' must be an object, got {type(value).__name__}"
             # Could add nested object validation here if needed
         elif expected_type == "null":
             if value is not None:

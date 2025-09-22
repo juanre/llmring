@@ -184,9 +184,7 @@ async def basic_mcp_server(mcp_server_factory):
         description="Echo the input message",
         input_schema={
             "type": "object",
-            "properties": {
-                "message": {"type": "string", "description": "Message to echo"}
-            },
+            "properties": {"message": {"type": "string", "description": "Message to echo"}},
             "required": ["message"],
         },
         handler=echo_handler,
@@ -415,13 +413,9 @@ def make_jsonrpc_request(
     return request
 
 
-def assert_jsonrpc_success(
-    response: dict[str, Any], request_id: str | None = None
-) -> Any:
+def assert_jsonrpc_success(response: dict[str, Any], request_id: str | None = None) -> Any:
     """Assert that a JSON-RPC response is successful and return the result."""
-    assert "error" not in response, (
-        f"Expected success but got error: {response.get('error')}"
-    )
+    assert "error" not in response, f"Expected success but got error: {response.get('error')}"
     assert "result" in response, "Missing result in response"
 
     if request_id is not None:
@@ -440,9 +434,9 @@ def assert_jsonrpc_error(
     error = response["error"]
 
     if expected_code is not None:
-        assert error.get("code") == expected_code, (
-            f"Expected error code {expected_code} but got {error.get('code')}"
-        )
+        assert (
+            error.get("code") == expected_code
+        ), f"Expected error code {expected_code} but got {error.get('code')}"
 
     return error
 

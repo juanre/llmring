@@ -8,7 +8,6 @@ and Ollama (best effort).
 
 import pytest
 
-from llmring.service import LLMRing
 from llmring.schemas import LLMRequest, LLMResponse, Message
 
 
@@ -26,18 +25,14 @@ class TestUnifiedStructuredOutput:
             "type": "object",
             "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
             "required": ["name", "age"],
-            "additionalProperties": False
+            "additionalProperties": False,
         }
 
     @pytest.fixture
     def structured_request_template(self, person_schema):
         """Template for structured output requests."""
         return {
-            "messages": [
-                Message(
-                    role="user", content="Generate a person with name Alice, age 30"
-                )
-            ],
+            "messages": [Message(role="user", content="Generate a person with name Alice, age 30")],
             "max_tokens": 100,
             "temperature": 0.1,
             "response_format": {
@@ -52,9 +47,7 @@ class TestUnifiedStructuredOutput:
         reason="OpenAI not available",
     )
     @pytest.mark.asyncio
-    async def test_openai_unified_structured_output(
-        self, service, structured_request_template
-    ):
+    async def test_openai_unified_structured_output(self, service, structured_request_template):
         """Test OpenAI native JSON schema support via unified interface."""
         request = LLMRequest(model="openai_fast", **structured_request_template)
         response = await service.chat(request)
@@ -77,13 +70,9 @@ class TestUnifiedStructuredOutput:
         reason="Anthropic not available",
     )
     @pytest.mark.asyncio
-    async def test_anthropic_unified_structured_output(
-        self, service, structured_request_template
-    ):
+    async def test_anthropic_unified_structured_output(self, service, structured_request_template):
         """Test Anthropic tool injection approach via unified interface."""
-        request = LLMRequest(
-            model="anthropic_balanced", **structured_request_template
-        )
+        request = LLMRequest(model="anthropic_balanced", **structured_request_template)
         response = await service.chat(request)
 
         # Verify response structure
@@ -108,13 +97,9 @@ class TestUnifiedStructuredOutput:
         reason="Google GenAI not available",
     )
     @pytest.mark.asyncio
-    async def test_google_unified_structured_output(
-        self, service, structured_request_template
-    ):
+    async def test_google_unified_structured_output(self, service, structured_request_template):
         """Test Google function calling approach via unified interface."""
-        request = LLMRequest(
-            model="google_balanced", **structured_request_template
-        )
+        request = LLMRequest(model="google_balanced", **structured_request_template)
         response = await service.chat(request)
 
         # Verify response structure
@@ -135,9 +120,7 @@ class TestUnifiedStructuredOutput:
         print(f"✓ Google structured output: {response.parsed}")
 
     @pytest.mark.asyncio
-    async def test_ollama_unified_structured_output(
-        self, service, structured_request_template
-    ):
+    async def test_ollama_unified_structured_output(self, service, structured_request_template):
         """Test Ollama best-effort approach via unified interface."""
         request = LLMRequest(model="ollama_local", **structured_request_template)
 
@@ -203,13 +186,9 @@ class TestUnifiedStructuredOutput:
             for provider_name, parsed_data in results.items():
                 assert "name" in parsed_data, f"{provider_name} missing name field"
                 assert "age" in parsed_data, f"{provider_name} missing age field"
-                assert isinstance(parsed_data["age"], int), (
-                    f"{provider_name} age not integer"
-                )
+                assert isinstance(parsed_data["age"], int), f"{provider_name} age not integer"
 
-            print(
-                f"✓ Cross-provider consistency verified across {len(results)} providers"
-            )
+            print(f"✓ Cross-provider consistency verified across {len(results)} providers")
             print(f"Results: {results}")
 
     def test_schema_adaptation_logic(self, service):
@@ -232,9 +211,7 @@ class TestUnifiedStructuredOutput:
 
         # Should NOT adapt OpenAI
         adapted = asyncio.run(
-            service._apply_structured_output_adapter(
-                openai_request, "openai", mock_provider
-            )
+            service._apply_structured_output_adapter(openai_request, "openai", mock_provider)
         )
         assert adapted.tools is None, "OpenAI should not have tools injected"
 
@@ -249,9 +226,7 @@ class TestUnifiedStructuredOutput:
         )
 
         adapted = asyncio.run(
-            service._apply_structured_output_adapter(
-                anthropic_request, "anthropic", mock_provider
-            )
+            service._apply_structured_output_adapter(anthropic_request, "anthropic", mock_provider)
         )
         assert adapted.tools is not None, "Anthropic should have tools injected"
         assert len(adapted.tools) == 1

@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from llmring.schemas import LLMResponse
 from llmring.mcp.client.llm_client import AsyncMCPClientWithLLM, MCPClientWithLLM
+from llmring.schemas import LLMResponse
 
 
 class TestMCPClientWithLLM:
@@ -106,10 +106,7 @@ class TestMCPClientWithLLM:
         assert response["id"] == "test-123"
         assert "error" in response
         assert response["error"]["code"] == -32602
-        assert (
-            "role" in response["error"]["data"]
-            and "content" in response["error"]["data"]
-        )
+        assert "role" in response["error"]["data"] and "content" in response["error"]["data"]
 
     def test_missing_model(self):
         """Test sampling request without model and no default."""
@@ -288,9 +285,7 @@ class TestAsyncMCPClientWithLLM:
     async def test_async_sampling_disabled(self):
         """Test async sampling when disabled."""
         config = {"enabled": False}
-        client = AsyncMCPClientWithLLM(
-            "http://test.example.com", sampling_config=config
-        )
+        client = AsyncMCPClientWithLLM("http://test.example.com", sampling_config=config)
 
         request = {
             "method": "sampling/createMessage",

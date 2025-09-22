@@ -38,16 +38,12 @@ class RegistryModel(BaseModel):
     supports_vision: bool = Field(False, description="Supports image input")
     supports_function_calling: bool = Field(False, description="Supports functions")
     supports_json_mode: bool = Field(False, description="Supports JSON output")
-    supports_parallel_tool_calls: bool = Field(
-        False, description="Supports parallel tools"
-    )
+    supports_parallel_tool_calls: bool = Field(False, description="Supports parallel tools")
 
     # Status
     is_active: bool = Field(True, description="Model is currently available")
     added_date: Optional[datetime] = Field(None, description="When model was added")
-    deprecated_date: Optional[datetime] = Field(
-        None, description="When model was deprecated"
-    )
+    deprecated_date: Optional[datetime] = Field(None, description="When model was deprecated")
 
 
 class RegistryVersion(BaseModel):
@@ -56,9 +52,7 @@ class RegistryVersion(BaseModel):
     provider: str = Field(..., description="Provider name")
     version: int = Field(..., description="Version number")
     updated_at: datetime = Field(..., description="Last update time")
-    models: List[RegistryModel] = Field(
-        default_factory=list, description="Models in this version"
-    )
+    models: List[RegistryModel] = Field(default_factory=list, description="Models in this version")
 
 
 class RegistryClient:
@@ -68,9 +62,7 @@ class RegistryClient:
     CACHE_DIR = Path.home() / ".cache" / "llmring" / "registry"
     CACHE_DURATION_HOURS = 24
 
-    def __init__(
-        self, registry_url: Optional[str] = None, cache_dir: Optional[Path] = None
-    ):
+    def __init__(self, registry_url: Optional[str] = None, cache_dir: Optional[Path] = None):
         """
         Initialize the registry client.
 
@@ -85,7 +77,9 @@ class RegistryClient:
         # In-memory cache
         self._cache: Dict[str, Any] = {}
 
-    async def fetch_models(self, provider: str, version: Optional[int] = None) -> List[RegistryModel]:
+    async def fetch_models(
+        self, provider: str, version: Optional[int] = None
+    ) -> List[RegistryModel]:
         """
         Fetch models for a provider, either current or a specific version.
 
@@ -232,9 +226,7 @@ class RegistryClient:
                 return version_info
 
         except Exception as e:
-            raise Exception(
-                f"Failed to fetch registry version {version} for {provider}: {e}"
-            )
+            raise Exception(f"Failed to fetch registry version {version} for {provider}: {e}")
 
     async def get_current_version(self, provider: str) -> int:
         """
@@ -355,15 +347,11 @@ class RegistryClient:
 
                 # Validate required fields
                 if "model_name" not in model_data:
-                    print(
-                        f"Warning: Model '{model_key}' missing required field 'model_name'"
-                    )
+                    print(f"Warning: Model '{model_key}' missing required field 'model_name'")
                     continue
 
                 if not model_data.get("display_name"):
-                    print(
-                        f"Warning: Model '{model_key}' missing required field 'display_name'"
-                    )
+                    print(f"Warning: Model '{model_key}' missing required field 'display_name'")
                     continue
 
                 model = RegistryModel(**model_data)
@@ -398,7 +386,9 @@ class RegistryClient:
         for cache_file in self.cache_dir.glob("*.json"):
             cache_file.unlink()
 
-    async def validate_model(self, provider: str, model_name: str, version: Optional[int] = None) -> bool:
+    async def validate_model(
+        self, provider: str, model_name: str, version: Optional[int] = None
+    ) -> bool:
         """
         Validate that a model exists in the registry.
 
@@ -412,7 +402,7 @@ class RegistryClient:
         """
         try:
             # Use pinned version if set as an attribute (set by service)
-            if version is None and hasattr(self, '_pinned_version'):
+            if version is None and hasattr(self, "_pinned_version"):
                 version = self._pinned_version
 
             models = await self.fetch_models(provider, version)
@@ -424,6 +414,7 @@ class RegistryClient:
             # Fail-open per design: treat model as valid if registry is unavailable
             # but emit an explicit warning so callers can distinguish outage from success.
             import logging
+
             logging.getLogger(__name__).warning(
                 "Registry validate_model fail-open: provider=%s model=%s error=%s",
                 provider,

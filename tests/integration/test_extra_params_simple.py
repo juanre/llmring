@@ -4,8 +4,8 @@ Simple test of extra_params flow using real APIs.
 
 import pytest
 
-from llmring.service import LLMRing
 from llmring.schemas import LLMRequest, Message
+from llmring.service import LLMRing
 
 
 class TestExtraParamsSimple:
@@ -117,10 +117,11 @@ class TestExtraParamsSimple:
     def test_provider_signatures_have_extra_params(self):
         """Test that all providers have extra_params in their signatures."""
         import inspect
-        from llmring.providers.openai_api import OpenAIProvider
+
         from llmring.providers.anthropic_api import AnthropicProvider
         from llmring.providers.google_api import GoogleProvider
         from llmring.providers.ollama_api import OllamaProvider
+        from llmring.providers.openai_api import OpenAIProvider
 
         providers = [OpenAIProvider, AnthropicProvider, GoogleProvider, OllamaProvider]
 
@@ -128,21 +129,20 @@ class TestExtraParamsSimple:
             sig = inspect.signature(provider_class.chat)
             params = list(sig.parameters.keys())
 
-            assert "extra_params" in params, (
-                f"{provider_class.__name__} missing extra_params parameter"
-            )
+            assert (
+                "extra_params" in params
+            ), f"{provider_class.__name__} missing extra_params parameter"
 
             # Check default value
             extra_params_param = sig.parameters["extra_params"]
-            assert extra_params_param.default is None, (
-                f"{provider_class.__name__} extra_params should default to None"
-            )
+            assert (
+                extra_params_param.default is None
+            ), f"{provider_class.__name__} extra_params should default to None"
 
         print("✓ All providers have extra_params parameter with correct default")
 
     def test_service_passes_all_params(self):
         """Test that service.py is configured to pass all parameters including extra_params."""
-        from llmring.service import LLMRing
         import inspect
 
         # Read the service.py source to verify it passes extra_params
@@ -151,8 +151,8 @@ class TestExtraParamsSimple:
             service_source = f.read()
 
         # Check that extra_params is passed in provider.chat calls
-        assert "extra_params=request.extra_params" in service_source, (
-            "service.py should pass extra_params=request.extra_params to providers"
-        )
+        assert (
+            "extra_params=request.extra_params" in service_source
+        ), "service.py should pass extra_params=request.extra_params to providers"
 
         print("✓ Service.py properly configured to pass extra_params")

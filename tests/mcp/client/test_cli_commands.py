@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Test script for CLI commands."""
 
+import json
 import os
 import subprocess
 import sys
 import tempfile
-import json
 
 
 def run_command(cmd):
@@ -60,12 +60,12 @@ def test_query_command():
                             "alias": "test",
                             "provider": "openai",
                             "model": "gpt-4o-mini",
-                            "constraints": None
+                            "constraints": None,
                         }
                     ],
-                    "registry_versions": {}
+                    "registry_versions": {},
                 }
-            }
+            },
         }
 
         with open(lockfile_path, "w") as f:
@@ -124,9 +124,7 @@ def main():
     print("=" * 50)
 
     # Set environment to avoid hitting real services
-    os.environ["DATABASE_URL"] = (
-        "postgresql://postgres:postgres@localhost/mcp_client_test"
-    )
+    os.environ["DATABASE_URL"] = "postgresql://postgres:postgres@localhost/mcp_client_test"
 
     try:
         test_help_commands()
@@ -137,9 +135,7 @@ def main():
         print("\n" + "=" * 50)
         print("All CLI command tests completed!")
         print("Note: Some commands failed due to missing services, which is expected.")
-        print(
-            "The important thing is that all commands are recognized and parsed correctly."
-        )
+        print("The important thing is that all commands are recognized and parsed correctly.")
 
     except AssertionError as e:
         print(f"\nTest failed: {e}")

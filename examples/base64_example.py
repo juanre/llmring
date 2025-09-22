@@ -63,9 +63,7 @@ async def demo_base64_auto_detection():
     print(f"First 50 chars: {base64_data[:50]}...")
 
     # Use analyze_image with auto-detection
-    content = analyze_image(
-        base64_data, "What text is visible in this image?", mime_type
-    )
+    content = analyze_image(base64_data, "What text is visible in this image?", mime_type)
 
     print("\nGenerated content structure:")
     print(f"- {len(content)} parts")
@@ -173,9 +171,7 @@ async def demo_llm_integration():
         # Would normally call: analyze_image(base64_data, "Describe this image", mime_type)
 
         print("\nExample usage:")
-        print(
-            f"content = analyze_image(base64_data, 'Describe this image', '{mime_type}')"
-        )
+        print(f"content = analyze_image(base64_data, 'Describe this image', '{mime_type}')")
         print(
             "request = LLMRequest(messages=[Message(role='user', content=content)], model='balanced')"
         )

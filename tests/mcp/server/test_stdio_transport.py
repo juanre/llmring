@@ -1,7 +1,7 @@
 import asyncio
 import json
 from io import StringIO
-from unittest.mock import MagicMock, patch, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -66,7 +66,9 @@ class TestStdioTransport:
             def encode(self, o):
                 if isinstance(o, dict) and "params" in o:
                     # Force an unescaped newline
-                    return '{"jsonrpc":"2.0","method":"test","params":{"text":"line1\nline2"},"id":1}'
+                    return (
+                        '{"jsonrpc":"2.0","method":"test","params":{"text":"line1\nline2"},"id":1}'
+                    )
                 return super().encode(o)
 
         with patch("json.dumps", BadEncoder().encode):

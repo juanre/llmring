@@ -89,7 +89,6 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Registry client already initialized before mixins
 
-
         # Note: Model name mapping removed - rely on registry for model availability
         self._breaker = CircuitBreaker()
 
@@ -139,11 +138,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
                         # Create Google-style image part
                         parts.append(
-                            types.Part(
-                                inline_data=types.Blob(
-                                    mime_type=mime_type, data=image_data
-                                )
-                            )
+                            types.Part(inline_data=types.Blob(mime_type=mime_type, data=image_data))
                         )
                     except (ValueError, IndexError):
                         # Skip invalid image data
@@ -163,9 +158,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         # Create Google-style document part using inlineData
                         parts.append(
                             types.Part(
-                                inline_data=types.Blob(
-                                    mime_type=mime_type, data=document_data
-                                )
+                                inline_data=types.Blob(mime_type=mime_type, data=document_data)
                             )
                         )
                     except (ValueError, base64.binascii.Error):
@@ -173,7 +166,6 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         continue
 
         return parts if parts else str(content)
-
 
     async def get_default_model(self) -> str:
         """
@@ -203,7 +195,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     provider_name="google",
                     available_models=models,
                     cost_range=(0.05, 2.0),  # Google's typical range
-                    fallback_model=None  # No hardcoded fallback
+                    fallback_model=None,  # No hardcoded fallback
                 )
                 self.default_model = selected_model
                 self.log_info(f"Derived default model from registry: {selected_model}")
@@ -355,9 +347,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         try:
             registry_models = await self._registry_client.fetch_current_models("google")
             if not any(m.model_name == model and m.is_active for m in registry_models):
-                logger.warning(
-                    f"Model '{model}' not found in registry, proceeding anyway"
-                )
+                logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
         except Exception:
             pass  # Registry unavailable, continue anyway
 
@@ -565,11 +555,13 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         error_msg = self._extract_error_message(e)
                         if "api_key" in error_msg.lower() or "unauthorized" in error_msg.lower():
                             raise ProviderAuthenticationError(
-                                f"Google API authentication failed: {error_msg}", provider="google"
+                                f"Google API authentication failed: {error_msg}",
+                                provider="google",
                             ) from e
                         elif "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
                             raise ProviderRateLimitError(
-                                f"Google API rate limit exceeded: {error_msg}", provider="google"
+                                f"Google API rate limit exceeded: {error_msg}",
+                                provider="google",
                             ) from e
                         elif "timeout" in error_msg.lower():
                             raise ProviderTimeoutError(
@@ -577,10 +569,14 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                             ) from e
                         elif "cancelled" in error_msg.lower():
                             raise ProviderTimeoutError(
-                                "Google API request timed out or was cancelled", provider="google"
+                                "Google API request timed out or was cancelled",
+                                provider="google",
                             ) from e
-                        elif ("not found" in error_msg.lower() and "model" in error_msg.lower()) or "not supported" in error_msg.lower():
+                        elif (
+                            "not found" in error_msg.lower() and "model" in error_msg.lower()
+                        ) or "not supported" in error_msg.lower():
                             from llmring.exceptions import ModelNotFoundError
+
                             raise ModelNotFoundError(
                                 f"Google model not available: {error_msg}",
                                 provider="google",
@@ -649,6 +645,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         except Exception as e:
             # Already wrapped? Just re-raise
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
@@ -710,9 +707,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         try:
             registry_models = await self._registry_client.fetch_current_models("google")
             if not any(m.model_name == model and m.is_active for m in registry_models):
-                logger.warning(
-                    f"Model '{model}' not found in registry, proceeding anyway"
-                )
+                logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
         except Exception:
             pass  # Registry unavailable, continue anyway
 
@@ -818,10 +813,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         try:
             # For single user message, we can use generate_content directly
-            if (
-                len(conversation_messages) == 1
-                and conversation_messages[0].role == "user"
-            ):
+            if len(conversation_messages) == 1 and conversation_messages[0].role == "user":
                 msg = conversation_messages[0]
 
                 # Convert content to Google format
@@ -877,9 +869,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     # Convert history to google-genai format
                     for msg in history_messages:
                         if msg.role == "user":
-                            converted_content = self._convert_content_to_google_format(
-                                msg.content
-                            )
+                            converted_content = self._convert_content_to_google_format(msg.content)
                             if isinstance(converted_content, str):
                                 parts = [types.Part(text=converted_content)]
                             else:
@@ -887,9 +877,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                             history.append(types.Content(role="user", parts=parts))
                         elif msg.role == "assistant":
                             history.append(
-                                types.Content(
-                                    role="model", parts=[types.Part(text=msg.content)]
-                                )
+                                types.Content(role="model", parts=[types.Part(text=msg.content)])
                             )
 
                     # Create chat with history and send the current message
@@ -921,12 +909,11 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     response_text = response.text
                 else:
                     # No messages? This shouldn't happen but handle gracefully
-                    raise ProviderResponseError(
-                        "No messages provided for chat", provider="google"
-                    )
+                    raise ProviderResponseError("No messages provided for chat", provider="google")
         except Exception as e:
             # Already wrapped? Just re-raise
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
@@ -938,8 +925,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
             # Handle RetryError
             from llmring.net.retry import RetryError
+
             if isinstance(e, RetryError):
-                root = e.__cause__ if hasattr(e, '__cause__') else e
+                root = e.__cause__ if hasattr(e, "__cause__") else e
 
                 # Timeout after retries
                 if isinstance(root, asyncio.TimeoutError):
@@ -966,8 +954,11 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
             # Parse error message for categorization
             error_msg = self._extract_error_message(e)
-            if "model" in error_msg.lower() and ("not found" in error_msg.lower() or "not supported" in error_msg.lower()):
+            if "model" in error_msg.lower() and (
+                "not found" in error_msg.lower() or "not supported" in error_msg.lower()
+            ):
                 from llmring.exceptions import ModelNotFoundError
+
                 raise ModelNotFoundError(
                     f"Model '{model}' not available",
                     provider="google",
@@ -1025,9 +1016,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Simple usage tracking (google-genai doesn't provide detailed token counts)
         usage = {
-            "prompt_tokens": self.get_token_count(
-                "\n".join([str(m.content) for m in messages])
-            ),
+            "prompt_tokens": self.get_token_count("\n".join([str(m.content) for m in messages])),
             "completion_tokens": self.get_token_count(response_text or ""),
             "total_tokens": 0,  # Will be calculated below
         }
@@ -1074,9 +1063,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 _asyncio = None
 
             if (
-                (hasattr(_asyncio, "TimeoutError") and isinstance(e, _asyncio.TimeoutError))
-                or isinstance(e, TimeoutError)
-            ):
+                hasattr(_asyncio, "TimeoutError") and isinstance(e, _asyncio.TimeoutError)
+            ) or isinstance(e, TimeoutError):
                 return "Request timed out"
             if hasattr(_asyncio, "CancelledError") and isinstance(e, _asyncio.CancelledError):
                 return "Request was cancelled (likely due to timeout)"

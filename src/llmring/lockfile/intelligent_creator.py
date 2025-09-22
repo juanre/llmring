@@ -36,13 +36,11 @@ class IntelligentLockfileCreator:
             "user_needs": {},
             "registry_analysis": {},
             "recommendations": {},
-            "selected_aliases": {}
+            "selected_aliases": {},
         }
 
     async def create_lockfile_interactively(
-        self,
-        profile_name: str = "default",
-        max_cost_per_turn: float = 0.50
+        self, profile_name: str = "default", max_cost_per_turn: float = 0.50
     ) -> Lockfile:
         """
         Guide user through intelligent lockfile creation.
@@ -77,9 +75,10 @@ class IntelligentLockfileCreator:
         # Use our own API with "advisor" alias from bootstrap lockfile
         request = LLMRequest(
             model="advisor",  # Self-hosted: uses bootstrap lockfile
-            messages=[Message(
-                role="system",
-                content="""You are a registry analyst for LLMRing. Analyze the current state
+            messages=[
+                Message(
+                    role="system",
+                    content="""You are a registry analyst for LLMRing. Analyze the current state
                 of all provider registries to understand the model landscape.
 
                 Use the available tools to:
@@ -90,11 +89,13 @@ class IntelligentLockfileCreator:
                    - Fastest response (low latency)
                    - Best specialized capabilities (vision, function calling, etc.)
 
-                Respond with structured analysis in JSON format with your findings."""
-            ), Message(
-                role="user",
-                content="Analyze the current registry and categorize the best available models"
-            )],
+                Respond with structured analysis in JSON format with your findings.""",
+                ),
+                Message(
+                    role="user",
+                    content="Analyze the current registry and categorize the best available models",
+                ),
+            ],
             tools=self._get_registry_tools(),
             response_format={
                 "type": "json_schema",
@@ -109,8 +110,8 @@ class IntelligentLockfileCreator:
                                 "properties": {
                                     "openai": {"type": "object"},
                                     "anthropic": {"type": "object"},
-                                    "google": {"type": "object"}
-                                }
+                                    "google": {"type": "object"},
+                                },
                             },
                             "recommendations": {
                                 "type": "object",
@@ -118,15 +119,15 @@ class IntelligentLockfileCreator:
                                     "most_capable": {"type": "string"},
                                     "most_cost_effective": {"type": "string"},
                                     "fastest": {"type": "string"},
-                                    "best_vision": {"type": "string"}
-                                }
-                            }
+                                    "best_vision": {"type": "string"},
+                                },
+                            },
                         },
-                        "required": ["analysis_date", "providers", "recommendations"]
-                    }
+                        "required": ["analysis_date", "providers", "recommendations"],
+                    },
                 },
-                "strict": True
-            }
+                "strict": True,
+            },
         )
 
         response = await self.service.chat(request)
@@ -135,9 +136,10 @@ class IntelligentLockfileCreator:
     async def _discover_user_needs(self):
         """Interactive conversation to understand user requirements."""
         # Multi-turn conversation using advisor
-        conversation_messages = [Message(
-            role="system",
-            content=f"""You are an expert LLM configuration advisor. Help users create
+        conversation_messages = [
+            Message(
+                role="system",
+                content=f"""You are an expert LLM configuration advisor. Help users create
             optimal lockfile configurations based on their specific needs.
 
             Current registry analysis: {json.dumps(self.conversation_state['registry_analysis'], indent=2)}
@@ -149,15 +151,16 @@ class IntelligentLockfileCreator:
             4. Determine optimal alias configuration for their workflow
 
             Ask 2-3 targeted questions total. Be conversational and helpful.
-            End with a summary of their needs in structured format."""
-        )]
+            End with a summary of their needs in structured format.""",
+            )
+        ]
 
         # Simulated conversation for now (in CLI implementation, this would be interactive)
         # For the design, assume user has mixed use cases with balanced budget
         user_responses = [
             "I need LLMs for data analysis, some creative writing, and general Q&A. Budget is important but I want good quality.",
             "I'd like vision capabilities for document processing, and I do expect moderate usage - maybe 100-200 requests per month.",
-            "I prefer reliable, established models over cutting-edge experimental ones."
+            "I prefer reliable, established models over cutting-edge experimental ones.",
         ]
 
         for user_response in user_responses:
@@ -167,27 +170,33 @@ class IntelligentLockfileCreator:
                 model="advisor",
                 messages=conversation_messages,
                 max_tokens=300,
-                temperature=0.7
+                temperature=0.7,
             )
 
             response = await self.service.chat(request)
             conversation_messages.append(Message(role="assistant", content=response.content))
 
         self.conversation_state["user_needs"] = {
-            "use_cases": ["data_analysis", "creative_writing", "general_qa", "document_processing"],
+            "use_cases": [
+                "data_analysis",
+                "creative_writing",
+                "general_qa",
+                "document_processing",
+            ],
             "budget_preference": "balanced",
             "required_capabilities": ["vision", "function_calling"],
             "usage_volume": "moderate",
-            "stability_preference": "established"
+            "stability_preference": "established",
         }
 
     async def _generate_recommendations(self):
         """Generate structured alias recommendations."""
         request = LLMRequest(
             model="advisor",
-            messages=[Message(
-                role="system",
-                content=f"""You are creating optimal alias recommendations for a lockfile.
+            messages=[
+                Message(
+                    role="system",
+                    content=f"""You are creating optimal alias recommendations for a lockfile.
 
                 Registry Analysis: {json.dumps(self.conversation_state['registry_analysis'], indent=2)}
                 User Needs: {json.dumps(self.conversation_state['user_needs'], indent=2)}
@@ -195,11 +204,13 @@ class IntelligentLockfileCreator:
                 Create 5-6 semantic aliases that match the user's workflow.
                 For each alias, recommend the optimal model from the registry analysis.
 
-                Respond with structured recommendations."""
-            ), Message(
-                role="user",
-                content="Generate optimal alias configuration based on the analysis and user needs"
-            )],
+                Respond with structured recommendations.""",
+                ),
+                Message(
+                    role="user",
+                    content="Generate optimal alias configuration based on the analysis and user needs",
+                ),
+            ],
             response_format={
                 "type": "json_schema",
                 "json_schema": {
@@ -216,20 +227,28 @@ class IntelligentLockfileCreator:
                                         "provider": {"type": "string"},
                                         "model": {"type": "string"},
                                         "rationale": {"type": "string"},
-                                        "use_cases": {"type": "array", "items": {"type": "string"}},
-                                        "estimated_cost_per_request": {"type": "number"}
+                                        "use_cases": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                        "estimated_cost_per_request": {"type": "number"},
                                     },
-                                    "required": ["alias", "provider", "model", "rationale"]
-                                }
+                                    "required": [
+                                        "alias",
+                                        "provider",
+                                        "model",
+                                        "rationale",
+                                    ],
+                                },
                             },
                             "total_estimated_monthly_cost": {"type": "number"},
-                            "coverage_analysis": {"type": "string"}
+                            "coverage_analysis": {"type": "string"},
                         },
-                        "required": ["aliases"]
-                    }
+                        "required": ["aliases"],
+                    },
                 },
-                "strict": True
-            }
+                "strict": True,
+            },
         )
 
         response = await self.service.chat(request)
@@ -249,7 +268,7 @@ class IntelligentLockfileCreator:
                 alias=alias_config["alias"],
                 provider=alias_config["provider"],
                 model=alias_config["model"],
-                constraints={}  # Could add temperature, max_tokens, etc.
+                constraints={},  # Could add temperature, max_tokens, etc.
             )
             profile.bindings.append(binding)
 
@@ -266,7 +285,7 @@ class IntelligentLockfileCreator:
                 for alias_config in recommendations["aliases"]
             },
             "estimated_monthly_cost": recommendations.get("total_estimated_monthly_cost"),
-            "coverage_analysis": recommendations.get("coverage_analysis")
+            "coverage_analysis": recommendations.get("coverage_analysis"),
         }
 
         return lockfile
@@ -284,12 +303,12 @@ class IntelligentLockfileCreator:
                         "properties": {
                             "provider": {
                                 "type": "string",
-                                "enum": ["openai", "anthropic", "google", "ollama"]
+                                "enum": ["openai", "anthropic", "google", "ollama"],
                             }
                         },
-                        "required": ["provider"]
-                    }
-                }
+                        "required": ["provider"],
+                    },
+                },
             },
             {
                 "type": "function",
@@ -299,21 +318,18 @@ class IntelligentLockfileCreator:
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "model_refs": {
-                                "type": "array",
-                                "items": {"type": "string"}
-                            }
+                            "model_refs": {"type": "array", "items": {"type": "string"}}
                         },
-                        "required": ["model_refs"]
-                    }
-                }
-            }
+                        "required": ["model_refs"],
+                    },
+                },
+            },
         ]
 
 
 async def create_intelligent_lockfile(
     output_path: str = "llmring.lock",
-    bootstrap_lockfile: str = "bootstrap.llmring.lock"
+    bootstrap_lockfile: str = "bootstrap.llmring.lock",
 ) -> bool:
     """
     Create an intelligent lockfile using the conversation system.
@@ -336,7 +352,9 @@ async def create_intelligent_lockfile(
         print("📊 Configuration Summary:")
 
         for alias_config in creator.conversation_state["recommendations"]["aliases"]:
-            print(f"  {alias_config['alias']:<12} → {alias_config['provider']}:{alias_config['model']}")
+            print(
+                f"  {alias_config['alias']:<12} → {alias_config['provider']}:{alias_config['model']}"
+            )
             print(f"               Rationale: {alias_config['rationale']}")
 
         return True

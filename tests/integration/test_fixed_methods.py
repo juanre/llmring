@@ -7,14 +7,15 @@ These tests verify that:
 3. Return types are correct
 """
 
-import pytest
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from llmring.mcp.client.stateless_engine import StatelessChatEngine, ChatRequest
+import pytest
+
 from llmring.mcp.client.mcp_client import MCPClient
-from llmring.mcp.client.models.schemas import ToolCall, ToolResult
-from llmring.schemas import Message, LLMResponse
+from llmring.mcp.client.models.schemas import ToolCall
+from llmring.mcp.client.stateless_engine import ChatRequest, StatelessChatEngine
+from llmring.schemas import LLMResponse, Message
 
 
 class TestFixedMethods:
@@ -24,6 +25,7 @@ class TestFixedMethods:
     def chat_engine(self):
         """Create a chat engine for testing."""
         from llmring.service import LLMRing
+
         llm_service = LLMRing(origin="test")
         return StatelessChatEngine(llmring=llm_service)
 
@@ -34,11 +36,11 @@ class TestFixedMethods:
         client = MCPClient(transport=MagicMock())
 
         # Verify it has call_tool method
-        assert hasattr(client, 'call_tool')
-        assert callable(getattr(client, 'call_tool'))
+        assert hasattr(client, "call_tool")
+        assert callable(getattr(client, "call_tool"))
 
         # Verify it does NOT have execute_tool
-        assert not hasattr(client, 'execute_tool')
+        assert not hasattr(client, "execute_tool")
 
     @pytest.mark.asyncio
     async def test_conversation_manager_get_conversation_not_load(self, chat_engine):
@@ -46,11 +48,11 @@ class TestFixedMethods:
         conv_manager = chat_engine.conversation_manager
 
         # Verify it has get_conversation
-        assert hasattr(conv_manager, 'get_conversation')
-        assert callable(getattr(conv_manager, 'get_conversation'))
+        assert hasattr(conv_manager, "get_conversation")
+        assert callable(getattr(conv_manager, "get_conversation"))
 
         # Verify it does NOT have load_conversation
-        assert not hasattr(conv_manager, 'load_conversation')
+        assert not hasattr(conv_manager, "load_conversation")
 
     @pytest.mark.asyncio
     async def test_conversation_manager_add_message_signature(self, chat_engine):
@@ -66,7 +68,7 @@ class TestFixedMethods:
                 role="user",
                 content="Test content",
                 token_count=10,
-                metadata={"test": "data"}
+                metadata={"test": "data"},
             )
         except Exception as e:
             # Connection errors are OK, we're testing the signature
@@ -80,13 +82,13 @@ class TestFixedMethods:
         conv_manager = chat_engine.conversation_manager
 
         # Verify it does NOT have add_tool_result
-        assert not hasattr(conv_manager, 'add_tool_result')
+        assert not hasattr(conv_manager, "add_tool_result")
 
     @pytest.mark.asyncio
     async def test_execute_tool_uses_call_tool(self, chat_engine):
         """Test that execute_tool method properly calls call_tool on MCPClient."""
-        from unittest.mock import AsyncMock
         import uuid
+        from unittest.mock import AsyncMock
 
         # Use a proper UUID for conversation_id
         conv_id = str(uuid.uuid4())
@@ -106,31 +108,23 @@ class TestFixedMethods:
         )
 
         # Mock add_message to avoid UUID conversion issues
-        chat_engine.conversation_manager.add_message = AsyncMock(
-            return_value="msg-id"
-        )
+        chat_engine.conversation_manager.add_message = AsyncMock(return_value="msg-id")
 
         # Mock _get_mcp_client to return our mock client
         chat_engine._get_mcp_client = AsyncMock(return_value=mock_mcp_client)
 
         # Create a tool call
-        tool_call = ToolCall(
-            id="call_123",
-            tool_name="test_tool",
-            arguments={"param": "value"}
-        )
+        tool_call = ToolCall(id="call_123", tool_name="test_tool", arguments={"param": "value"})
 
         # Execute the tool
         result = await chat_engine.execute_tool(
             conversation_id=conv_id,
             tool_call=tool_call,
-            auth_context={"user_id": "test"}
+            auth_context={"user_id": "test"},
         )
 
         # Verify call_tool was called (not execute_tool)
-        mock_mcp_client.call_tool.assert_called_once_with(
-            "test_tool", {"param": "value"}
-        )
+        mock_mcp_client.call_tool.assert_called_once_with("test_tool", {"param": "value"})
 
     @pytest.mark.asyncio
     async def test_prepare_messages_returns_message_objects(self, chat_engine):
@@ -141,7 +135,7 @@ class TestFixedMethods:
             conversation_id="test",
             messages=[
                 Message(role="user", content="Hello"),
-                Message(role="assistant", content="Hi")
+                Message(role="assistant", content="Hi"),
             ],
             system_prompt="Be helpful",
             model="mcp_agent",
@@ -149,7 +143,7 @@ class TestFixedMethods:
             max_tokens=None,
             tools=None,
             auth_context={},
-            mcp_client=None
+            mcp_client=None,
         )
 
         messages = chat_engine._prepare_messages(context)
@@ -168,16 +162,12 @@ class TestFixedMethods:
     async def test_create_conversation_returns_id(self, chat_engine):
         """Test that create_conversation returns the conversation ID."""
         from unittest.mock import AsyncMock
+
         # Mock the conversation manager's create_conversation
         expected_id = str(uuid4())
-        chat_engine.conversation_manager.create_conversation = AsyncMock(
-            return_value=expected_id
-        )
+        chat_engine.conversation_manager.create_conversation = AsyncMock(return_value=expected_id)
 
-        request = ChatRequest(
-            message="Test",
-            save_to_db=True
-        )
+        request = ChatRequest(message="Test", save_to_db=True)
 
         # This should use the returned ID
         context = await chat_engine._create_context(request)
@@ -201,7 +191,7 @@ class TestFixedMethods:
             message="Test",
             tools=[{"name": "test_tool", "description": "A test tool"}],
             save_to_db=True,
-            auth_context={"user_id": "test-user-wrap"}
+            auth_context={"user_id": "test-user-wrap"},
         )
 
         await chat_engine._create_context(request)
@@ -216,15 +206,16 @@ class TestFixedMethods:
     @pytest.mark.asyncio
     async def test_llm_response_type_assertion(self, chat_engine):
         """Test that LLMResponse type assertion is in place."""
-        from llmring.mcp.client.stateless_engine import ProcessingContext
         from unittest.mock import AsyncMock
+
+        from llmring.mcp.client.stateless_engine import ProcessingContext
 
         # Mock the llmring.chat to return a proper LLMResponse
         mock_response = LLMResponse(
             content="Test response",
             model="test-model",
             usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
-            finish_reason="stop"
+            finish_reason="stop",
         )
 
         chat_engine.llmring.chat = AsyncMock(return_value=mock_response)
@@ -238,12 +229,13 @@ class TestFixedMethods:
             max_tokens=None,
             tools=None,
             auth_context={},
-            mcp_client=None
+            mcp_client=None,
         )
 
         # This should not raise an assertion error
-        response_message, tool_calls, tool_results, llm_response = \
+        response_message, tool_calls, tool_results, llm_response = (
             await chat_engine._process_with_llm(context)
+        )
 
         # Verify the response was processed correctly
         assert isinstance(response_message, Message)

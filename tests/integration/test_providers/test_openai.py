@@ -10,9 +10,9 @@ import os
 
 import pytest
 
+from llmring.exceptions import ModelNotFoundError, ProviderResponseError
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.schemas import LLMResponse, Message
-from llmring.exceptions import ModelNotFoundError, ProviderResponseError
 from tests.conftest_models import get_test_model
 
 
@@ -73,18 +73,22 @@ class TestOpenAIProviderIntegration:
     @pytest.mark.asyncio
     async def test_chat_with_temperature(self, provider):
         """Test chat with different temperature settings."""
-        messages = [
-            Message(role="user", content="Write a creative opening line for a story.")
-        ]
+        messages = [Message(role="user", content="Write a creative opening line for a story.")]
 
         # Test with low temperature (more deterministic)
         response_low = await provider.chat(
-            messages=messages, model=get_test_model("openai"), temperature=0.1, max_tokens=50
+            messages=messages,
+            model=get_test_model("openai"),
+            temperature=0.1,
+            max_tokens=50,
         )
 
         # Test with high temperature (more creative)
         response_high = await provider.chat(
-            messages=messages, model=get_test_model("openai"), temperature=0.9, max_tokens=50
+            messages=messages,
+            model=get_test_model("openai"),
+            temperature=0.9,
+            max_tokens=50,
         )
 
         assert isinstance(response_low, LLMResponse)
@@ -96,9 +100,7 @@ class TestOpenAIProviderIntegration:
     async def test_chat_with_max_tokens(self, provider):
         """Test chat with max_tokens limit."""
         messages = [
-            Message(
-                role="user", content="Write a long essay about artificial intelligence."
-            )
+            Message(role="user", content="Write a long essay about artificial intelligence.")
         ]
 
         response = await provider.chat(
@@ -159,9 +161,7 @@ class TestOpenAIProviderIntegration:
     @pytest.mark.asyncio
     async def test_chat_with_tools(self, provider):
         """Test chat with function calling."""
-        messages = [
-            Message(role="user", content="What's the weather like in San Francisco?")
-        ]
+        messages = [Message(role="user", content="What's the weather like in San Francisco?")]
 
         tools = [
             {
@@ -265,9 +265,7 @@ class TestOpenAIProviderIntegration:
         try:
             # Use the vision-capable test model from configuration
             vision_model = get_test_model("openai", "vision")
-            response = await provider.chat(
-                messages=messages, model=vision_model, max_tokens=100
-            )
+            response = await provider.chat(messages=messages, model=vision_model, max_tokens=100)
 
             assert isinstance(response, LLMResponse)
             assert len(response.content) > 0
@@ -432,10 +430,7 @@ startxref
         except Exception as e:
             # Handle potential API limitations
             error_str = str(e).lower()
-            if any(
-                term in error_str
-                for term in ["billing", "quota", "usage limit", "rate limit"]
-            ):
+            if any(term in error_str for term in ["billing", "quota", "usage limit", "rate limit"]):
                 pytest.skip(f"OpenAI API limit reached: {e}")
             elif "assistants" in error_str:
                 pytest.skip(f"Assistants API not available: {e}")

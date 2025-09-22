@@ -49,8 +49,8 @@ class RegistryAdvisorTools:
                         "supports_vision": model.supports_vision,
                         "supports_function_calling": model.supports_function_calling,
                         "supports_json_mode": model.supports_json_mode,
-                        "added_date": model.added_date.isoformat() if model.added_date else None,
-                        "is_active": model.is_active
+                        "added_date": (model.added_date.isoformat() if model.added_date else None),
+                        "is_active": model.is_active,
                     }
                     for model in active_models
                 ],
@@ -58,11 +58,19 @@ class RegistryAdvisorTools:
                     "has_vision_models": any(m.supports_vision for m in active_models),
                     "has_function_calling": any(m.supports_function_calling for m in active_models),
                     "has_json_mode": any(m.supports_json_mode for m in active_models),
-                    "cost_range": {
-                        "min_input_cost": min((m.dollars_per_million_tokens_input or 0) for m in active_models),
-                        "max_input_cost": max((m.dollars_per_million_tokens_input or 0) for m in active_models)
-                    } if active_models else None
-                }
+                    "cost_range": (
+                        {
+                            "min_input_cost": min(
+                                (m.dollars_per_million_tokens_input or 0) for m in active_models
+                            ),
+                            "max_input_cost": max(
+                                (m.dollars_per_million_tokens_input or 0) for m in active_models
+                            ),
+                        }
+                        if active_models
+                        else None
+                    ),
+                },
             }
 
         except Exception as e:
@@ -71,7 +79,7 @@ class RegistryAdvisorTools:
                 "provider": provider,
                 "error": str(e),
                 "total_active_models": 0,
-                "models": []
+                "models": [],
             }
 
     async def compare_models_by_cost(self, model_refs: List[str]) -> Dict[str, Any]:
@@ -100,18 +108,20 @@ class RegistryAdvisorTools:
                     # Typical request: 1K input, 200 output tokens
                     typical_request_cost = (input_cost * 1 / 1000) + (output_cost * 0.2 / 1000)
 
-                    comparisons.append({
-                        "model_ref": model_ref,
-                        "cost_per_million_input": input_cost,
-                        "cost_per_million_output": output_cost,
-                        "cost_per_typical_request": typical_request_cost,
-                        "max_context_tokens": model.max_input_tokens,
-                        "capabilities": {
-                            "vision": model.supports_vision,
-                            "function_calling": model.supports_function_calling,
-                            "json_mode": model.supports_json_mode
+                    comparisons.append(
+                        {
+                            "model_ref": model_ref,
+                            "cost_per_million_input": input_cost,
+                            "cost_per_million_output": output_cost,
+                            "cost_per_typical_request": typical_request_cost,
+                            "max_context_tokens": model.max_input_tokens,
+                            "capabilities": {
+                                "vision": model.supports_vision,
+                                "function_calling": model.supports_function_calling,
+                                "json_mode": model.supports_json_mode,
+                            },
                         }
-                    })
+                    )
 
             except Exception as e:
                 logger.warning(f"Failed to analyze model {model_ref}: {e}")
@@ -124,14 +134,14 @@ class RegistryAdvisorTools:
             "methodology": "Cost per typical request (1K input + 200 output tokens)",
             "comparisons": comparisons,
             "most_cost_effective": comparisons[0]["model_ref"] if comparisons else None,
-            "most_expensive": comparisons[-1]["model_ref"] if comparisons else None
+            "most_expensive": comparisons[-1]["model_ref"] if comparisons else None,
         }
 
     async def recommend_for_use_case(
         self,
         use_case: str,
         budget_preference: str = "balanced",
-        required_capabilities: Optional[List[str]] = None
+        required_capabilities: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Recommend models for specific use cases.
@@ -150,35 +160,35 @@ class RegistryAdvisorTools:
                 "reasoning_importance": "high",
                 "function_calling": True,
                 "json_mode": True,
-                "context_size": "large"
+                "context_size": "large",
             },
             "creative_writing": {
                 "reasoning_importance": "high",
                 "creativity": "high",
                 "context_size": "large",
-                "output_length": "long"
+                "output_length": "long",
             },
             "code_generation": {
                 "reasoning_importance": "high",
                 "function_calling": True,
                 "accuracy": "high",
-                "context_size": "large"
+                "context_size": "large",
             },
             "general_qa": {
                 "reasoning_importance": "medium",
                 "speed": "high",
-                "cost_sensitivity": "high"
+                "cost_sensitivity": "high",
             },
             "document_processing": {
                 "vision": True,
                 "reasoning_importance": "high",
-                "context_size": "very_large"
+                "context_size": "very_large",
             },
             "research": {
                 "reasoning_importance": "very_high",
                 "context_size": "very_large",
-                "accuracy": "high"
-            }
+                "accuracy": "high",
+            },
         }
 
         requirements = use_case_requirements.get(use_case, {})
@@ -201,12 +211,14 @@ class RegistryAdvisorTools:
         for provider, model in all_models:
             score = self._calculate_use_case_score(model, requirements, budget_preference)
             if score > 0:
-                recommendations.append({
-                    "model_ref": f"{provider}:{model.model_name}",
-                    "score": score,
-                    "reasoning": self._explain_recommendation(model, requirements, use_case),
-                    "estimated_cost": self._estimate_use_case_cost(model, use_case)
-                })
+                recommendations.append(
+                    {
+                        "model_ref": f"{provider}:{model.model_name}",
+                        "score": score,
+                        "reasoning": self._explain_recommendation(model, requirements, use_case),
+                        "estimated_cost": self._estimate_use_case_cost(model, use_case),
+                    }
+                )
 
         # Sort by score and return top recommendations
         recommendations.sort(key=lambda x: x["score"], reverse=True)
@@ -216,7 +228,7 @@ class RegistryAdvisorTools:
             "budget_preference": budget_preference,
             "requirements": requirements,
             "top_recommendations": recommendations[:3],
-            "analysis_date": datetime.now().isoformat()
+            "analysis_date": datetime.now().isoformat(),
         }
 
     def _calculate_use_case_score(
@@ -298,7 +310,7 @@ class RegistryAdvisorTools:
             "code_generation": (3000, 1500),  # Code context + generation
             "general_qa": (500, 200),  # Simple Q&A
             "document_processing": (10000, 1000),  # Large document analysis
-            "research": (8000, 2000)  # Research synthesis
+            "research": (8000, 2000),  # Research synthesis
         }
 
         input_tokens, output_tokens = patterns.get(use_case, (1000, 200))
@@ -326,7 +338,7 @@ async def tool_compare_models_by_cost(model_refs: List[str]) -> Dict[str, Any]:
 async def tool_recommend_for_use_case(
     use_case: str,
     budget_preference: str = "balanced",
-    required_capabilities: Optional[List[str]] = None
+    required_capabilities: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """MCP tool: Recommend models for use case."""
     return await registry_tools.recommend_for_use_case(

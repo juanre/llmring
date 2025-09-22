@@ -144,16 +144,12 @@ class TestImageContentCreation:
 
         result = create_image_content(url)
 
-        expected = [
-            {"type": "image_url", "image_url": {"url": "https://example.com/image.png"}}
-        ]
+        expected = [{"type": "image_url", "image_url": {"url": "https://example.com/image.png"}}]
         assert result == expected
 
     @patch("llmring.file_utils.validate_file_for_vision_api")
     @patch("llmring.file_utils.create_data_url")
-    def test_create_image_content_with_file_path(
-        self, mock_create_data_url, mock_validate
-    ):
+    def test_create_image_content_with_file_path(self, mock_create_data_url, mock_validate):
         """Test creating image content from file path."""
         mock_create_data_url.return_value = "data:image/png;base64,test123"
         mock_validate.return_value = None  # No validation error
@@ -429,9 +425,7 @@ class TestEnhancedConvenienceFunctions:
 
     @patch("llmring.file_utils.validate_file_for_vision_api")
     @patch("llmring.file_utils.create_data_url")
-    def test_compare_images_with_mixed_sources(
-        self, mock_create_data_url, mock_validate
-    ):
+    def test_compare_images_with_mixed_sources(self, mock_create_data_url, mock_validate):
         """Test compare_images with mixed source types."""
         mock_create_data_url.return_value = "data:image/png;base64,mocked_file_data"
         mock_validate.return_value = None  # No validation error

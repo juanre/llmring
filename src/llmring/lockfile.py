@@ -24,9 +24,7 @@ class AliasBinding(BaseModel):
     alias: str = Field(..., description="Alias name (e.g., 'summarizer')")
     provider: str = Field(..., description="Provider name (e.g., 'openai')")
     model: str = Field(..., description="Model name (e.g., 'gpt-4')")
-    constraints: Optional[Dict[str, Any]] = Field(
-        None, description="Optional constraints"
-    )
+    constraints: Optional[Dict[str, Any]] = Field(None, description="Optional constraints")
 
     @property
     def model_ref(self) -> str:
@@ -50,9 +48,7 @@ class ProfileConfig(BaseModel):
     """Configuration for a specific profile."""
 
     name: str = Field(..., description="Profile name (e.g., 'prod', 'staging', 'dev')")
-    bindings: List[AliasBinding] = Field(
-        default_factory=list, description="Alias bindings"
-    )
+    bindings: List[AliasBinding] = Field(default_factory=list, description="Alias bindings")
     registry_versions: Dict[str, int] = Field(
         default_factory=dict, description="Pinned registry versions per provider"
     )
@@ -64,9 +60,7 @@ class ProfileConfig(BaseModel):
                 return binding
         return None
 
-    def set_binding(
-        self, alias: str, model_ref: str, constraints: Optional[Dict] = None
-    ):
+    def set_binding(self, alias: str, model_ref: str, constraints: Optional[Dict] = None):
         """Set or update a binding."""
         # Remove existing binding if present
         self.bindings = [b for b in self.bindings if b.alias != alias]
@@ -196,19 +190,18 @@ class Lockfile(BaseModel):
 
                 if active_models:
                     # Find long_context: highest max_input_tokens
-                    long_context = max(
-                        active_models,
-                        key=lambda m: m.max_input_tokens or 0
-                    )
+                    long_context = max(active_models, key=lambda m: m.max_input_tokens or 0)
                     if long_context.max_input_tokens and long_context.max_input_tokens > 0:
                         defaults["long_context"] = f"openai:{long_context.model_name}"
 
                     # Find low_cost: lowest input price
-                    models_with_price = [m for m in active_models if m.dollars_per_million_tokens_input]
+                    models_with_price = [
+                        m for m in active_models if m.dollars_per_million_tokens_input
+                    ]
                     if models_with_price:
                         low_cost = min(
                             models_with_price,
-                            key=lambda m: m.dollars_per_million_tokens_input or float('inf')
+                            key=lambda m: m.dollars_per_million_tokens_input or float("inf"),
                         )
                         defaults["low_cost"] = f"openai:{low_cost.model_name}"
                         defaults["fast"] = f"openai:{low_cost.model_name}"
@@ -223,15 +216,13 @@ class Lockfile(BaseModel):
                     # Add mcp_agent if not set by Anthropic (prefer most capable OpenAI model)
                     if "mcp_agent" not in defaults and active_models:
                         # Find the most capable model (usually the one with highest tokens)
-                        capable_model = max(
-                            active_models,
-                            key=lambda m: m.max_input_tokens or 0
-                        )
+                        capable_model = max(active_models, key=lambda m: m.max_input_tokens or 0)
                         defaults["mcp_agent"] = f"openai:{capable_model.model_name}"
 
             except Exception as e:
                 # Log but don't fail - registry might be unavailable
                 import logging
+
                 logging.warning(f"Could not fetch OpenAI models from registry: {e}")
 
         if os.environ.get("ANTHROPIC_API_KEY"):
@@ -247,7 +238,7 @@ class Lockfile(BaseModel):
                         sorted_models = sorted(
                             models_with_tokens,
                             key=lambda m: m.max_input_tokens or 0,
-                            reverse=True
+                            reverse=True,
                         )
                         # Take the most capable model
                         if sorted_models:
@@ -261,24 +252,24 @@ class Lockfile(BaseModel):
 
                     # Find low_cost if not already set
                     if "low_cost" not in defaults:
-                        models_with_price = [m for m in active_models if m.dollars_per_million_tokens_input]
+                        models_with_price = [
+                            m for m in active_models if m.dollars_per_million_tokens_input
+                        ]
                         if models_with_price:
                             low_cost = min(
                                 models_with_price,
-                                key=lambda m: m.dollars_per_million_tokens_input or float('inf')
+                                key=lambda m: m.dollars_per_million_tokens_input or float("inf"),
                             )
                             defaults["low_cost"] = f"anthropic:{low_cost.model_name}"
 
                     # PDF reader - prefer models with good context length
                     if "pdf_reader" not in defaults and models_with_tokens:
-                        pdf_model = max(
-                            models_with_tokens,
-                            key=lambda m: m.max_input_tokens or 0
-                        )
+                        pdf_model = max(models_with_tokens, key=lambda m: m.max_input_tokens or 0)
                         defaults["pdf_reader"] = f"anthropic:{pdf_model.model_name}"
 
             except Exception as e:
                 import logging
+
                 logging.warning(f"Could not fetch Anthropic models from registry: {e}")
 
         if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
@@ -294,7 +285,7 @@ class Lockfile(BaseModel):
                         vision_models_sorted = sorted(
                             vision_models,
                             key=lambda m: m.max_input_tokens or 0,
-                            reverse=True
+                            reverse=True,
                         )
                         if vision_models_sorted:
                             defaults["vision"] = f"google:{vision_models_sorted[0].model_name}"
@@ -306,7 +297,7 @@ class Lockfile(BaseModel):
                         if models_with_tokens:
                             long_context = max(
                                 models_with_tokens,
-                                key=lambda m: m.max_input_tokens or 0
+                                key=lambda m: m.max_input_tokens or 0,
                             )
                             defaults["long_context"] = f"google:{long_context.model_name}"
 
@@ -316,12 +307,13 @@ class Lockfile(BaseModel):
                         if models_with_tokens:
                             pdf_model = max(
                                 models_with_tokens,
-                                key=lambda m: m.max_input_tokens or 0
+                                key=lambda m: m.max_input_tokens or 0,
                             )
                             defaults["pdf_reader"] = f"google:{pdf_model.model_name}"
 
             except Exception as e:
                 import logging
+
                 logging.warning(f"Could not fetch Google models from registry: {e}")
 
         # Always add local option
@@ -351,9 +343,7 @@ class Lockfile(BaseModel):
         profile_config.set_binding(alias, model_ref, constraints)
         self.updated_at = datetime.now(timezone.utc)
 
-    def get_binding(
-        self, alias: str, profile: Optional[str] = None
-    ) -> Optional[AliasBinding]:
+    def get_binding(self, alias: str, profile: Optional[str] = None) -> Optional[AliasBinding]:
         """Get a binding from the specified profile."""
         profile_config = self.get_profile(profile)
         return profile_config.get_binding(alias)

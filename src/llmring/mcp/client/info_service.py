@@ -12,12 +12,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from llmring.exceptions import (
-    ConfigurationError,
-    ModelError,
-    ProviderError,
-    ServerConnectionError,
-)
+from llmring.exceptions import ConfigurationError, ModelError, ProviderError, ServerConnectionError
 
 # LLMDatabase is not in llmring, will need to adapt
 from llmring.service import LLMRing
@@ -167,9 +162,7 @@ class MCPClientInfoService:
                     except (ServerConnectionError, ProviderError) as e:
                         logger.warning(f"Error getting provider usage stats: {e}")
                     except Exception as e:
-                        logger.error(
-                            f"Unexpected error getting provider usage stats: {e}"
-                        )
+                        logger.error(f"Unexpected error getting provider usage stats: {e}")
 
                 # Provider descriptions
                 descriptions = {
@@ -212,9 +205,7 @@ class MCPClientInfoService:
 
                 for model in db_models:
                     # Get usage stats for this model
-                    usage_stats = self._get_model_usage_stats(
-                        provider, model.model_name
-                    )
+                    usage_stats = self._get_model_usage_stats(provider, model.model_name)
 
                     # Convert costs to convenient formats using Decimal for precision
                     cost_per_1k_input = None
@@ -247,9 +238,7 @@ class MCPClientInfoService:
                             cost_per_1k_input_tokens=cost_per_1k_input,
                             cost_per_1k_output_tokens=cost_per_1k_output,
                             is_active=model.is_active,
-                            last_used=(
-                                usage_stats.get("last_used") if usage_stats else None
-                            ),
+                            last_used=(usage_stats.get("last_used") if usage_stats else None),
                             total_usage_last_30_days=(
                                 usage_stats.get("total_tokens") if usage_stats else None
                             ),
@@ -328,14 +317,10 @@ class MCPClientInfoService:
                     "model_name": model.model_name,
                     "display_name": model.display_name,
                     "cost_per_input_token": (
-                        float(model.cost_per_input_token)
-                        if model.cost_per_input_token
-                        else None
+                        float(model.cost_per_input_token) if model.cost_per_input_token else None
                     ),
                     "cost_per_output_token": (
-                        float(model.cost_per_output_token)
-                        if model.cost_per_output_token
-                        else None
+                        float(model.cost_per_output_token) if model.cost_per_output_token else None
                     ),
                     "cost_per_1k_input_tokens": model.cost_per_1k_input_tokens,
                     "cost_per_1k_output_tokens": model.cost_per_1k_output_tokens,
@@ -557,9 +542,7 @@ class MCPClientInfoService:
 
         return summary
 
-    def _get_provider_usage_stats(
-        self, provider: str, days: int = 30
-    ) -> dict[str, Any] | None:
+    def _get_provider_usage_stats(self, provider: str, days: int = 30) -> dict[str, Any] | None:
         """Get usage statistics for a specific provider."""
         if not self.llm_db:
             return None
@@ -590,9 +573,7 @@ class MCPClientInfoService:
                             total_cost += float(stats.total_cost or 0)
                             total_calls += stats.total_calls or 0
                     except (ServerConnectionError, ProviderError) as e:
-                        logger.warning(
-                            f"Error getting usage stats for provider model: {e}"
-                        )
+                        logger.warning(f"Error getting usage stats for provider model: {e}")
                         continue
                     except Exception as e:
                         logger.error(f"Unexpected error getting usage stats: {e}")
@@ -752,9 +733,7 @@ class MCPClientInfoService:
             logger.error(f"Unexpected error getting calls by model: {e}")
             return {}
 
-    def _get_daily_usage_breakdown(
-        self, user_id: str, days: int = 30
-    ) -> list[dict[str, Any]]:
+    def _get_daily_usage_breakdown(self, user_id: str, days: int = 30) -> list[dict[str, Any]]:
         """Get daily usage breakdown."""
         if not self.llmring:
             return []
@@ -775,11 +754,7 @@ class MCPClientInfoService:
                         "date": date.strftime("%Y-%m-%d"),
                         "calls": stats.total_calls // max(days, 1) if i == 0 else 0,
                         "tokens": stats.total_tokens // max(days, 1) if i == 0 else 0,
-                        "cost": (
-                            float(stats.total_cost or 0) / max(days, 1)
-                            if i == 0
-                            else 0.0
-                        ),
+                        "cost": (float(stats.total_cost or 0) / max(days, 1) if i == 0 else 0.0),
                     }
                 )
 
@@ -800,8 +775,7 @@ class MCPClientInfoService:
                     result[key] = str(value)
                 elif isinstance(value, list):
                     result[key] = [
-                        self.to_dict(item) if hasattr(item, "__dict__") else item
-                        for item in value
+                        self.to_dict(item) if hasattr(item, "__dict__") else item for item in value
                     ]
                 elif hasattr(value, "__dict__"):
                     result[key] = self.to_dict(value)

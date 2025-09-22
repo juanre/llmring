@@ -9,44 +9,45 @@ so tests can reliably use them without hardcoding models that might not exist.
 # These should be updated periodically to match registry contents
 
 VALID_ANTHROPIC_MODELS = [
-    "claude-3-opus-20240229",      # Stable, widely available
-    "claude-3-haiku-20240307",     # Fast, affordable
-    "claude-3-5-haiku-20241022",   # Newer haiku version with vision
-    "claude-opus-4-20250514",      # Latest opus with vision
-    "claude-sonnet-4-20250514",    # Latest sonnet with vision
+    "claude-3-opus-20240229",  # Stable, widely available
+    "claude-3-haiku-20240307",  # Fast, affordable
+    "claude-3-5-haiku-20241022",  # Newer haiku version with vision
+    "claude-opus-4-20250514",  # Latest opus with vision
+    "claude-sonnet-4-20250514",  # Latest sonnet with vision
 ]
 
 VALID_OPENAI_MODELS = [
-    "gpt-4o-mini",                 # Has vision support
-    "gpt-4",                       # Standard GPT-4
-    "gpt-3.5-turbo",              # Fast, affordable
+    "gpt-4o-mini",  # Has vision support
+    "gpt-4",  # Standard GPT-4
+    "gpt-3.5-turbo",  # Fast, affordable
 ]
 
 VALID_GOOGLE_MODELS = [
-    "gemini-1.5-flash",            # Fast, affordable with vision
-    "gemini-1.5-pro",              # More capable
-    "gemini-2.0-flash",            # Newer version with vision
+    "gemini-1.5-flash",  # Fast, affordable with vision
+    "gemini-1.5-pro",  # More capable
+    "gemini-2.0-flash",  # Newer version with vision
 ]
 
 # Default models to use in tests (should be stable and available)
 DEFAULT_TEST_MODELS = {
     "anthropic": "claude-3-haiku-20240307",  # Fast and cheap for tests
-    "openai": "gpt-4o-mini",                 # Multimodal and in registry
-    "google": "gemini-1.5-flash",            # Fast Gemini model
+    "openai": "gpt-4o-mini",  # Multimodal and in registry
+    "google": "gemini-1.5-flash",  # Fast Gemini model
 }
 
 # Models with specific capabilities
 VISION_CAPABLE_MODELS = {
     "anthropic": "claude-3-5-haiku-20241022",  # Has vision support
-    "openai": "gpt-4o-mini",                   # GPT-4o-mini has vision
-    "google": "gemini-1.5-flash",              # All Gemini models support vision
+    "openai": "gpt-4o-mini",  # GPT-4o-mini has vision
+    "google": "gemini-1.5-flash",  # All Gemini models support vision
 }
 
 PDF_CAPABLE_MODELS = {
     "anthropic": "claude-3-5-haiku-20241022",  # Newer model with PDF support
-    "google": "gemini-1.5-flash",              # Can process documents
-    "openai": "gpt-4o-mini",                   # Via assistants API
+    "google": "gemini-1.5-flash",  # Can process documents
+    "openai": "gpt-4o-mini",  # Via assistants API
 }
+
 
 def get_test_model(provider: str, capability: str = None) -> str:
     """
@@ -65,6 +66,7 @@ def get_test_model(provider: str, capability: str = None) -> str:
         return PDF_CAPABLE_MODELS.get(provider, DEFAULT_TEST_MODELS.get(provider))
     else:
         return DEFAULT_TEST_MODELS.get(provider)
+
 
 def get_all_valid_models(provider: str) -> list:
     """Get all valid models for a provider."""

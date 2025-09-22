@@ -57,9 +57,7 @@ async def cmd_query(args: argparse.Namespace) -> None:
         if args.conversation_id and not args.no_save:
             try:
                 await llm.load_conversation(args.conversation_id)
-                console.print(
-                    f"[dim]Continuing conversation {args.conversation_id}[/dim]"
-                )
+                console.print(f"[dim]Continuing conversation {args.conversation_id}[/dim]")
             except Exception:
                 # Create new conversation if ID doesn't exist
                 args.conversation_id = await llm.create_conversation(
@@ -96,9 +94,7 @@ async def cmd_query(args: argparse.Namespace) -> None:
                 console.print("\nConversation ID: Not saved (--no-save flag)")
 
         if args.show_usage and response.usage:
-            console.print(
-                f"[dim]Tokens used: {response.usage.get('total_tokens', 'N/A')}[/dim]"
-            )
+            console.print(f"[dim]Tokens used: {response.usage.get('total_tokens', 'N/A')}[/dim]")
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -130,15 +126,11 @@ async def cmd_chat(args: argparse.Namespace) -> None:
         # Handle conversation resumption
         if args.resume:
             if not args.conversation_id:
-                console.print(
-                    "[red]Error: --resume requires --conversation-id (--cid)[/red]"
-                )
+                console.print("[red]Error: --resume requires --conversation-id (--cid)[/red]")
                 sys.exit(1)
             try:
                 await llm.load_conversation(args.conversation_id)
-                console.print(
-                    f"[green]Resumed conversation {args.conversation_id}[/green]"
-                )
+                console.print(f"[green]Resumed conversation {args.conversation_id}[/green]")
 
                 # Show last few messages for context
                 if llm.conversation_history:
@@ -166,9 +158,7 @@ async def cmd_chat(args: argparse.Namespace) -> None:
         if args.system:
             messages.append({"role": "system", "content": args.system})
 
-        console.print(
-            "[bold]MCP Interactive Chat[/bold] (Type 'exit' or Ctrl+C to quit)\n"
-        )
+        console.print("[bold]MCP Interactive Chat[/bold] (Type 'exit' or Ctrl+C to quit)\n")
 
         # Interactive loop
         while True:
@@ -313,17 +303,13 @@ async def cmd_conversations_delete(args: argparse.Namespace) -> None:
     try:
         # Confirm deletion if not forced
         if not args.yes:
-            confirm = Confirm.ask(
-                f"[yellow]Delete conversation {args.conversation_id}?[/yellow]"
-            )
+            confirm = Confirm.ask(f"[yellow]Delete conversation {args.conversation_id}?[/yellow]")
             if not confirm:
                 console.print("Cancelled.")
                 return
 
         # Create conversation manager
-        from llmring.mcp.client.conversation_manager_async import (
-            AsyncConversationManager,
-        )
+        from llmring.mcp.client.conversation_manager_async import AsyncConversationManager
 
         manager = AsyncConversationManager(
             llmring_server_url=args.server_url,
@@ -412,25 +398,25 @@ def main() -> None:
 Examples:
   # Single query
   mcp-client query "What is the weather today?"
-  
+
   # Query with system prompt
   mcp-client query "Explain quantum computing" --system "You are a physics teacher"
-  
+
   # Interactive chat
   mcp-client chat
-  
+
   # Resume a chat session
   mcp-client chat --resume --conversation-id abc123
-  
+
   # List conversations
   mcp-client conversations list
-  
+
   # Show a conversation
   mcp-client conversations show abc123
-  
+
   # Export conversation
   mcp-client conversations export abc123 --format markdown -o chat.md
-  
+
   # Delete conversation
   mcp-client conversations delete abc123 --yes
 """,
@@ -527,9 +513,7 @@ Examples:
 
     # Conversations command with subcommands
     conv_parser = subparsers.add_parser("conversations", help="Manage conversations")
-    conv_subparsers = conv_parser.add_subparsers(
-        dest="subcommand", help="Conversation commands"
-    )
+    conv_subparsers = conv_parser.add_subparsers(dest="subcommand", help="Conversation commands")
 
     # List conversations
     list_parser = conv_subparsers.add_parser("list", help="List conversations")

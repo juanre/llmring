@@ -10,11 +10,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from ollama import AsyncClient, ResponseError
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
-from llmring.exceptions import (
-    CircuitBreakerError,
-    ProviderResponseError,
-    ProviderTimeoutError,
-)
+from llmring.exceptions import CircuitBreakerError, ProviderResponseError, ProviderTimeoutError
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
@@ -27,9 +23,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
     def __init__(
         self,
-        api_key: Optional[
-            str
-        ] = None,  # Not used for Ollama, included for API compatibility
+        api_key: Optional[str] = None,  # Not used for Ollama, included for API compatibility
         base_url: Optional[str] = None,
         model: Optional[str] = None,
     ):
@@ -42,9 +36,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model: Default model to use
         """
         # Get base URL from parameter or environment
-        base_url = base_url or os.environ.get(
-            "OLLAMA_BASE_URL", "http://localhost:11434"
-        )
+        base_url = base_url or os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
         # Create config for base class (no API key needed for Ollama)
         config = ProviderConfig(
@@ -72,7 +64,6 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         # Registry client already initialized before mixins
 
         self._breaker = CircuitBreaker()
-
 
     async def get_default_model(self) -> str:
         """
@@ -109,7 +100,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     provider_name="ollama",
                     available_models=models,
                     cost_range=(0.0, 0.1),  # Ollama models are typically free/local
-                    fallback_model=None  # No hardcoded fallback
+                    fallback_model=None,  # No hardcoded fallback
                 )
                 self.default_model = selected_model
                 self.log_info(f"Derived default model from registry: {selected_model}")
@@ -129,7 +120,6 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         raise ValueError(
             "No Ollama models available. Please install a model first using 'ollama pull'."
         )
-
 
     async def aclose(self) -> None:
         """Clean up provider resources."""
@@ -202,9 +192,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             models = []
             if hasattr(response, "models"):
                 for model in response.models:
-                    model_name = getattr(model, "name", None) or getattr(
-                        model, "model", ""
-                    )
+                    model_name = getattr(model, "name", None) or getattr(model, "model", "")
                     if model_name:
                         models.append(model_name)
             return models
@@ -296,10 +284,9 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 base_model = model.split(":")[0]
                 if not any(base_model in m for m in available):
                     import logging
+
                     logger = logging.getLogger(__name__)
-                    logger.warning(
-                        f"Model '{model}' not found locally, proceeding anyway"
-                    )
+                    logger.warning(f"Model '{model}' not found locally, proceeding anyway")
         except Exception:
             pass  # Can't check, continue anyway
 
@@ -309,9 +296,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             # Handle different message types
             if msg.role == "system":
                 # System messages become assistant messages in Ollama
-                ollama_messages.append(
-                    {"role": "assistant", "content": f"System: {msg.content}"}
-                )
+                ollama_messages.append({"role": "assistant", "content": f"System: {msg.content}"})
             elif msg.role in ["user", "assistant"]:
                 ollama_messages.append({"role": msg.role, "content": str(msg.content)})
 
@@ -321,9 +306,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             if ollama_messages and ollama_messages[0]["role"] == "assistant":
                 ollama_messages[0]["content"] += f"\n\n{tools_prompt}"
             else:
-                ollama_messages.insert(
-                    0, {"role": "assistant", "content": tools_prompt}
-                )
+                ollama_messages.insert(0, {"role": "assistant", "content": tools_prompt})
 
         # Handle JSON response format
         if json_response or (
@@ -395,9 +378,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         finish_reason="stop",
                         usage={
                             "prompt_tokens": self.get_token_count(str(ollama_messages)),
-                            "completion_tokens": self.get_token_count(
-                                accumulated_content
-                            ),
+                            "completion_tokens": self.get_token_count(accumulated_content),
                             "total_tokens": self.get_token_count(str(ollama_messages))
                             + self.get_token_count(accumulated_content),
                         },
@@ -423,9 +404,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     f"Ollama request timed out: {error_msg}", provider="ollama"
                 ) from e
             else:
-                raise ProviderResponseError(
-                    f"Ollama error: {error_msg}", provider="ollama"
-                ) from e
+                raise ProviderResponseError(f"Ollama error: {error_msg}", provider="ollama") from e
 
     async def _chat_non_streaming(
         self,
@@ -455,10 +434,9 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 base_model = model.split(":")[0]
                 if not any(base_model in m for m in available):
                     import logging
+
                     logger = logging.getLogger(__name__)
-                    logger.warning(
-                        f"Model '{model}' not found locally, proceeding anyway"
-                    )
+                    logger.warning(f"Model '{model}' not found locally, proceeding anyway")
         except Exception:
             pass  # Can't check, continue anyway
 
@@ -592,9 +570,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                         "type": "function",
                                         "function": {
                                             "name": tool_data["name"],
-                                            "arguments": json.dumps(
-                                                tool_data.get("arguments", {})
-                                            ),
+                                            "arguments": json.dumps(tool_data.get("arguments", {})),
                                         },
                                     }
                                 ]
@@ -631,9 +607,10 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             await self._breaker.record_failure(f"ollama:{model}")
 
             # Let the error message guide categorization, but don't over-analyze
-            error_msg = str(getattr(e, 'error', e))
+            error_msg = str(getattr(e, "error", e))
             if "model" in error_msg.lower():
                 from llmring.exceptions import ModelNotFoundError
+
                 raise ModelNotFoundError(
                     f"Model '{model}' not available",
                     provider="ollama",
@@ -650,6 +627,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         except Exception as e:
             # Already wrapped? Just re-raise
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
@@ -661,8 +639,9 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
             # Handle RetryError - check the root cause
             from llmring.net.retry import RetryError
+
             if isinstance(e, RetryError):
-                root = e.__cause__ if hasattr(e, '__cause__') else e
+                root = e.__cause__ if hasattr(e, "__cause__") else e
 
                 # Timeout after retries
                 if isinstance(root, asyncio.TimeoutError):
@@ -674,9 +653,10 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
                 # Ollama ResponseError after retries
                 if "ResponseError" in type(root).__name__:
-                    error_msg = str(getattr(root, 'error', root))
+                    error_msg = str(getattr(root, "error", root))
                     if "model" in error_msg.lower():
                         from llmring.exceptions import ModelNotFoundError
+
                         raise ModelNotFoundError(
                             f"Model '{model}' not available",
                             provider="ollama",

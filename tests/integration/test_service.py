@@ -7,9 +7,8 @@ import os
 
 import pytest
 
-from llmring.schemas import LLMRequest, LLMResponse, Message
-from llmring.service import LLMRing
 from llmring.exceptions import ProviderNotFoundError
+from llmring.schemas import LLMRequest, LLMResponse, Message
 
 
 @pytest.mark.llm
@@ -118,9 +117,7 @@ class TestLLMRingIntegration:
             raise
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(
-        reason="Ollama tests take too long - skipping for faster test runs"
-    )
+    @pytest.mark.skip(reason="Ollama tests take too long - skipping for faster test runs")
     @pytest.mark.ollama
     async def test_ollama_provider_integration(self, llmring):
         """Test Ollama provider through LLM service."""
@@ -227,9 +224,7 @@ class TestLLMRingIntegration:
     @pytest.mark.asyncio
     async def test_error_handling_invalid_provider(self, llmring):
         """Test error handling for invalid provider."""
-        request = LLMRequest(
-            messages=[Message(role="user", content="test")], model="invalid:model"
-        )
+        request = LLMRequest(messages=[Message(role="user", content="test")], model="invalid:model")
 
         with pytest.raises(ProviderNotFoundError, match="Provider .* not found"):
             await llmring.chat(request)

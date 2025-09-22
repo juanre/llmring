@@ -103,9 +103,7 @@ def create_server() -> MCPServer:
         description="Echo the input message",
         input_schema={
             "type": "object",
-            "properties": {
-                "message": {"type": "string", "description": "Message to echo"}
-            },
+            "properties": {"message": {"type": "string", "description": "Message to echo"}},
             "required": ["message"],
             "additionalProperties": False,
         },
@@ -204,17 +202,13 @@ def create_server() -> MCPServer:
         name="test_prompt",
         description="A simple test prompt",
         content="This is a test prompt with parameter: {name}",
-        arguments=[
-            {"name": "name", "description": "Name parameter", "required": False}
-        ],
+        arguments=[{"name": "name", "description": "Name parameter", "required": False}],
     )
 
     server.register_prompt(
         name="dynamic_test_prompt",
         description="A dynamic test prompt",
-        arguments=[
-            {"name": "name", "description": "Name parameter", "required": False}
-        ],
+        arguments=[{"name": "name", "description": "Name parameter", "required": False}],
         handler=generate_test_prompt,
     )
 

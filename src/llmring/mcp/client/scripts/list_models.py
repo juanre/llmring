@@ -55,9 +55,7 @@ def get_all_provider_models() -> dict:
     # Get OpenAI models
     try:
         openai = OpenAIProvider(api_key="dummy-key")
-        models["openai"] = [
-            (name, f"openai:{name}") for name in openai.get_supported_models()
-        ]
+        models["openai"] = [(name, f"openai:{name}") for name in openai.get_supported_models()]
     except Exception as e:
         print(f"Error getting OpenAI models: {e}")
         models["openai"] = []
@@ -65,9 +63,7 @@ def get_all_provider_models() -> dict:
     # Get Google models
     try:
         google = GoogleProvider(api_key="dummy-key")
-        models["google"] = [
-            (name, f"google:{name}") for name in google.get_supported_models()
-        ]
+        models["google"] = [(name, f"google:{name}") for name in google.get_supported_models()]
     except Exception as e:
         print(f"Error getting Google models: {e}")
         models["google"] = []
@@ -75,9 +71,7 @@ def get_all_provider_models() -> dict:
     # Get Ollama models
     try:
         ollama = OllamaProvider()
-        models["ollama"] = [
-            (name, f"ollama:{name}") for name in ollama.get_supported_models()
-        ]
+        models["ollama"] = [(name, f"ollama:{name}") for name in ollama.get_supported_models()]
     except Exception as e:
         print(f"Error getting Ollama models: {e}")
         models["ollama"] = []
@@ -115,9 +109,7 @@ async def main():
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Show detailed model information"
     )
-    parser.add_argument(
-        "--check", "-c", action="store_true", help="Check for missing models"
-    )
+    parser.add_argument("--check", "-c", action="store_true", help="Check for missing models")
     parser.add_argument(
         "--update",
         "-u",

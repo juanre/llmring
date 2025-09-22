@@ -5,12 +5,13 @@ Tests that the fixed response access (response.content instead of response.choic
 works correctly with actual API calls.
 """
 
-import pytest
-from uuid import uuid4
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
-from llmring.service_extended import LLMRingExtended
+import pytest
+
 from llmring.schemas import LLMRequest, Message
+from llmring.service_extended import LLMRingExtended
 
 
 class TestServiceExtendedFixes:
@@ -20,14 +21,14 @@ class TestServiceExtendedFixes:
     def extended_service(self):
         """Create extended service with conversation support."""
         import os
+
         test_lockfile = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            'llmring.lock.json'
+            os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json"
         )
         return LLMRingExtended(
             enable_conversations=True,
             message_logging_level="full",
-            lockfile_path=test_lockfile
+            lockfile_path=test_lockfile,
         )
 
     @pytest.mark.asyncio
@@ -60,14 +61,12 @@ class TestServiceExtendedFixes:
         assert hasattr(response, "content"), "Response should have content attribute"
         assert hasattr(response, "model"), "Response should have model attribute"
         assert hasattr(response, "usage"), "Response should have usage attribute"
-        assert hasattr(response, "finish_reason"), (
-            "Response should have finish_reason attribute"
-        )
+        assert hasattr(response, "finish_reason"), "Response should have finish_reason attribute"
 
         # Verify content is a string (not a choices array)
-        assert isinstance(response.content, str), (
-            "response.content should be string, not choices array"
-        )
+        assert isinstance(
+            response.content, str
+        ), "response.content should be string, not choices array"
         assert len(response.content) > 0, "Response should have content"
 
         print(f"✓ OpenAI response.content access works: {response.content[:50]}...")
@@ -102,14 +101,12 @@ class TestServiceExtendedFixes:
         assert hasattr(response, "content"), "Response should have content attribute"
         assert hasattr(response, "model"), "Response should have model attribute"
         assert hasattr(response, "usage"), "Response should have usage attribute"
-        assert hasattr(response, "finish_reason"), (
-            "Response should have finish_reason attribute"
-        )
+        assert hasattr(response, "finish_reason"), "Response should have finish_reason attribute"
 
         # Verify content is a string (not a choices array)
-        assert isinstance(response.content, str), (
-            "response.content should be string, not choices array"
-        )
+        assert isinstance(
+            response.content, str
+        ), "response.content should be string, not choices array"
         assert len(response.content) > 0, "Response should have content"
 
         print(f"✓ Anthropic response.content access works: {response.content[:50]}...")
@@ -134,12 +131,8 @@ class TestServiceExtendedFixes:
         assert hasattr(response, "content"), "Response should have content attribute"
         assert hasattr(response, "model"), "Response should have model attribute"
         assert hasattr(response, "usage"), "Response should have usage attribute"
-        assert hasattr(response, "finish_reason"), (
-            "Response should have finish_reason attribute"
-        )
-        assert not hasattr(response, "choices"), (
-            "Response should NOT have choices attribute"
-        )
+        assert hasattr(response, "finish_reason"), "Response should have finish_reason attribute"
+        assert not hasattr(response, "choices"), "Response should NOT have choices attribute"
 
         # Verify content is accessible and correct type
         assert isinstance(response.content, str), "Content should be string"
@@ -229,9 +222,7 @@ class TestServiceExtendedFixes:
         response = await extended_service.chat(request)
 
         # Verify response structure includes tool_calls if present
-        assert hasattr(response, "tool_calls"), (
-            "Response should have tool_calls attribute"
-        )
+        assert hasattr(response, "tool_calls"), "Response should have tool_calls attribute"
 
         # Tool calls should be None or a list, never accessed as choices[0].message.tool_calls
         if response.tool_calls:

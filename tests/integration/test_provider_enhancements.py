@@ -10,15 +10,15 @@ These tests validate that:
 """
 
 import os
-import pytest
-
-from llmring.service import LLMRing
-from llmring.schemas import LLMRequest, LLMResponse, Message
 
 # Import test model helpers
 import sys
+
+import pytest
+
+from llmring.schemas import LLMRequest, LLMResponse, Message
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from conftest_models import get_test_model
 
 
 @pytest.mark.integration
@@ -59,16 +59,14 @@ class TestProviderEnhancements:
         # Real streaming should produce multiple chunks
         content_chunks = [c for c in chunks if c.delta and c.delta.strip()]
 
-        print(
-            f"Google streaming: {len(chunks)} total chunks, {len(content_chunks)} content chunks"
-        )
+        print(f"Google streaming: {len(chunks)} total chunks, {len(content_chunks)} content chunks")
         print(f"Deltas: {[c.delta for c in content_chunks]}")
 
         # If this was still faked, we'd get exactly 1 chunk with all content
         # Real streaming should give us multiple chunks
-        assert len(content_chunks) > 1, (
-            f"Expected real streaming (>1 chunk), got {len(content_chunks)} - may still be faked"
-        )
+        assert (
+            len(content_chunks) > 1
+        ), f"Expected real streaming (>1 chunk), got {len(content_chunks)} - may still be faked"
 
     @pytest.mark.skipif(
         not (
@@ -127,9 +125,7 @@ class TestProviderEnhancements:
                     "description": "Get weather information for a location",
                     "parameters": {
                         "type": "object",
-                        "properties": {
-                            "location": {"type": "string", "description": "City name"}
-                        },
+                        "properties": {"location": {"type": "string", "description": "City name"}},
                         "required": ["location"],
                     },
                 },
@@ -171,9 +167,9 @@ class TestProviderEnhancements:
             schema_count = sum(
                 1 for indicator in tool_schema_indicators if indicator in response_lower
             )
-            assert schema_count <= 1, (
-                f"Response contains tool schema, may still be using prompt-based approach: {response.content[:200]}"
-            )
+            assert (
+                schema_count <= 1
+            ), f"Response contains tool schema, may still be using prompt-based approach: {response.content[:200]}"
 
         except Exception as e:
             if "function calling" in str(e).lower() or "tool" in str(e).lower():
@@ -181,17 +177,13 @@ class TestProviderEnhancements:
             else:
                 raise
 
-    @pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"), reason="OpenAI API key not available"
-    )
+    @pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OpenAI API key not available")
     @pytest.mark.asyncio
     async def test_openai_json_schema_support(self, service):
         """Test OpenAI JSON schema support (new feature)."""
         request = LLMRequest(
             model="openai_fast",  # Use alias from lockfile
-            messages=[
-                Message(role="user", content="Generate a person with name and age")
-            ],
+            messages=[Message(role="user", content="Generate a person with name and age")],
             max_tokens=100,
             response_format={
                 "type": "json_schema",
@@ -273,14 +265,10 @@ class TestProviderEnhancements:
 
         # Check each provider based on API key availability
         if os.getenv("OPENAI_API_KEY"):
-            assert "openai" in available, (
-                "OpenAI provider should be available with API key"
-            )
+            assert "openai" in available, "OpenAI provider should be available with API key"
 
         if os.getenv("ANTHROPIC_API_KEY"):
-            assert "anthropic" in available, (
-                "Anthropic provider should be available with API key"
-            )
+            assert "anthropic" in available, "Anthropic provider should be available with API key"
 
         google_keys = [
             os.getenv("GOOGLE_API_KEY"),
@@ -288,13 +276,11 @@ class TestProviderEnhancements:
             os.getenv("GOOGLE_GEMINI_API_KEY"),
         ]
         if any(google_keys):
-            assert "google" in available, (
-                f"Google provider should be available with API key. Available: {available}"
-            )
+            assert (
+                "google" in available
+            ), f"Google provider should be available with API key. Available: {available}"
 
         # Ollama should always be available (no API key required)
         assert "ollama" in available, "Ollama provider should always be available"
 
-        assert len(available) >= 2, (
-            f"Should have multiple providers available, got: {available}"
-        )
+        assert len(available) >= 2, f"Should have multiple providers available, got: {available}"

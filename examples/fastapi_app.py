@@ -87,16 +87,11 @@ async def health_check(service: LLMRing = Depends(get_llmring)):
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat_completion(
-    request: ChatRequest, service: LLMRing = Depends(get_llmring)
-):
+async def chat_completion(request: ChatRequest, service: LLMRing = Depends(get_llmring)):
     """Chat completion endpoint."""
     try:
         # Convert messages
-        messages = [
-            Message(role=msg["role"], content=msg["content"])
-            for msg in request.messages
-        ]
+        messages = [Message(role=msg["role"], content=msg["content"]) for msg in request.messages]
 
         # Create LLM request
         llm_request = LLMRequest(
@@ -157,9 +152,7 @@ async def list_providers(service: LLMRing = Depends(get_llmring)):
                     "provider": provider_name,
                     "configured": configured,
                     "models": (
-                        service.get_available_models().get(provider_name, [])
-                        if configured
-                        else []
+                        service.get_available_models().get(provider_name, []) if configured else []
                     ),
                 }
             )
@@ -173,6 +166,4 @@ if __name__ == "__main__":
     import uvicorn
 
     # Run with proper async server
-    uvicorn.run(
-        "fastapi_app:app", host="0.0.0.0", port=8000, reload=True, log_level="info"
-    )
+    uvicorn.run("fastapi_app:app", host="0.0.0.0", port=8000, reload=True, log_level="info")

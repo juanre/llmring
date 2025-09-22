@@ -5,8 +5,8 @@ Tests are minimal to avoid excessive resource usage.
 Chat tests are skipped for large models to prevent long test times.
 """
 
-import pytest
 import httpx
+import pytest
 
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.schemas import LLMResponse, Message
@@ -74,18 +74,14 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(
-            indicator in model_to_use for indicator in small_model_indicators
-        )
+        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)
 
         # Skip if it's a large base model and not explicitly marked as small
         if is_large_base and not is_small_model:
-            pytest.skip(
-                f"Skipping large model {model_to_use} - too slow for unit testing"
-            )
+            pytest.skip(f"Skipping large model {model_to_use} - too slow for unit testing")
 
         # Also skip 3.2 models unless they're 1b
         if "llama3.2" in model_to_use and not is_small_model:
@@ -111,9 +107,7 @@ class TestOllamaProviderUnit:
 
     @skip_if_ollama_not_running
     @pytest.mark.asyncio
-    async def test_chat_with_system_message(
-        self, ollama_provider, system_user_messages
-    ):
+    async def test_chat_with_system_message(self, ollama_provider, system_user_messages):
         """Test chat with system message."""
         try:
             available_models = await ollama_provider.get_available_models()
@@ -126,18 +120,14 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(
-            indicator in model_to_use for indicator in small_model_indicators
-        )
+        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)
 
         # Skip if it's a large base model and not explicitly marked as small
         if is_large_base and not is_small_model:
-            pytest.skip(
-                f"Skipping large model {model_to_use} - too slow for unit testing"
-            )
+            pytest.skip(f"Skipping large model {model_to_use} - too slow for unit testing")
 
         # Also skip 3.2 models unless they're 1b
         if "llama3.2" in model_to_use and not is_small_model:
@@ -156,9 +146,7 @@ class TestOllamaProviderUnit:
 
     @skip_if_ollama_not_running
     @pytest.mark.asyncio
-    async def test_chat_with_provider_prefix_removal(
-        self, ollama_provider, simple_user_message
-    ):
+    async def test_chat_with_provider_prefix_removal(self, ollama_provider, simple_user_message):
         """Test that provider prefix is correctly removed from model name."""
         try:
             available_models = await ollama_provider.get_available_models()
@@ -171,24 +159,18 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(
-            indicator in base_model for indicator in small_model_indicators
-        )
+        is_small_model = any(indicator in base_model for indicator in small_model_indicators)
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in base_model for pattern in large_model_patterns)
 
         # Skip if it's a large base model and not explicitly marked as small
         if is_large_base and not is_small_model:
-            pytest.skip(
-                f"Skipping large model {base_model} - too slow for unit testing"
-            )
+            pytest.skip(f"Skipping large model {base_model} - too slow for unit testing")
 
         # Also skip 3.2 models unless they're 1b
         if "llama3.2" in base_model and not is_small_model:
-            pytest.skip(
-                f"Skipping large llama3.2 model {base_model} - use 1b variant for testing"
-            )
+            pytest.skip(f"Skipping large llama3.2 model {base_model} - use 1b variant for testing")
 
         response = await ollama_provider.chat(
             messages=simple_user_message, model=f"ollama:{base_model}", max_tokens=3
@@ -212,18 +194,14 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(
-            indicator in model_to_use for indicator in small_model_indicators
-        )
+        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)
 
         # Skip if it's a large base model and not explicitly marked as small
         if is_large_base and not is_small_model:
-            pytest.skip(
-                f"Skipping large model {model_to_use} - too slow for unit testing"
-            )
+            pytest.skip(f"Skipping large model {model_to_use} - too slow for unit testing")
 
         # Also skip 3.2 models unless they're 1b
         if "llama3.2" in model_to_use and not is_small_model:
@@ -250,9 +228,7 @@ class TestOllamaProviderUnit:
         from llmring.exceptions import ModelNotFoundError, ProviderResponseError
 
         with pytest.raises((ModelNotFoundError, ProviderResponseError)):
-            await ollama_provider.chat(
-                messages=simple_user_message, model="invalid_model!@#"
-            )
+            await ollama_provider.chat(messages=simple_user_message, model="invalid_model!@#")
 
     @skip_if_ollama_not_running
     @pytest.mark.asyncio
@@ -268,9 +244,7 @@ class TestOllamaProviderUnit:
 
         # Should wrap the error with our standard format (either validation or API error)
         error_msg = str(exc_info.value).lower()
-        assert (
-            "error" in error_msg or "not found" in error_msg or "invalid" in error_msg
-        )
+        assert "error" in error_msg or "not found" in error_msg or "invalid" in error_msg
 
     def test_get_token_count_fallback(self, ollama_provider):
         """Test token counting fallback implementation."""
@@ -298,9 +272,7 @@ class TestOllamaProviderUnit:
 
     @skip_if_ollama_not_running
     @pytest.mark.asyncio
-    async def test_multi_turn_conversation(
-        self, ollama_provider, multi_turn_conversation
-    ):
+    async def test_multi_turn_conversation(self, ollama_provider, multi_turn_conversation):
         """Test multi-turn conversation handling."""
         try:
             available_models = await ollama_provider.get_available_models()
@@ -313,18 +285,14 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(
-            indicator in model_to_use for indicator in small_model_indicators
-        )
+        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)
 
         # Skip if it's a large base model and not explicitly marked as small
         if is_large_base and not is_small_model:
-            pytest.skip(
-                f"Skipping large model {model_to_use} - too slow for unit testing"
-            )
+            pytest.skip(f"Skipping large model {model_to_use} - too slow for unit testing")
 
         # Also skip 3.2 models unless they're 1b
         if "llama3.2" in model_to_use and not is_small_model:
@@ -368,18 +336,14 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(
-            indicator in model_to_use for indicator in small_model_indicators
-        )
+        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)
 
         # Skip if it's a large base model and not explicitly marked as small
         if is_large_base and not is_small_model:
-            pytest.skip(
-                f"Skipping large model {model_to_use} - too slow for unit testing"
-            )
+            pytest.skip(f"Skipping large model {model_to_use} - too slow for unit testing")
 
         # Also skip 3.2 models unless they're 1b
         if "llama3.2" in model_to_use and not is_small_model:
@@ -414,18 +378,14 @@ class TestOllamaProviderUnit:
         # Skip large models as they're too slow for unit testing
         # Allow small variants like :1b but skip large ones
         small_model_indicators = [":1b", ":0.5b", ":1B", ":0.5B"]
-        is_small_model = any(
-            indicator in model_to_use for indicator in small_model_indicators
-        )
+        is_small_model = any(indicator in model_to_use for indicator in small_model_indicators)
 
         large_model_patterns = ["llama3.3", "deepseek-r1:32b"]
         is_large_base = any(pattern in model_to_use for pattern in large_model_patterns)
 
         # Skip if it's a large base model and not explicitly marked as small
         if is_large_base and not is_small_model:
-            pytest.skip(
-                f"Skipping large model {model_to_use} - too slow for unit testing"
-            )
+            pytest.skip(f"Skipping large model {model_to_use} - too slow for unit testing")
 
         # Also skip 3.2 models unless they're 1b
         if "llama3.2" in model_to_use and not is_small_model:
@@ -433,11 +393,7 @@ class TestOllamaProviderUnit:
                 f"Skipping large llama3.2 model {model_to_use} - use 1b variant for testing"
             )
 
-        messages = [
-            Message(
-                role="user", content="Respond with JSON: answer=hello, confidence=0.9"
-            )
-        ]
+        messages = [Message(role="user", content="Respond with JSON: answer=hello, confidence=0.9")]
 
         response = await ollama_provider.chat(
             messages=messages,

@@ -8,8 +8,8 @@ import logging
 import os
 
 import aiohttp
-import pytest
 import httpx
+import pytest
 
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.schemas import LLMResponse, Message
@@ -73,9 +73,7 @@ class TestOllamaProviderIntegration:
 
             for model in models:
                 # Check if it's a small variant
-                is_small = any(
-                    indicator in model for indicator in small_model_indicators
-                )
+                is_small = any(indicator in model for indicator in small_model_indicators)
 
                 # Check if it's a large base model
                 large_patterns = ["llama3.3", "deepseek-r1:32b"]
@@ -89,9 +87,7 @@ class TestOllamaProviderIntegration:
                     return model
 
             # If only large models available, skip tests
-            pytest.skip(
-                "Only large models available - too slow for integration testing"
-            )
+            pytest.skip("Only large models available - too slow for integration testing")
         except Exception:
             pytest.skip("Cannot determine available Ollama models")
 
@@ -125,9 +121,7 @@ class TestOllamaProviderIntegration:
             Message(role="user", content="What is 2 + 2?"),
         ]
 
-        response = await provider.chat(
-            messages=messages, model=available_model, max_tokens=100
-        )
+        response = await provider.chat(messages=messages, model=available_model, max_tokens=100)
 
         assert isinstance(response, LLMResponse)
         assert "4" in response.content
@@ -136,9 +130,7 @@ class TestOllamaProviderIntegration:
     @pytest.mark.asyncio
     async def test_chat_with_temperature(self, provider, available_model):
         """Test chat with different temperature settings."""
-        messages = [
-            Message(role="user", content="Write a creative opening line for a story.")
-        ]
+        messages = [Message(role="user", content="Write a creative opening line for a story.")]
 
         # Test with low temperature (more deterministic)
         response_low = await provider.chat(
@@ -167,9 +159,7 @@ class TestOllamaProviderIntegration:
             Message(role="user", content="What was my name again?"),
         ]
 
-        response = await provider.chat(
-            messages=messages, model=available_model, max_tokens=50
-        )
+        response = await provider.chat(messages=messages, model=available_model, max_tokens=50)
 
         assert isinstance(response, LLMResponse)
         assert "Alice" in response.content
@@ -204,9 +194,7 @@ class TestOllamaProviderIntegration:
 
         async def make_request(i):
             messages = [Message(role="user", content=f"Count to {i}")]
-            return await provider.chat(
-                messages=messages, model=available_model, max_tokens=50
-            )
+            return await provider.chat(messages=messages, model=available_model, max_tokens=50)
 
         # Make 2 concurrent requests (be gentle with local Ollama)
         agents = [make_request(i) for i in range(1, 3)]
@@ -230,7 +218,9 @@ class TestOllamaProviderIntegration:
             assert isinstance(first_model, str)
             logger.info(f"Found {len(available_models)} Ollama models: {available_models}")
         else:
-            logger.info("No Ollama models found (Ollama may not be running or have models installed)")
+            logger.info(
+                "No Ollama models found (Ollama may not be running or have models installed)"
+            )
 
     @pytest.mark.asyncio
     async def test_default_model_selection(self, provider):
@@ -260,9 +250,7 @@ class TestOllamaProviderIntegration:
             )
         ]
 
-        response = await provider.chat(
-            messages=messages, model=available_model, max_tokens=100
-        )
+        response = await provider.chat(messages=messages, model=available_model, max_tokens=100)
 
         assert isinstance(response, LLMResponse)
         # Should calculate: 15 - 7 + 3 = 11
@@ -279,16 +267,13 @@ class TestOllamaProviderIntegration:
             )
         ]
 
-        response = await provider.chat(
-            messages=messages, model=available_model, max_tokens=200
-        )
+        response = await provider.chat(messages=messages, model=available_model, max_tokens=200)
 
         assert isinstance(response, LLMResponse)
         assert len(response.content) > 0
         # Should contain some programming-related content
         assert any(
-            word in response.content.lower()
-            for word in ["def", "function", "return", "python"]
+            word in response.content.lower() for word in ["def", "function", "return", "python"]
         )
 
     @pytest.mark.asyncio
@@ -331,9 +316,7 @@ class TestOllamaProviderIntegration:
 
         messages = [Message(role="user", content="Hello")]
 
-        response = await provider.chat(
-            messages=messages, model=model_name, max_tokens=30
-        )
+        response = await provider.chat(messages=messages, model=model_name, max_tokens=30)
 
         assert isinstance(response, LLMResponse)
         assert len(response.content) > 0
@@ -341,13 +324,9 @@ class TestOllamaProviderIntegration:
     @pytest.mark.asyncio
     async def test_long_response_handling(self, provider, available_model):
         """Test handling of longer responses."""
-        messages = [
-            Message(role="user", content="Write a short poem about programming.")
-        ]
+        messages = [Message(role="user", content="Write a short poem about programming.")]
 
-        response = await provider.chat(
-            messages=messages, model=available_model, max_tokens=150
-        )
+        response = await provider.chat(messages=messages, model=available_model, max_tokens=150)
 
         assert isinstance(response, LLMResponse)
         assert len(response.content) > 50  # Should be a reasonable length poem
@@ -369,7 +348,5 @@ class TestOllamaProviderIntegration:
         )
 
         assert isinstance(response, LLMResponse)
-        assert response.model == available_model.replace(
-            "ollama:", ""
-        )  # Should strip the prefix
+        assert response.model == available_model.replace("ollama:", "")  # Should strip the prefix
         assert len(response.content) > 0

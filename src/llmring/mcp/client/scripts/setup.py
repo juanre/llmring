@@ -125,9 +125,7 @@ def check_env_variables():
             if value:
                 # Hide full values for API keys and auth tokens
                 if "API_KEY" in var or "TOKEN" in var or "PASSWORD" in var:
-                    shown_value = (
-                        f"{value[:3]}...{value[-3:]}" if len(value) > 10 else "***"
-                    )
+                    shown_value = f"{value[:3]}...{value[-3:]}" if len(value) > 10 else "***"
                     print(f"  ✅ {var}: {shown_value}")
                 else:
                     print(f"  ✅ {var}: {value}")
@@ -164,9 +162,7 @@ async def main():
     )
     parser.add_argument("--env-file", help="Path to the .env file", default=".env")
     parser.add_argument("--skip-db", action="store_true", help="Skip database setup")
-    parser.add_argument(
-        "--skip-models", action="store_true", help="Skip adding default LLM models"
-    )
+    parser.add_argument("--skip-models", action="store_true", help="Skip adding default LLM models")
     parser.add_argument(
         "--skip-env-check", action="store_true", help="Skip environment variable check"
     )

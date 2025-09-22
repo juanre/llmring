@@ -264,9 +264,7 @@ def create_file_content(
                 "Remote URL inputs are disabled by configuration. Use data URLs or base64."
             )
 
-        content_parts.append(
-            {"type": "image_url", "image_url": {"url": file_path_url_or_base64}}
-        )
+        content_parts.append({"type": "image_url", "image_url": {"url": file_path_url_or_base64}})
 
     elif _is_base64_string(file_path_url_or_base64):
         # It's base64 data - need mime_type to determine format
@@ -405,9 +403,7 @@ def _is_base64_string(s: str) -> bool:
         return False
 
     # Check if it contains only base64 characters first
-    base64_chars = set(
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
-    )
+    base64_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
     if not all(c in base64_chars for c in s):
         return False
 

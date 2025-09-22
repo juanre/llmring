@@ -5,6 +5,9 @@ These tests require actual API keys and test the real file processing capabiliti
 """
 
 import os
+
+# Import test model helpers
+import sys
 import tempfile
 
 import pytest
@@ -14,13 +17,8 @@ from reportlab.pdfgen import canvas
 
 from llmring.file_utils import analyze_image, create_image_content
 from llmring.schemas import LLMRequest, Message
-from llmring.service import LLMRing
 
-# Import test model helpers
-import sys
-import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from conftest_models import get_test_model
 
 
 def create_test_image_with_text() -> str:
@@ -363,10 +361,7 @@ class TestFileProcessing:
         except Exception as e:
             # Handle potential API limitations
             error_str = str(e).lower()
-            if any(
-                term in error_str
-                for term in ["billing", "quota", "usage limit", "rate limit"]
-            ):
+            if any(term in error_str for term in ["billing", "quota", "usage limit", "rate limit"]):
                 pytest.skip(f"OpenAI API limit reached: {e}")
             elif "assistants" in error_str:
                 pytest.skip(f"Assistants API not available: {e}")

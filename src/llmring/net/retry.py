@@ -34,9 +34,7 @@ class RetryError(Exception):
             msg = str(e) or ""
             if msg.strip():
                 return msg
-            return _walk(getattr(e, "__cause__", None)) or _walk(
-                getattr(e, "__context__", None)
-            )
+            return _walk(getattr(e, "__cause__", None)) or _walk(getattr(e, "__context__", None))
 
         msg = _walk(self.__cause__) or _walk(self.__context__)
         return msg or "Retry failed"
@@ -91,14 +89,10 @@ async def retry_async(
     """
     attempts = max_attempts or _get_int_env("LLMRING_RETRY_ATTEMPTS", 2)
     base = (
-        base_delay_s
-        if base_delay_s is not None
-        else _get_float_env("LLMRING_RETRY_BASE_S", 0.25)
+        base_delay_s if base_delay_s is not None else _get_float_env("LLMRING_RETRY_BASE_S", 0.25)
     )
     max_delay = (
-        max_delay_s
-        if max_delay_s is not None
-        else _get_float_env("LLMRING_RETRY_MAX_S", 2.0)
+        max_delay_s if max_delay_s is not None else _get_float_env("LLMRING_RETRY_MAX_S", 2.0)
     )
 
     last_exc: Optional[BaseException] = None

@@ -1,4 +1,5 @@
 import asyncio
+
 import pytest
 
 from llmring.net.retry import RetryError
@@ -40,5 +41,3 @@ def test_google_provider_handles_cancelled_error(monkeypatch):
 
     msg = provider._extract_error_message(retry)
     assert "cancelled" in msg.lower()
-
-

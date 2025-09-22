@@ -31,6 +31,7 @@ load_dotenv()
 # Database imports - optional, only if database support is needed
 try:
     from pgdbm import AsyncDatabaseManager, DatabaseConfig, MonitoredAsyncDatabaseManager
+
     HAS_DATABASE = True
 except ImportError:
     # Database support is optional
@@ -75,9 +76,7 @@ class CommandCompleter(Completer):
                     display = HTML(
                         f"<b>{command}</b> - <style fg='#888888'>{self.commands[command]}</style>"
                     )
-                    yield Completion(
-                        command, start_position=-len(word), display=display
-                    )
+                    yield Completion(command, start_position=-len(word), display=display)
 
             # For /model command, offer model suggestions
             if text.startswith("/model "):
@@ -260,13 +259,9 @@ class MCPChatApp:
                     # Show count of remaining tools
                     remaining = len(self.available_tools) - max_display
                     if remaining > 0:
-                        self.console.print(
-                            f"  [info]... and {remaining} more tools[/info]"
-                        )
+                        self.console.print(f"  [info]... and {remaining} more tools[/info]")
             except Exception as e:
-                self.console.print(
-                    f"[error]Failed to connect to MCP server:[/error] {e!s}"
-                )
+                self.console.print(f"[error]Failed to connect to MCP server:[/error] {e!s}")
 
         # Display available models
         models = self.get_available_models()
@@ -290,7 +285,9 @@ class MCPChatApp:
             )
 
             if not HAS_DATABASE:
-                raise ImportError("Database support not available. Install pgdbm to use database features.")
+                raise ImportError(
+                    "Database support not available. Install pgdbm to use database features."
+                )
 
             config = DatabaseConfig(
                 connection_string=connection_string,
@@ -306,9 +303,7 @@ class MCPChatApp:
 
             # Create schema-isolated manager for mcp_client and run migrations
             if AsyncDatabaseManager:
-                self.db_manager = AsyncDatabaseManager(
-                    pool=self.shared_pool, schema="mcp_client"
-                )
+                self.db_manager = AsyncDatabaseManager(pool=self.shared_pool, schema="mcp_client")
             else:
                 raise ImportError("Database support not available")
             # MCPClientDB functionality removed - database operations now optional
@@ -321,9 +316,7 @@ class MCPChatApp:
         if self.shared_pool:
             # We created our own pool
             if AsyncDatabaseManager:
-                llm_db_manager = AsyncDatabaseManager(
-                    pool=self.shared_pool, schema="llmring"
-                )
+                llm_db_manager = AsyncDatabaseManager(pool=self.shared_pool, schema="llmring")
             else:
                 llm_db_manager = None
         elif self._external_db and self.db_manager is not None:
@@ -408,9 +401,7 @@ class MCPChatApp:
             System message content
         """
         if not self.available_tools:
-            return (
-                "You are a helpful assistant. Respond directly to the user's questions."
-            )
+            return "You are a helpful assistant. Respond directly to the user's questions."
 
         # Prepare tool descriptions
         tool_descriptions = []
@@ -507,19 +498,13 @@ Otherwise, respond directly to help the user.
 
         # No MCP client means no tool calls
         if not self.mcp_client:
-            self.console.print(
-                "[error]Cannot execute tools: No MCP server connected[/error]"
-            )
+            self.console.print("[error]Cannot execute tools: No MCP server connected[/error]")
             # Add to conversation
-            self.conversation.append(
-                Message(role="assistant", content=json.dumps(response_json))
-            )
+            self.conversation.append(Message(role="assistant", content=json.dumps(response_json)))
             return
 
         # Add assistant message to conversation
-        self.conversation.append(
-            Message(role="assistant", content=json.dumps(response_json))
-        )
+        self.conversation.append(Message(role="assistant", content=json.dumps(response_json)))
 
         # Process each tool call
         tool_results = []
@@ -542,9 +527,7 @@ Otherwise, respond directly to help the user.
                 # Format result based on type
                 if isinstance(result, dict | list):
                     self.console.print(JSON(result, indent=2))
-                elif isinstance(result, str) and (
-                    result.startswith("{") or result.startswith("[")
-                ):
+                elif isinstance(result, str) and (result.startswith("{") or result.startswith("[")):
                     try:
                         # Try to parse as JSON
                         json_result = json.loads(result)
@@ -557,16 +540,12 @@ Otherwise, respond directly to help the user.
                     self.console.print(result)
 
                 # Add to results
-                tool_results.append(
-                    {"tool": tool_name, "result": result, "success": True}
-                )
+                tool_results.append({"tool": tool_name, "result": result, "success": True})
 
             except Exception as e:
                 # Handle error
                 self.console.print(f"[error]Tool error:[/error] {e!s}")
-                tool_results.append(
-                    {"tool": tool_name, "error": str(e), "success": False}
-                )
+                tool_results.append({"tool": tool_name, "error": str(e), "success": False})
 
         # Add tool results to conversation
         self.conversation.append(
@@ -591,9 +570,7 @@ Otherwise, respond directly to help the user.
         self.console.print(Markdown(follow_up_response.content))
 
         # Add final response to conversation
-        self.conversation.append(
-            Message(role="assistant", content=follow_up_response.content)
-        )
+        self.conversation.append(Message(role="assistant", content=follow_up_response.content))
 
     async def handle_command(self, command: str) -> None:
         """
@@ -784,9 +761,7 @@ async def run_with_shared_pool(args):
         await mcp_db.initialize()
 
         # Create LLM service with schema-specific manager
-        llmring = LLMRing(
-            db_manager=llm_db_manager, origin="mcp-client", enable_db_logging=True
-        )
+        llmring = LLMRing(db_manager=llm_db_manager, origin="mcp-client", enable_db_logging=True)
 
         # Create and configure chat app
         app = MCPChatApp(
@@ -840,10 +815,7 @@ def main():
         return
 
     # Use shared pool if requested or by default
-    if (
-        args.use_shared_pool
-        or os.getenv("MCP_USE_SHARED_POOL", "true").lower() == "true"
-    ):
+    if args.use_shared_pool or os.getenv("MCP_USE_SHARED_POOL", "true").lower() == "true":
         # Run with shared pool
         try:
             asyncio.run(run_with_shared_pool(args))

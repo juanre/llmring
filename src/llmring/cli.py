@@ -27,7 +27,7 @@ async def cmd_lock_init(args):
         return 1
 
     # Check if intelligent creation is requested
-    if hasattr(args, 'interactive') and args.interactive:
+    if hasattr(args, "interactive") and args.interactive:
         return await cmd_lock_init_intelligent(path)
 
     # Basic creation with recommendation to use intelligent system
@@ -37,6 +37,7 @@ async def cmd_lock_init(args):
     # Try to create with registry data
     try:
         from llmring.registry import RegistryClient
+
         registry_client = RegistryClient()
         lockfile = await Lockfile.create_default_async(registry_client)
         print("✅ Using registry data for intelligent defaults")
@@ -94,9 +95,10 @@ async def cmd_lock_init_intelligent(path: Path):
 
         analysis_request = LLMRequest(
             model="advisor",  # Uses our own API!
-            messages=[Message(
-                role="system",
-                content="""You are an expert LLM configuration advisor. Analyze the current
+            messages=[
+                Message(
+                    role="system",
+                    content="""You are an expert LLM configuration advisor. Analyze the current
                 model landscape and recommend optimal lockfile aliases.
 
                 Consider:
@@ -105,11 +107,13 @@ async def cmd_lock_init_intelligent(path: Path):
                 3. Fastest/cheapest models for simple tasks ("fast")
                 4. Models with special capabilities (vision, etc.)
 
-                Provide 4-5 recommendations with clear rationale."""
-            ), Message(
-                role="user",
-                content="Based on current available models, recommend optimal lockfile aliases for a general-purpose user"
-            )]
+                Provide 4-5 recommendations with clear rationale.""",
+                ),
+                Message(
+                    role="user",
+                    content="Based on current available models, recommend optimal lockfile aliases for a general-purpose user",
+                ),
+            ],
         )
 
         print("   Consulting advisor for recommendations...")
@@ -122,7 +126,7 @@ async def cmd_lock_init_intelligent(path: Path):
         # For now, extract key content and create basic intelligent defaults
         # Full parsing would extract structured JSON from the advisor response
 
-        from llmring.lockfile import Lockfile, ProfileConfig, AliasBinding
+        from llmring.lockfile import AliasBinding, Lockfile, ProfileConfig
 
         lockfile = Lockfile()
         profile = ProfileConfig(name="default")
@@ -134,7 +138,7 @@ async def cmd_lock_init_intelligent(path: Path):
             binding = AliasBinding(
                 alias=binding_info["alias"],
                 provider=binding_info["provider"],
-                model=binding_info["model"]
+                model=binding_info["model"],
             )
             profile.bindings.append(binding)
 
@@ -149,7 +153,9 @@ async def cmd_lock_init_intelligent(path: Path):
         print()
 
         for binding_info in recommended_bindings:
-            print(f"  {binding_info['alias']:<10} → {binding_info['provider']}:{binding_info['model']}")
+            print(
+                f"  {binding_info['alias']:<10} → {binding_info['provider']}:{binding_info['model']}"
+            )
             print(f"             {binding_info['rationale']}")
             print()
 
@@ -164,107 +170,111 @@ async def cmd_lock_init_intelligent(path: Path):
 
 
 async def _create_bootstrap_advisor() -> str:
-        """Create bootstrap advisor automatically."""
-        from llmring.registry import RegistryClient
-        import os
+    """Create bootstrap advisor automatically."""
+    import os
 
-        registry = RegistryClient()
+    from llmring.registry import RegistryClient
 
-        # Find best available advisor model
-        advisor_model = None
+    registry = RegistryClient()
 
-        # Try providers in order of preference for advisor role
-        advisor_candidates = []
+    # Find best available advisor model
+    advisor_model = None
 
-        if os.getenv("ANTHROPIC_API_KEY"):
-            try:
-                models = await registry.fetch_current_models("anthropic")
-                # Score models for advisor role (reasoning + tool support)
-                for model in models:
-                    if model.is_active:
-                        score = 0
-                        if "opus" in model.model_name:
-                            score += 20  # Highest reasoning capability
-                        if "sonnet" in model.model_name:
-                            score += 15  # Good reasoning
-                        if model.supports_function_calling:
-                            score += 10
-                        if score > 10:  # Only consider capable models
-                            advisor_candidates.append(("anthropic", model.model_name, score))
-            except Exception as e:
-                print(f"   ⚠️  Could not access Anthropic registry: {e}")
+    # Try providers in order of preference for advisor role
+    advisor_candidates = []
 
-        if os.getenv("OPENAI_API_KEY"):
-            try:
-                models = await registry.fetch_current_models("openai")
-                for model in models:
-                    if model.is_active and model.supports_function_calling:
-                        score = 10  # OpenAI models generally capable
-                        if "gpt-4" in model.model_name and "mini" not in model.model_name:
-                            score += 5  # Prefer full GPT-4 for advisor
-                        advisor_candidates.append(("openai", model.model_name, score))
-            except Exception as e:
-                print(f"   ⚠️  Could not access OpenAI registry: {e}")
+    if os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            models = await registry.fetch_current_models("anthropic")
+            # Score models for advisor role (reasoning + tool support)
+            for model in models:
+                if model.is_active:
+                    score = 0
+                    if "opus" in model.model_name:
+                        score += 20  # Highest reasoning capability
+                    if "sonnet" in model.model_name:
+                        score += 15  # Good reasoning
+                    if model.supports_function_calling:
+                        score += 10
+                    if score > 10:  # Only consider capable models
+                        advisor_candidates.append(("anthropic", model.model_name, score))
+        except Exception as e:
+            print(f"   ⚠️  Could not access Anthropic registry: {e}")
 
-        if os.getenv("GOOGLE_GEMINI_API_KEY"):
-            try:
-                models = await registry.fetch_current_models("google")
-                for model in models:
-                    if model.is_active and model.supports_function_calling:
-                        score = 8  # Google models capable but prefer others for advisor role
-                        if "pro" in model.model_name:
-                            score += 3
-                        advisor_candidates.append(("google", model.model_name, score))
-            except Exception as e:
-                print(f"   ⚠️  Could not access Google registry: {e}")
+    if os.getenv("OPENAI_API_KEY"):
+        try:
+            models = await registry.fetch_current_models("openai")
+            for model in models:
+                if model.is_active and model.supports_function_calling:
+                    score = 10  # OpenAI models generally capable
+                    if "gpt-4" in model.model_name and "mini" not in model.model_name:
+                        score += 5  # Prefer full GPT-4 for advisor
+                    advisor_candidates.append(("openai", model.model_name, score))
+        except Exception as e:
+            print(f"   ⚠️  Could not access OpenAI registry: {e}")
 
-        # Select best advisor or prompt user
-        if advisor_candidates:
-            # Sort by score and select best
-            best_advisor = max(advisor_candidates, key=lambda x: x[2])
-            advisor_model = f"{best_advisor[0]}:{best_advisor[1]}"
-            print(f"   ✅ Selected advisor: {advisor_model} (score: {best_advisor[2]})")
-        else:
-            # No API keys or registry completely unavailable
-            print("   ❌ No advisor models available:")
-            print("      - No API keys found, or")
-            print("      - Registry completely inaccessible, or")
-            print("      - No capable models in registry")
-            print("   Please check your API keys and internet connection.")
-            return None
+    if os.getenv("GOOGLE_GEMINI_API_KEY"):
+        try:
+            models = await registry.fetch_current_models("google")
+            for model in models:
+                if model.is_active and model.supports_function_calling:
+                    score = 8  # Google models capable but prefer others for advisor role
+                    if "pro" in model.model_name:
+                        score += 3
+                    advisor_candidates.append(("google", model.model_name, score))
+        except Exception as e:
+            print(f"   ⚠️  Could not access Google registry: {e}")
 
-        # Create minimal lockfile with advisor
-        from llmring.lockfile import Lockfile, ProfileConfig, AliasBinding
+    # Select best advisor or prompt user
+    if advisor_candidates:
+        # Sort by score and select best
+        best_advisor = max(advisor_candidates, key=lambda x: x[2])
+        advisor_model = f"{best_advisor[0]}:{best_advisor[1]}"
+        print(f"   ✅ Selected advisor: {advisor_model} (score: {best_advisor[2]})")
+    else:
+        # No API keys or registry completely unavailable
+        print("   ❌ No advisor models available:")
+        print("      - No API keys found, or")
+        print("      - Registry completely inaccessible, or")
+        print("      - No capable models in registry")
+        print("   Please check your API keys and internet connection.")
+        return None
 
-        lockfile = Lockfile()
-        profile = ProfileConfig(name="default")
+    # Create minimal lockfile with advisor
+    from llmring.lockfile import AliasBinding, Lockfile, ProfileConfig
 
-        provider, model = advisor_model.split(":", 1)
-        binding = AliasBinding(alias="advisor", provider=provider, model=model)
-        profile.bindings.append(binding)
+    lockfile = Lockfile()
+    profile = ProfileConfig(name="default")
 
-        lockfile.profiles["default"] = profile
-        lockfile.save(Path("llmring.lock"))
+    provider, model = advisor_model.split(":", 1)
+    binding = AliasBinding(alias="advisor", provider=provider, model=model)
+    profile.bindings.append(binding)
 
-        return advisor_model
+    lockfile.profiles["default"] = profile
+    lockfile.save(Path("llmring.lock"))
+
+    return advisor_model
 
 
 async def _generate_registry_based_bindings(advisor_model: str) -> list[dict[str, str]]:
     """Generate lockfile bindings based on current registry data (no hardcoded models)."""
-    from llmring.registry import RegistryClient
     import os
+
+    from llmring.registry import RegistryClient
 
     registry = RegistryClient()
     bindings = []
 
     # Add the advisor that was intelligently selected
     advisor_provider, advisor_model_name = advisor_model.split(":", 1)
-    bindings.append({
-        "alias": "advisor",
-        "provider": advisor_provider,
-        "model": advisor_model_name,
-        "rationale": "Powers intelligent lockfile creation system"
-    })
+    bindings.append(
+        {
+            "alias": "advisor",
+            "provider": advisor_provider,
+            "model": advisor_model_name,
+            "rationale": "Powers intelligent lockfile creation system",
+        }
+    )
 
     # Generate other aliases based on available providers and registry
     try:
@@ -274,25 +284,34 @@ async def _generate_registry_based_bindings(advisor_model: str) -> list[dict[str
             opus_models = [m for m in models if "opus" in m.model_name and m.is_active]
             if opus_models:
                 best = max(opus_models, key=lambda x: x.max_input_tokens or 0)
-                bindings.append({
-                    "alias": "deep",
-                    "provider": "anthropic",
-                    "model": best.model_name,
-                    "rationale": "Most capable reasoning model for complex analysis"
-                })
+                bindings.append(
+                    {
+                        "alias": "deep",
+                        "provider": "anthropic",
+                        "model": best.model_name,
+                        "rationale": "Most capable reasoning model for complex analysis",
+                    }
+                )
 
         # "fast" - Most cost-effective model available
         if os.getenv("OPENAI_API_KEY"):
             models = await registry.fetch_current_models("openai")
-            cost_effective = [m for m in models if m.is_active and (m.dollars_per_million_tokens_input or 0) < 1.0]
+            cost_effective = [
+                m for m in models if m.is_active and (m.dollars_per_million_tokens_input or 0) < 1.0
+            ]
             if cost_effective:
-                best = min(cost_effective, key=lambda x: x.dollars_per_million_tokens_input or 0)
-                bindings.append({
-                    "alias": "fast",
-                    "provider": "openai",
-                    "model": best.model_name,
-                    "rationale": "Most cost-effective model for quick responses"
-                })
+                best = min(
+                    cost_effective,
+                    key=lambda x: x.dollars_per_million_tokens_input or 0,
+                )
+                bindings.append(
+                    {
+                        "alias": "fast",
+                        "provider": "openai",
+                        "model": best.model_name,
+                        "rationale": "Most cost-effective model for quick responses",
+                    }
+                )
 
         # "balanced" - Good middle-ground model
         if os.getenv("ANTHROPIC_API_KEY"):
@@ -300,12 +319,14 @@ async def _generate_registry_based_bindings(advisor_model: str) -> list[dict[str
             haiku_models = [m for m in models if "haiku" in m.model_name and m.is_active]
             if haiku_models:
                 latest = max(haiku_models, key=lambda x: x.added_date or "")
-                bindings.append({
-                    "alias": "balanced",
-                    "provider": "anthropic",
-                    "model": latest.model_name,
-                    "rationale": "Balanced cost and capability for general use"
-                })
+                bindings.append(
+                    {
+                        "alias": "balanced",
+                        "provider": "anthropic",
+                        "model": latest.model_name,
+                        "rationale": "Balanced cost and capability for general use",
+                    }
+                )
 
         # "local" - Best available Ollama model (if any)
         try:
@@ -314,12 +335,14 @@ async def _generate_registry_based_bindings(advisor_model: str) -> list[dict[str
             if ollama_models:
                 # Select most capable Ollama model
                 best_ollama = max(ollama_models, key=lambda x: x.max_input_tokens or 0)
-                bindings.append({
-                    "alias": "local",
-                    "provider": "ollama",
-                    "model": best_ollama.model_name,
-                    "rationale": "Local execution for privacy and offline use"
-                })
+                bindings.append(
+                    {
+                        "alias": "local",
+                        "provider": "ollama",
+                        "model": best_ollama.model_name,
+                        "rationale": "Local execution for privacy and offline use",
+                    }
+                )
         except Exception:
             # Ollama registry not available - this is expected
             # Don't add local alias if no Ollama models in registry
@@ -446,17 +469,13 @@ async def cmd_lock_validate(args):
             for binding in profile.bindings:
                 # Validate model exists in registry
                 try:
-                    is_valid = await registry.validate_model(
-                        binding.provider, binding.model
-                    )
+                    is_valid = await registry.validate_model(binding.provider, binding.model)
                     status = "✅" if is_valid else "❌"
                     print(f"  {status} {binding.alias} → {binding.model_ref}")
                     if not is_valid:
                         valid = False
                 except Exception as e:
-                    print(
-                        f"  ⚠️  {binding.alias} → {binding.model_ref} (couldn't validate: {e})"
-                    )
+                    print(f"  ⚠️  {binding.alias} → {binding.model_ref} (couldn't validate: {e})")
 
     if valid:
         print("\n✅ All bindings are valid")
@@ -581,9 +600,7 @@ async def cmd_chat(args):
                     json.dumps(
                         {
                             "content": full_content,
-                            "model": (
-                                chunk.model if chunk and chunk.model else args.model
-                            ),
+                            "model": (chunk.model if chunk and chunk.model else args.model),
                             "usage": accumulated_usage,
                             "finish_reason": chunk.finish_reason if chunk else None,
                         },
@@ -595,9 +612,7 @@ async def cmd_chat(args):
                 print()
 
                 if args.verbose and accumulated_usage:
-                    print(
-                        f"\n[Model: {chunk.model if chunk and chunk.model else args.model}]"
-                    )
+                    print(f"\n[Model: {chunk.model if chunk and chunk.model else args.model}]")
                     print(
                         f"[Tokens: {accumulated_usage.get('prompt_tokens', 0)} in, {accumulated_usage.get('completion_tokens', 0)} out]"
                     )
@@ -661,19 +676,12 @@ async def cmd_info(args):
             if "max_output_tokens" in info:
                 print(f"Max Output: {info['max_output_tokens']:,} tokens")
             if "dollars_per_million_tokens_input" in info:
-                print(
-                    f"Input Cost: ${info['dollars_per_million_tokens_input']:.2f}/M tokens"
-                )
+                print(f"Input Cost: ${info['dollars_per_million_tokens_input']:.2f}/M tokens")
             if "dollars_per_million_tokens_output" in info:
-                print(
-                    f"Output Cost: ${info['dollars_per_million_tokens_output']:.2f}/M tokens"
-                )
+                print(f"Output Cost: ${info['dollars_per_million_tokens_output']:.2f}/M tokens")
             if "supports_vision" in info and info["supports_vision"]:
                 print("Supports: Vision")
-            if (
-                "supports_function_calling" in info
-                and info["supports_function_calling"]
-            ):
+            if "supports_function_calling" in info and info["supports_function_calling"]:
                 print("Supports: Function Calling")
             if "supports_json_mode" in info and info["supports_json_mode"]:
                 print("Supports: JSON Mode")
@@ -839,32 +847,37 @@ def main():
 
     # Lock commands
     lock_parser = subparsers.add_parser("lock", help="Lockfile management")
-    lock_subparsers = lock_parser.add_subparsers(
-        dest="lock_command", help="Lock commands"
-    )
+    lock_subparsers = lock_parser.add_subparsers(dest="lock_command", help="Lock commands")
 
     # lock init
     init_parser = lock_subparsers.add_parser(
         "init", help="Initialize lockfile with intelligent recommendations"
     )
     init_parser.add_argument("--file", help="Lockfile path (default: llmring.lock)")
+    init_parser.add_argument("--force", action="store_true", help="Overwrite existing file")
     init_parser.add_argument(
-        "--force", action="store_true", help="Overwrite existing file"
-    )
-    init_parser.add_argument(
-        "--interactive", action="store_true",
-        help="Use intelligent advisor for optimal recommendations (recommended)"
+        "--interactive",
+        action="store_true",
+        help="Use intelligent advisor for optimal recommendations (recommended)",
     )
 
     # lock validate
     lock_subparsers.add_parser("validate", help="Validate lockfile against registry")
 
     # lock optimize
-    optimize_parser = lock_subparsers.add_parser("optimize", help="Optimize existing lockfile with current registry data")
-    optimize_parser.add_argument("--interactive", action="store_true", help="Interactive optimization with advisor")
+    optimize_parser = lock_subparsers.add_parser(
+        "optimize", help="Optimize existing lockfile with current registry data"
+    )
+    optimize_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Interactive optimization with advisor",
+    )
 
     # lock analyze
-    analyze_parser = lock_subparsers.add_parser("analyze", help="Analyze current lockfile cost and coverage")
+    analyze_parser = lock_subparsers.add_parser(
+        "analyze", help="Analyze current lockfile cost and coverage"
+    )
     analyze_parser.add_argument("--cost", action="store_true", help="Show cost analysis")
     analyze_parser.add_argument("--coverage", action="store_true", help="Show capability coverage")
 
@@ -891,33 +904,28 @@ def main():
     chat_parser = subparsers.add_parser("chat", help="Send a chat message")
     chat_parser.add_argument("message", help="Message to send")
     chat_parser.add_argument(
-        "--model", default="fast", help="Model alias (fast, balanced, deep) or provider:model"
+        "--model",
+        default="fast",
+        help="Model alias (fast, balanced, deep) or provider:model",
     )
     chat_parser.add_argument("--system", help="System prompt")
-    chat_parser.add_argument(
-        "--temperature", type=float, default=0.7, help="Temperature (0.0-2.0)"
-    )
-    chat_parser.add_argument(
-        "--max-tokens", type=int, help="Maximum tokens to generate"
-    )
+    chat_parser.add_argument("--temperature", type=float, default=0.7, help="Temperature (0.0-2.0)")
+    chat_parser.add_argument("--max-tokens", type=int, help="Maximum tokens to generate")
     chat_parser.add_argument("--json", action="store_true", help="Output as JSON")
-    chat_parser.add_argument(
-        "--verbose", action="store_true", help="Show additional information"
-    )
+    chat_parser.add_argument("--verbose", action="store_true", help="Show additional information")
     chat_parser.add_argument("--profile", help="Profile to use for alias resolution")
-    chat_parser.add_argument(
-        "--stream", action="store_true", help="Stream response in real-time"
-    )
+    chat_parser.add_argument("--stream", action="store_true", help="Stream response in real-time")
 
     # Info command
     info_parser = subparsers.add_parser("info", help="Show model information")
-    info_parser.add_argument("model", help="Model alias (fast, balanced, deep) or provider:model (e.g., openai:gpt-4)")
+    info_parser.add_argument(
+        "model",
+        help="Model alias (fast, balanced, deep) or provider:model (e.g., openai:gpt-4)",
+    )
     info_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # Providers command
-    providers_parser = subparsers.add_parser(
-        "providers", help="List configured providers"
-    )
+    providers_parser = subparsers.add_parser("providers", help="List configured providers")
     providers_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # Push/pull commands removed per source-of-truth v3.8
@@ -925,16 +933,12 @@ def main():
 
     # Stats command
     stats_parser = subparsers.add_parser("stats", help="Show usage statistics")
-    stats_parser.add_argument(
-        "--verbose", action="store_true", help="Show detailed statistics"
-    )
+    stats_parser.add_argument("--verbose", action="store_true", help="Show detailed statistics")
     stats_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # Export command
     export_parser = subparsers.add_parser("export", help="Export receipts to file")
-    export_parser.add_argument(
-        "--output", help="Output file (default: llmring_receipts.json)"
-    )
+    export_parser.add_argument("--output", help="Output file (default: llmring_receipts.json)")
     export_parser.add_argument(
         "--format", choices=["json", "csv"], default="json", help="Export format"
     )

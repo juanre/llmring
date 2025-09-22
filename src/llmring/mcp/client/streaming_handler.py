@@ -102,9 +102,7 @@ class StreamingToolHandler:
                 )
 
                 # Stream the follow-up response
-                follow_up_stream = await self.enhanced_llm.llmring.chat(
-                    follow_up_request
-                )
+                follow_up_stream = await self.enhanced_llm.llmring.chat(follow_up_request)
                 async for follow_up_chunk in follow_up_stream:
                     yield follow_up_chunk
 
@@ -137,11 +135,7 @@ class StreamingToolHandler:
                 tool_results.append(
                     {
                         "tool_call_id": tool_call["id"],
-                        "content": (
-                            json.dumps(result)
-                            if not isinstance(result, str)
-                            else result
-                        ),
+                        "content": (json.dumps(result) if not isinstance(result, str) else result),
                     }
                 )
 

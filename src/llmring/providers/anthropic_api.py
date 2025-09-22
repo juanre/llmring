@@ -85,7 +85,6 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         self._cached_models = None  # Will be populated from registry
         self._breaker = CircuitBreaker()
 
-
     async def get_default_model(self) -> str:
         """
         Get the default model to use, derived from registry if not specified.
@@ -114,7 +113,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                     provider_name="anthropic",
                     available_models=models,
                     cost_range=(0.1, 20.0),  # Anthropic's typical range
-                    fallback_model=None  # No hardcoded fallback
+                    fallback_model=None,  # No hardcoded fallback
                 )
                 self.default_model = selected_model
                 self.log_info(f"Derived default model from registry: {selected_model}")
@@ -133,7 +132,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
     async def aclose(self) -> None:
         """Clean up provider resources."""
-        if hasattr(self, 'client') and self.client:
+        if hasattr(self, "client") and self.client:
             await self.client.close()
 
     async def get_capabilities(self) -> ProviderCapabilities:
@@ -250,16 +249,12 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         try:
             registry_models = await self._registry_client.fetch_current_models("anthropic")
             if not any(m.model_name == model and m.is_active for m in registry_models):
-                logger.warning(
-                    f"Model '{model}' not found in registry, proceeding anyway"
-                )
+                logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
         except Exception:
             pass  # Registry unavailable, continue anyway
 
         # Prepare messages and system prompt
-        anthropic_messages, system_message, system_cache_control = (
-            self._prepare_messages(messages)
-        )
+        anthropic_messages, system_message, system_cache_control = self._prepare_messages(messages)
 
         # Build request parameters
         request_params = {
@@ -334,8 +329,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                         usage_dict = {
                             "prompt_tokens": event.usage.input_tokens,
                             "completion_tokens": event.usage.output_tokens,
-                            "total_tokens": event.usage.input_tokens
-                            + event.usage.output_tokens,
+                            "total_tokens": event.usage.input_tokens + event.usage.output_tokens,
                         }
                         # Add cache-related usage if available
                         if hasattr(event.usage, "cache_creation_input_tokens"):
@@ -351,9 +345,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                             delta="",
                             model=model,
                             finish_reason=(
-                                event.stop_reason
-                                if hasattr(event, "stop_reason")
-                                else "stop"
+                                event.stop_reason if hasattr(event, "stop_reason") else "stop"
                             ),
                             usage=usage_dict if event.usage else None,
                         )
@@ -361,11 +353,13 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         except Exception as e:
             # Already wrapped? Just re-raise
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
             # Handle known SDK exceptions
             from anthropic import AuthenticationError, RateLimitError
+
             if isinstance(e, AuthenticationError):
                 raise ProviderAuthenticationError(
                     "Authentication failed",
@@ -376,7 +370,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                 raise ProviderRateLimitError(
                     "Rate limit exceeded",
                     provider="anthropic",
-                    retry_after=getattr(e, 'retry_after', None),
+                    retry_after=getattr(e, "retry_after", None),
                     original=e,
                 ) from e
 
@@ -397,23 +391,13 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         for msg in messages:
             if msg.role == "system":
-                system_message = (
-                    msg.content if isinstance(msg.content, str) else str(msg.content)
-                )
+                system_message = msg.content if isinstance(msg.content, str) else str(msg.content)
                 # Check for cache control in system message metadata
-                if (
-                    hasattr(msg, "metadata")
-                    and msg.metadata
-                    and "cache_control" in msg.metadata
-                ):
+                if hasattr(msg, "metadata") and msg.metadata and "cache_control" in msg.metadata:
                     system_cache_control = msg.metadata["cache_control"]
             else:
                 # Handle tool calls and responses
-                if (
-                    msg.role == "assistant"
-                    and hasattr(msg, "tool_calls")
-                    and msg.tool_calls
-                ):
+                if msg.role == "assistant" and hasattr(msg, "tool_calls") and msg.tool_calls:
                     content = []
                     if msg.content:
                         content.append({"type": "text", "text": msg.content})
@@ -426,12 +410,16 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                             try:
                                 input_dict = json.loads(arguments)
                             except (json.JSONDecodeError, TypeError):
-                                raise ValueError(f"Tool call arguments must be valid JSON: {arguments}")
+                                raise ValueError(
+                                    f"Tool call arguments must be valid JSON: {arguments}"
+                                )
                         elif isinstance(arguments, dict):
                             # Already a dict, use as-is
                             input_dict = arguments
                         else:
-                            raise ValueError(f"Tool call arguments must be JSON string or dict, got {type(arguments)}")
+                            raise ValueError(
+                                f"Tool call arguments must be JSON string or dict, got {type(arguments)}"
+                            )
 
                         content.append(
                             {
@@ -541,17 +529,13 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                         "description": tool.get("description", ""),
                         "input_schema": tool.get(
                             "input_schema",
-                            tool.get(
-                                "parameters", {"type": "object", "properties": {}}
-                            ),
+                            tool.get("parameters", {"type": "object", "properties": {}}),
                         ),
                     }
                 )
         return anthropic_tools
 
-    def _prepare_tool_choice(
-        self, tool_choice: Union[str, Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def _prepare_tool_choice(self, tool_choice: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
         """Convert tool choice to Anthropic format."""
         if tool_choice == "auto":
             return {"type": "auto"}
@@ -588,16 +572,12 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         try:
             registry_models = await self._registry_client.fetch_current_models("anthropic")
             if not any(m.model_name == model and m.is_active for m in registry_models):
-                logger.warning(
-                    f"Model '{model}' not found in registry, proceeding anyway"
-                )
+                logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
         except Exception:
             pass  # Registry unavailable, continue anyway
 
         # Convert messages to Anthropic format using _prepare_messages
-        anthropic_messages, system_message, system_cache_control = (
-            self._prepare_messages(messages)
-        )
+        anthropic_messages, system_message, system_cache_control = self._prepare_messages(messages)
 
         # Build the request parameters
         request_params = {
@@ -666,6 +646,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         except Exception as e:
             # Already wrapped? Just re-raise
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
@@ -676,12 +657,18 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                 pass
 
             # Handle Anthropic SDK specific exceptions
-            from anthropic import NotFoundError, BadRequestError, AuthenticationError, RateLimitError
+            from anthropic import (
+                AuthenticationError,
+                BadRequestError,
+                NotFoundError,
+                RateLimitError,
+            )
+
             from llmring.net.retry import RetryError
 
             # Check for RetryError wrapper first
             if isinstance(e, RetryError):
-                root = e.__cause__ if hasattr(e, '__cause__') else e
+                root = e.__cause__ if hasattr(e, "__cause__") else e
 
                 # Timeout after retries
                 if isinstance(root, asyncio.TimeoutError):
@@ -709,7 +696,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                     raise ProviderRateLimitError(
                         "Rate limit exceeded",
                         provider="anthropic",
-                        retry_after=getattr(root, 'retry_after', None),
+                        retry_after=getattr(root, "retry_after", None),
                         original=e,
                     ) from e
 
@@ -738,7 +725,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                 raise ProviderRateLimitError(
                     "Rate limit exceeded",
                     provider="anthropic",
-                    retry_after=getattr(e, 'retry_after', None),
+                    retry_after=getattr(e, "retry_after", None),
                     original=e,
                 ) from e
             elif isinstance(e, BadRequestError):
@@ -797,33 +784,23 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         usage_dict = {
             "prompt_tokens": int(response.usage.input_tokens),
             "completion_tokens": int(response.usage.output_tokens),
-            "total_tokens": int(
-                response.usage.input_tokens + response.usage.output_tokens
-            ),
+            "total_tokens": int(response.usage.input_tokens + response.usage.output_tokens),
         }
 
         # Add cache-related usage if available
         # The Anthropic SDK returns these as separate fields
         if hasattr(response.usage, "cache_creation_input_tokens"):
-            usage_dict["cache_creation_input_tokens"] = (
-                response.usage.cache_creation_input_tokens
-            )
+            usage_dict["cache_creation_input_tokens"] = response.usage.cache_creation_input_tokens
         if hasattr(response.usage, "cache_read_input_tokens"):
-            usage_dict["cache_read_input_tokens"] = (
-                response.usage.cache_read_input_tokens
-            )
+            usage_dict["cache_read_input_tokens"] = response.usage.cache_read_input_tokens
 
         # Also check for cache_creation detail object which has ephemeral token info
         if hasattr(response.usage, "cache_creation") and response.usage.cache_creation:
             cache_creation = response.usage.cache_creation
             if hasattr(cache_creation, "ephemeral_5m_input_tokens"):
-                usage_dict["cache_creation_5m_tokens"] = (
-                    cache_creation.ephemeral_5m_input_tokens
-                )
+                usage_dict["cache_creation_5m_tokens"] = cache_creation.ephemeral_5m_input_tokens
             if hasattr(cache_creation, "ephemeral_1h_input_tokens"):
-                usage_dict["cache_creation_1h_tokens"] = (
-                    cache_creation.ephemeral_1h_input_tokens
-                )
+                usage_dict["cache_creation_1h_tokens"] = cache_creation.ephemeral_1h_input_tokens
 
         llm_response = LLMResponse(
             content=content.strip() if content else "",

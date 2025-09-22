@@ -40,9 +40,7 @@ class TestLockfileIntegration:
 
         # Create service with lockfile
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}):
-            service = LLMRing(
-                registry_url=test_registry_url, lockfile_path=str(lockfile_path)
-            )
+            service = LLMRing(registry_url=test_registry_url, lockfile_path=str(lockfile_path))
             yield service
             await service.close()
 
@@ -119,9 +117,7 @@ class TestLockfileIntegration:
 
         # Create request within limits
         messages = [Message(role="user", content="x" * 1000)]
-        request = LLMRequest(
-            model="openai:gpt-4o-mini", messages=messages, max_tokens=100
-        )
+        request = LLMRequest(model="openai:gpt-4o-mini", messages=messages, max_tokens=100)
 
         # Should pass validation (gpt-4o-mini has 128k input limit)
         error = await service.validate_context_limit(request)
@@ -133,9 +129,7 @@ class TestLockfileIntegration:
         import string
 
         # Create a varied message that won't compress well
-        varied_text = "".join(
-            [string.ascii_letters[i % 52] + str(i % 10) for i in range(550_000)]
-        )
+        varied_text = "".join([string.ascii_letters[i % 52] + str(i % 10) for i in range(550_000)])
         huge_message = varied_text  # This should tokenize to ~137k tokens
         request_huge = LLMRequest(
             model="openai:gpt-4o-mini",
@@ -179,17 +173,13 @@ class TestLockfileIntegration:
         lockfile.save(lockfile_path)
 
         # Test with dev profile
-        with patch.dict(
-            os.environ, {"OPENAI_API_KEY": "sk-test", "LLMRING_PROFILE": "dev"}
-        ):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test", "LLMRING_PROFILE": "dev"}):
             service = LLMRing(lockfile_path=str(lockfile_path))
             resolved = service.resolve_alias("api")
             assert resolved == "openai:gpt-3.5-turbo"
 
         # Test with prod profile
-        with patch.dict(
-            os.environ, {"OPENAI_API_KEY": "sk-test", "LLMRING_PROFILE": "prod"}
-        ):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test", "LLMRING_PROFILE": "prod"}):
             service = LLMRing(lockfile_path=str(lockfile_path))
             resolved = service.resolve_alias("api")
             assert resolved == "openai:gpt-4"
@@ -321,12 +311,8 @@ class TestLockfileValidation:
         prompt_tokens = 1000
         completion_tokens = 500
 
-        input_cost = (
-            prompt_tokens / 1_000_000
-        ) * gpt35.dollars_per_million_tokens_input
-        output_cost = (
-            completion_tokens / 1_000_000
-        ) * gpt35.dollars_per_million_tokens_output
+        input_cost = (prompt_tokens / 1_000_000) * gpt35.dollars_per_million_tokens_input
+        output_cost = (completion_tokens / 1_000_000) * gpt35.dollars_per_million_tokens_output
         total_cost = input_cost + output_cost
 
         assert input_cost == pytest.approx(0.0005)  # $0.0005
@@ -424,14 +410,12 @@ class TestLiveRegistry:
         # These models should typically be available
         common_models = ["gpt-4", "gpt-3.5-turbo", "gpt-4-turbo"]
         found_models = [
-            m
-            for m in common_models
-            if any(model_name.startswith(m) for model_name in model_names)
+            m for m in common_models if any(model_name.startswith(m) for model_name in model_names)
         ]
 
-        assert len(found_models) > 0, (
-            f"Expected to find at least one common model, got: {model_names}"
-        )
+        assert (
+            len(found_models) > 0
+        ), f"Expected to find at least one common model, got: {model_names}"
 
         # Verify model structure
         for model in models:
@@ -441,9 +425,7 @@ class TestLiveRegistry:
 
             # Check pricing is reasonable (if set)
             if model.dollars_per_million_tokens_input is not None:
-                assert (
-                    0 < model.dollars_per_million_tokens_input < 1000
-                )  # Reasonable range
+                assert 0 < model.dollars_per_million_tokens_input < 1000  # Reasonable range
             if model.dollars_per_million_tokens_output is not None:
                 assert 0 < model.dollars_per_million_tokens_output < 1000
 
@@ -475,10 +457,7 @@ class TestLiveRegistry:
             # Costs should be positive
             assert cost_info["input_cost"] > 0
             assert cost_info["output_cost"] > 0
-            assert (
-                cost_info["total_cost"]
-                == cost_info["input_cost"] + cost_info["output_cost"]
-            )
+            assert cost_info["total_cost"] == cost_info["input_cost"] + cost_info["output_cost"]
 
             # Log actual costs for visibility
             print("\nActual costs from live registry for gpt-3.5-turbo:")

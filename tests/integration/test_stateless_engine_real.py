@@ -4,19 +4,15 @@ Real integration tests for stateless_engine without mocks.
 These tests exercise the actual code paths to ensure all methods work correctly.
 """
 
-import pytest
 import os
-from datetime import datetime, UTC
-from uuid import UUID
+from datetime import datetime
 
-from llmring.mcp.client.stateless_engine import (
-    StatelessChatEngine,
-    ChatRequest,
-    ProcessingContext
-)
+import pytest
+
 from llmring.mcp.client.conversation_manager_async import AsyncConversationManager
+from llmring.mcp.client.stateless_engine import ChatRequest, ProcessingContext, StatelessChatEngine
 from llmring.mcp.http_client import MCPHttpClient
-from llmring.schemas import Message, LLMResponse
+from llmring.schemas import LLMResponse, Message
 from llmring.service import LLMRing
 
 
@@ -28,8 +24,7 @@ class TestStatelessEngineReal:
         """Create a real LLMRing service."""
         # Use test lockfile if it exists, or create one
         test_lockfile = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            'llmring.lock.json'
+            os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json"
         )
 
         # If lockfile doesn't exist, use None to trigger default creation
@@ -44,15 +39,14 @@ class TestStatelessEngineReal:
         # Use a test server URL or None to test without server
         return MCPHttpClient(
             base_url=os.getenv("TEST_LLMRING_SERVER_URL", "http://localhost:8001"),
-            api_key=os.getenv("TEST_LLMRING_API_KEY", "test-key")
+            api_key=os.getenv("TEST_LLMRING_API_KEY", "test-key"),
         )
 
     @pytest.fixture
     async def conversation_manager(self, http_client):
         """Create a real conversation manager."""
         return AsyncConversationManager(
-            llmring_server_url=http_client.base_url,
-            api_key=http_client.api_key
+            llmring_server_url=http_client.base_url, api_key=http_client.api_key
         )
 
     @pytest.fixture
@@ -60,7 +54,7 @@ class TestStatelessEngineReal:
         """Create a real chat engine."""
         return StatelessChatEngine(
             llmring=llmring_service,
-            default_model="mcp_agent"  # Use the alias we defined
+            default_model="mcp_agent",  # Use the alias we defined
         )
 
     @pytest.mark.asyncio
@@ -70,7 +64,7 @@ class TestStatelessEngineReal:
             conversation_id="test-123",
             messages=[
                 Message(role="user", content="Hello"),
-                Message(role="assistant", content="Hi there!")
+                Message(role="assistant", content="Hi there!"),
             ],
             system_prompt="You are a helpful assistant",
             model="mcp_agent",
@@ -78,7 +72,7 @@ class TestStatelessEngineReal:
             max_tokens=100,
             tools=None,
             auth_context={},
-            mcp_client=None
+            mcp_client=None,
         )
 
         messages = chat_engine._prepare_messages(context)
@@ -107,13 +101,14 @@ class TestStatelessEngineReal:
             max_tokens=50,
             tools=None,
             auth_context={"user_id": "test-user"},
-            mcp_client=None
+            mcp_client=None,
         )
 
         # This should call the real LLM and handle the response correctly
         try:
-            response_message, tool_calls, tool_results, llm_response = \
+            response_message, tool_calls, tool_results, llm_response = (
                 await chat_engine._process_with_llm(context)
+            )
 
             # Verify response types
             assert isinstance(response_message, Message)
@@ -135,6 +130,7 @@ class TestStatelessEngineReal:
         """Test that add_message is called with correct parameters."""
         # Test the actual signature without mocks
         import uuid
+
         conversation_id = str(uuid.uuid4())  # Use proper UUID
 
         # This tests the actual method signature
@@ -144,7 +140,7 @@ class TestStatelessEngineReal:
                 role="user",
                 content="Test message content",
                 token_count=10,
-                metadata={"test": "data"}
+                metadata={"test": "data"},
             )
             # If server is not running, this will fail with connection error
             # which is fine - we're testing the signature compiles
@@ -166,7 +162,7 @@ class TestStatelessEngineReal:
             system_prompt="Be helpful",
             temperature=0.8,
             max_tokens=200,
-            save_to_db=False  # Don't actually save
+            save_to_db=False,  # Don't actually save
         )
 
         context = await chat_engine._create_context(request)
@@ -182,16 +178,19 @@ class TestStatelessEngineReal:
         assert context.auth_context == {}
 
     @pytest.mark.asyncio
-    async def test_create_context_with_existing_conversation(self, chat_engine, conversation_manager):
+    async def test_create_context_with_existing_conversation(
+        self, chat_engine, conversation_manager
+    ):
         """Test _create_context with an existing conversation ID."""
         # Replace the conversation manager with our real one
         chat_engine.conversation_manager = conversation_manager
 
         import uuid
+
         request = ChatRequest(
             conversation_id=str(uuid.uuid4()),  # Use proper UUID
             message="Continue conversation",
-            save_to_db=False
+            save_to_db=False,
         )
 
         # This should try to load the conversation
@@ -211,12 +210,9 @@ class TestStatelessEngineReal:
         """Test usage calculation."""
         messages = [
             Message(role="user", content="Hello, how are you today?"),
-            Message(role="assistant", content="I'm doing well, thank you!")
+            Message(role="assistant", content="I'm doing well, thank you!"),
         ]
-        response = Message(
-            role="assistant",
-            content="This is a test response with several words."
-        )
+        response = Message(role="assistant", content="This is a test response with several words.")
 
         usage = chat_engine._calculate_usage(messages, response)
 
@@ -237,7 +233,7 @@ class TestStatelessEngineReal:
             temperature=0.3,
             max_tokens=100,
             save_to_db=False,  # Don't save to avoid DB dependency
-            auth_context={"user_id": "test-flow-user"}
+            auth_context={"user_id": "test-flow-user"},
         )
 
         try:
@@ -267,7 +263,7 @@ class TestStatelessEngineReal:
             message="Count from 1 to 5",
             model="mcp_agent",
             save_to_db=False,
-            auth_context={"user_id": "stream-test"}
+            auth_context={"user_id": "stream-test"},
         )
 
         try:
@@ -310,7 +306,7 @@ class TestStatelessEngineReal:
                 message="Test metadata",
                 model="mcp_agent",
                 auth_context={"user_id": "metadata-test-user"},
-                save_to_db=False
+                save_to_db=False,
             )
 
             response = await chat_engine.process_request(request)

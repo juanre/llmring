@@ -1,5 +1,6 @@
-import pytest
 from pathlib import Path
+
+import pytest
 
 from llmring.service import LLMRing
 
@@ -47,9 +48,7 @@ class TestGoogleSchemaNormalizer:
                     "type": "object",
                     "properties": {"x": {"type": "integer"}},
                     "additionalProperties": False,
-                    "oneOf": [
-                        {"type": "object", "properties": {"a": {"type": "string"}}}
-                    ],
+                    "oneOf": [{"type": "object", "properties": {"a": {"type": "string"}}}],
                 }
             },
         }
@@ -63,5 +62,3 @@ class TestGoogleSchemaNormalizer:
         # Notes should mention removed keywords
         joined = "\n".join(notes)
         assert "removed unsupported keywords" in joined
-
-

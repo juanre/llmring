@@ -1,12 +1,13 @@
 """Integration tests for streaming functionality."""
 
 import asyncio
-import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock
 
-from llmring.service import LLMRing
+import pytest
+
 from llmring.schemas import LLMRequest, Message, StreamChunk
+from llmring.service import LLMRing
 
 
 @pytest.mark.asyncio
@@ -244,9 +245,7 @@ async def test_streaming_with_tools():
     request = LLMRequest(
         model="test:model",
         messages=[Message(role="user", content="Calculate something")],
-        tools=[
-            {"type": "function", "function": {"name": "calculate", "parameters": {}}}
-        ],
+        tools=[{"type": "function", "function": {"name": "calculate", "parameters": {}}}],
         stream=True,
     )
 

@@ -1,7 +1,9 @@
 """Integration tests for optional registry behavior."""
 
-import pytest
 from pathlib import Path
+
+import pytest
+
 from llmring import LLMRing
 from llmring.schemas import LLMRequest
 
@@ -13,13 +15,16 @@ async def test_models_work_without_registry():
 
     # Use an invalid registry URL to ensure registry is unavailable
     test_lockfile = Path(__file__).parent.parent / "llmring.lock.json"
-    ring = LLMRing(registry_url="http://invalid-registry-url.example.com", lockfile_path=str(test_lockfile))
+    ring = LLMRing(
+        registry_url="http://invalid-registry-url.example.com",
+        lockfile_path=str(test_lockfile),
+    )
 
     # Test with a real model that might not be in registry
     request = LLMRequest(
         model="openai:gpt-4o-mini",
         messages=[{"role": "user", "content": "Reply with just 'OK'"}],
-        max_tokens=10
+        max_tokens=10,
     )
 
     try:
@@ -39,6 +44,7 @@ async def test_registry_validation_is_advisory_not_mandatory():
 
     # Use test registry
     from pathlib import Path
+
     test_registry = Path(__file__).parent.parent / "resources" / "registry"
     test_lockfile = Path(__file__).parent.parent / "llmring.lock.json"
     ring = LLMRing(registry_url=f"file://{test_registry}", lockfile_path=str(test_lockfile))
@@ -47,7 +53,7 @@ async def test_registry_validation_is_advisory_not_mandatory():
     request1 = LLMRequest(
         model="openai:gpt-3.5-turbo",
         messages=[{"role": "user", "content": "Reply with just 'OK'"}],
-        max_tokens=10
+        max_tokens=10,
     )
 
     try:
@@ -62,7 +68,7 @@ async def test_registry_validation_is_advisory_not_mandatory():
     request2 = LLMRequest(
         model="openai:gpt-4o-mini",  # Not in test registry
         messages=[{"role": "user", "content": "Reply with just 'OK'"}],
-        max_tokens=10
+        max_tokens=10,
     )
 
     try:

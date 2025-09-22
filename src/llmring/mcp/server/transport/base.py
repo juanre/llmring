@@ -113,9 +113,7 @@ class Transport(abc.ABC):
         """
         self._handle_message_with_context(message, None)
 
-    def _handle_message_with_context(
-        self, message: JSONRPCMessage, context: Any = None
-    ) -> None:
+    def _handle_message_with_context(self, message: JSONRPCMessage, context: Any = None) -> None:
         """
         Handle a received message with optional context.
 

@@ -108,18 +108,22 @@ class TestGoogleProviderIntegration:
     @skip_on_quota_exceeded
     async def test_chat_with_temperature(self, provider):
         """Test chat with different temperature settings."""
-        messages = [
-            Message(role="user", content="Write a creative opening line for a story.")
-        ]
+        messages = [Message(role="user", content="Write a creative opening line for a story.")]
 
         # Test with low temperature (more deterministic)
         response_low = await provider.chat(
-            messages=messages, model=get_test_model("google"), temperature=0.1, max_tokens=50
+            messages=messages,
+            model=get_test_model("google"),
+            temperature=0.1,
+            max_tokens=50,
         )
 
         # Test with high temperature (more creative)
         response_high = await provider.chat(
-            messages=messages, model=get_test_model("google"), temperature=0.9, max_tokens=50
+            messages=messages,
+            model=get_test_model("google"),
+            temperature=0.9,
+            max_tokens=50,
         )
 
         assert isinstance(response_low, LLMResponse)
@@ -132,9 +136,7 @@ class TestGoogleProviderIntegration:
     async def test_chat_with_max_tokens(self, provider):
         """Test chat with max_tokens limit."""
         messages = [
-            Message(
-                role="user", content="Write a long essay about artificial intelligence."
-            )
+            Message(role="user", content="Write a long essay about artificial intelligence.")
         ]
 
         response = await provider.chat(
@@ -340,9 +342,7 @@ class TestGoogleProviderIntegration:
     @skip_on_quota_exceeded
     async def test_safety_filtering(self, provider):
         """Test that safety filtering works appropriately."""
-        messages = [
-            Message(role="user", content="Tell me a wholesome joke about programming.")
-        ]
+        messages = [Message(role="user", content="Tell me a wholesome joke about programming.")]
 
         try:
             response = await provider.chat(

@@ -52,18 +52,14 @@ class ChatResponse:
                 "role": self.message.role,
                 "content": self.message.content,
                 "timestamp": (
-                    self.message.timestamp.isoformat()
-                    if self.message.timestamp
-                    else None
+                    self.message.timestamp.isoformat() if self.message.timestamp else None
                 ),
             },
             "usage": self.usage,
             "model": self.model,
             "created_at": self.created_at.isoformat(),
             "processing_time_ms": self.processing_time_ms,
-            "tool_calls": (
-                [tc.dict() for tc in self.tool_calls] if self.tool_calls else None
-            ),
+            "tool_calls": ([tc.dict() for tc in self.tool_calls] if self.tool_calls else None),
         }
 
     def to_json(self) -> str:
@@ -174,9 +170,7 @@ class StatelessChatEngine:
                 usage = self._calculate_usage(context.messages, response_message)
 
             # Calculate processing time
-            processing_time_ms = int(
-                (datetime.now(UTC) - start_time).total_seconds() * 1000
-            )
+            processing_time_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
 
             # Save to database if requested
             if request.save_to_db:
@@ -286,9 +280,7 @@ class StatelessChatEngine:
     ) -> ToolResult:
         """Execute a tool within conversation context."""
         # Load conversation
-        conversation = await self.conversation_manager.get_conversation(
-            conversation_id
-        )
+        conversation = await self.conversation_manager.get_conversation(conversation_id)
 
         # Get MCP client for conversation
         mcp_client = await self._get_mcp_client(conversation)
@@ -310,7 +302,12 @@ class StatelessChatEngine:
             conversation_id=conversation_id,
             role="tool",
             content=str(tool_result.result),
-            metadata={"tool_result": {"tool_call_id": tool_result.tool_call_id, "result": tool_result.result}}
+            metadata={
+                "tool_result": {
+                    "tool_call_id": tool_result.tool_call_id,
+                    "result": tool_result.result,
+                }
+            },
         )
 
         return tool_result
@@ -319,9 +316,7 @@ class StatelessChatEngine:
         """Create processing context from request."""
         if request.conversation_id:
             # Load existing conversation
-            conversation = await self.conversation_manager.get_conversation(
-                request.conversation_id
-            )
+            conversation = await self.conversation_manager.get_conversation(request.conversation_id)
 
             if not conversation:
                 raise ValueError(f"Conversation {request.conversation_id} not found")
@@ -329,9 +324,7 @@ class StatelessChatEngine:
             return ProcessingContext(
                 conversation_id=request.conversation_id,
                 messages=(
-                    request.messages
-                    if request.messages is not None
-                    else conversation.messages
+                    request.messages if request.messages is not None else conversation.messages
                 ),
                 system_prompt=request.system_prompt or conversation.system_prompt,
                 model=request.model or conversation.model,
@@ -349,7 +342,11 @@ class StatelessChatEngine:
             if request.save_to_db:
                 # Create conversation returns the ID
                 # Get user_id from auth_context if available
-                user_id = request.auth_context.get("user_id", "default-user") if request.auth_context else "default-user"
+                user_id = (
+                    request.auth_context.get("user_id", "default-user")
+                    if request.auth_context
+                    else "default-user"
+                )
                 conversation_id = await self.conversation_manager.create_conversation(
                     user_id=user_id,
                     title="New Conversation",
@@ -400,15 +397,14 @@ class StatelessChatEngine:
         # We're not streaming, so response should be LLMResponse
         # Type assertion to satisfy type checker
         from llmring.schemas import LLMResponse
+
         assert isinstance(response, LLMResponse)
 
         # Extract response content
         content = response.content
 
         # Create response message
-        response_message = Message(
-            role="assistant", content=content, timestamp=datetime.now(UTC)
-        )
+        response_message = Message(role="assistant", content=content, timestamp=datetime.now(UTC))
 
         # Handle tool calls if present
         tool_calls = None
@@ -422,9 +418,7 @@ class StatelessChatEngine:
                 tool_call = ToolCall(
                     id=tc.get("id", str(uuid.uuid4())),
                     tool_name=tc.get("function", {}).get("name", tc.get("name", "")),
-                    arguments=tc.get("function", {}).get(
-                        "arguments", tc.get("arguments", {})
-                    ),
+                    arguments=tc.get("function", {}).get("arguments", tc.get("arguments", {})),
                 )
                 tool_calls.append(tool_call)
 
@@ -485,6 +479,7 @@ class StatelessChatEngine:
         # We're not streaming, so response should be LLMResponse
         # Type assertion to satisfy type checker
         from llmring.schemas import LLMResponse
+
         assert isinstance(response, LLMResponse)
 
         # Simulate streaming chunks
@@ -501,12 +496,8 @@ class StatelessChatEngine:
                     "type": "tool_call",
                     "tool_call": ToolCall(
                         id=tc.get("id", str(uuid.uuid4())),
-                        tool_name=tc.get("function", {}).get(
-                            "name", tc.get("name", "")
-                        ),
-                        arguments=tc.get("function", {}).get(
-                            "arguments", tc.get("arguments", {})
-                        ),
+                        tool_name=tc.get("function", {}).get("name", tc.get("name", "")),
+                        arguments=tc.get("function", {}).get("arguments", tc.get("arguments", {})),
                     ),
                 }
 
@@ -523,9 +514,7 @@ class StatelessChatEngine:
 
         return messages
 
-    def _calculate_usage(
-        self, messages: list[Message], response: Message
-    ) -> dict[str, int]:
+    def _calculate_usage(self, messages: list[Message], response: Message) -> dict[str, int]:
         """Calculate token usage."""
         # This is a simplified version
         # In production, use proper tokenizer for the model

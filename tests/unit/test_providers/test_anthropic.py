@@ -9,9 +9,13 @@ import os
 
 import pytest
 
+from llmring.exceptions import (
+    ModelNotFoundError,
+    ProviderAuthenticationError,
+    ProviderResponseError,
+)
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.schemas import LLMResponse, Message
-from llmring.exceptions import ProviderAuthenticationError, ModelNotFoundError, ProviderResponseError
 
 
 @pytest.mark.llm
@@ -68,9 +72,7 @@ class TestAnthropicProviderUnit:
         assert response.finish_reason in ["stop", "max_tokens", "end_turn"]
 
     @pytest.mark.asyncio
-    async def test_chat_with_system_message(
-        self, anthropic_provider, system_user_messages
-    ):
+    async def test_chat_with_system_message(self, anthropic_provider, system_user_messages):
         """Test chat with system message."""
         response = await anthropic_provider.chat(
             messages=system_user_messages,
@@ -83,9 +85,7 @@ class TestAnthropicProviderUnit:
         assert "4" in response.content or "four" in response.content.lower()
 
     @pytest.mark.asyncio
-    async def test_chat_with_provider_prefix_removal(
-        self, anthropic_provider, simple_user_message
-    ):
+    async def test_chat_with_provider_prefix_removal(self, anthropic_provider, simple_user_message):
         """Test that provider prefix is correctly removed from model name."""
         response = await anthropic_provider.chat(
             messages=simple_user_message,
@@ -94,9 +94,7 @@ class TestAnthropicProviderUnit:
         )
 
         assert isinstance(response, LLMResponse)
-        assert (
-            response.model == "claude-3-5-haiku-20241022"
-        )  # Prefix should be removed
+        assert response.model == "claude-3-5-haiku-20241022"  # Prefix should be removed
 
     @pytest.mark.asyncio
     async def test_chat_with_parameters(self, anthropic_provider, simple_user_message):
@@ -118,7 +116,9 @@ class TestAnthropicProviderUnit:
     ):
         """Test that using an unsupported model raises error from API."""
         # Now that registry validation is advisory, the API itself determines if model exists
-        with pytest.raises((ModelNotFoundError, ProviderResponseError), match="not_found|not available"):
+        with pytest.raises(
+            (ModelNotFoundError, ProviderResponseError), match="not_found|not available"
+        ):
             await anthropic_provider.chat(
                 messages=simple_user_message, model="definitely-not-a-real-model"
             )
@@ -190,9 +190,7 @@ class TestAnthropicProviderUnit:
             pytest.skip("Anthropic tokenizer not available")
 
     @pytest.mark.asyncio
-    async def test_chat_with_tool_calls_response(
-        self, anthropic_provider, sample_tools
-    ):
+    async def test_chat_with_tool_calls_response(self, anthropic_provider, sample_tools):
         """Test handling of tool calls in response."""
         # Use a message that's likely to trigger a tool call
         messages = [
@@ -225,9 +223,7 @@ class TestAnthropicProviderUnit:
                 pytest.fail("Tool call arguments are not valid JSON")
 
     @pytest.mark.asyncio
-    async def test_multi_turn_conversation(
-        self, anthropic_provider, multi_turn_conversation
-    ):
+    async def test_multi_turn_conversation(self, anthropic_provider, multi_turn_conversation):
         """Test multi-turn conversation handling."""
         response = await anthropic_provider.chat(
             messages=multi_turn_conversation,
@@ -257,11 +253,7 @@ class TestAnthropicProviderUnit:
     @pytest.mark.asyncio
     async def test_json_response_format(self, anthropic_provider, json_response_format):
         """Test JSON response format."""
-        messages = [
-            Message(
-                role="user", content="Respond with JSON: answer=hello, confidence=0.9"
-            )
-        ]
+        messages = [Message(role="user", content="Respond with JSON: answer=hello, confidence=0.9")]
 
         response = await anthropic_provider.chat(
             messages=messages,
@@ -295,9 +287,7 @@ class TestAnthropicProviderUnit:
         # Should get an authentication error
         error_msg = str(exc_info.value).lower()
         assert (
-            "authentication" in error_msg
-            or "unauthorized" in error_msg
-            or "api key" in error_msg
+            "authentication" in error_msg or "unauthorized" in error_msg or "api key" in error_msg
         )
 
     @pytest.mark.asyncio

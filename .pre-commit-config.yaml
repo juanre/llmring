@@ -1,0 +1,39 @@
+# Pre-commit hooks for automatic code formatting
+# See https://pre-commit.com for more information
+repos:
+  # Black - Python code formatter
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        language_version: python3
+        args: ['--config=pyproject.toml']
+
+  # isort - Python import sorter
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ['--settings-path=pyproject.toml']
+
+  # Basic file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+# Configuration
+default_stages: [pre-commit]
+fail_fast: false
+
+# Note: Run `uv run ruff check .` manually for linting
+# Or `uv run ruff check --fix .` to auto-fix issues

@@ -52,9 +52,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         # Get API key from parameter or environment
         api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
         if not api_key:
-            raise ProviderAuthenticationError(
-                "OpenAI API key must be provided", provider="openai"
-            )
+            raise ProviderAuthenticationError("OpenAI API key must be provided", provider="openai")
 
         # Create config for base class
         config = ProviderConfig(
@@ -82,7 +80,6 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         # Simple circuit breaker per model
         self._breaker = CircuitBreaker()
 
-
     async def get_default_model(self) -> str:
         """
         Get the default model to use, derived from registry if not specified.
@@ -107,7 +104,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         provider_name="openai",
                         available_models=models,
                         cost_range=(0.1, 5.0),  # OpenAI's typical range
-                        fallback_model=None  # No hardcoded fallback
+                        fallback_model=None,  # No hardcoded fallback
                     )
                     self.default_model = selected_model
                     self.log_info(f"Derived default model from registry: {selected_model}")
@@ -126,7 +123,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
     async def aclose(self) -> None:
         """Clean up provider resources."""
-        if hasattr(self, 'client') and self.client:
+        if hasattr(self, "client") and self.client:
             await self.client.close()
 
     async def get_capabilities(self) -> ProviderCapabilities:
@@ -180,9 +177,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                             return True
         return False
 
-    def _extract_pdf_content_and_text(
-        self, messages: List[Message]
-    ) -> tuple[List[bytes], str]:
+    def _extract_pdf_content_and_text(self, messages: List[Message]) -> tuple[List[bytes], str]:
         """
         Extract PDF content and combine all text content from messages.
 
@@ -234,9 +229,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         # Extract PDF data and text from messages
         pdf_data_list, combined_text = self._extract_pdf_content_and_text(messages)
         if not pdf_data_list:
-            raise ProviderResponseError(
-                "No PDF content found in messages", provider="openai"
-            )
+            raise ProviderResponseError("No PDF content found in messages", provider="openai")
         if not combined_text.strip():
             combined_text = "Please analyze this PDF document and provide a summary."
 
@@ -251,12 +244,8 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     tmp_file.flush()
                     with open(tmp_file.name, "rb") as f:
                         # PDFs must use 'assistants' purpose for Responses input_file
-                        file_obj = await self.client.files.create(
-                            file=f, purpose="assistants"
-                        )
-                        uploaded_files.append(
-                            {"file_id": file_obj.id, "temp_path": tmp_file.name}
-                        )
+                        file_obj = await self.client.files.create(file=f, purpose="assistants")
+                        uploaded_files.append({"file_id": file_obj.id, "temp_path": tmp_file.name})
 
             # Build Responses API input using input_file items (direct file processing)
             content_items: List[Dict[str, Any]] = []
@@ -285,9 +274,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 timeout=timeout_s,
             )
 
-            response_content = (
-                resp.output_text if hasattr(resp, "output_text") else str(resp)
-            )
+            response_content = resp.output_text if hasattr(resp, "output_text") else str(resp)
             estimated_usage = {
                 "prompt_tokens": self.get_token_count(combined_text),
                 "completion_tokens": self.get_token_count(response_content or ""),
@@ -402,8 +389,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     f"OpenAI API rate limit exceeded: {error_msg}", provider="openai"
                 ) from e
             elif "model" in error_msg.lower() and (
-                "not found" in error_msg.lower()
-                or "does not exist" in error_msg.lower()
+                "not found" in error_msg.lower() or "does not exist" in error_msg.lower()
             ):
                 raise ModelNotFoundError(
                     f"OpenAI model not available: {error_msg}",
@@ -428,8 +414,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         estimated_usage = {
             "prompt_tokens": self.get_token_count(input_text),
             "completion_tokens": self.get_token_count(content_text),
-            "total_tokens": self.get_token_count(input_text)
-            + self.get_token_count(content_text),
+            "total_tokens": self.get_token_count(input_text) + self.get_token_count(content_text),
         }
 
         return LLMResponse(
@@ -474,6 +459,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             models = await self._registry_client.fetch_current_models("openai")
             if not any(m.model_name == model and m.is_active for m in models):
                 import logging
+
                 logging.getLogger(__name__).warning(
                     f"Model '{model}' not found in registry, proceeding anyway"
                 )
@@ -528,9 +514,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 if "json_schema" in response_format:
                     json_schema_format["json_schema"] = response_format["json_schema"]
                 if response_format.get("strict") is not None:
-                    json_schema_format["json_schema"]["strict"] = response_format[
-                        "strict"
-                    ]
+                    json_schema_format["json_schema"]["strict"] = response_format["strict"]
                 request_params["response_format"] = json_schema_format
             else:
                 request_params["response_format"] = response_format
@@ -618,15 +602,9 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                             finish_reason=choice.finish_reason,
                             tool_calls=tool_calls_list,
                             usage={
-                                "prompt_tokens": self.get_token_count(
-                                    str(openai_messages)
-                                ),
-                                "completion_tokens": self.get_token_count(
-                                    accumulated_content
-                                ),
-                                "total_tokens": self.get_token_count(
-                                    str(openai_messages)
-                                )
+                                "prompt_tokens": self.get_token_count(str(openai_messages)),
+                                "completion_tokens": self.get_token_count(accumulated_content),
+                                "total_tokens": self.get_token_count(str(openai_messages))
                                 + self.get_token_count(accumulated_content),
                             },
                         )
@@ -652,9 +630,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     f"OpenAI API error: {error_msg}", provider="openai"
                 ) from e
 
-    async def _prepare_openai_messages(
-        self, messages: List[Message]
-    ) -> List[Dict[str, Any]]:
+    async def _prepare_openai_messages(self, messages: List[Message]) -> List[Dict[str, Any]]:
         """Convert messages to OpenAI format."""
         openai_messages = []
         for msg in messages:
@@ -737,9 +713,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             "on",
         }:
             for message in openai_messages:
-                if isinstance(message, dict) and isinstance(
-                    message.get("content"), list
-                ):
+                if isinstance(message, dict) and isinstance(message.get("content"), list):
                     for part in message["content"]:
                         if (
                             isinstance(part, dict)
@@ -747,15 +721,11 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                             and isinstance(part.get("image_url"), dict)
                         ):
                             url = part["image_url"].get("url")
-                            if isinstance(url, str) and url.startswith(
-                                ("http://", "https://")
-                            ):
+                            if isinstance(url, str) and url.startswith(("http://", "https://")):
                                 try:
                                     data, mime = await safe_fetch_bytes(url)
                                     b64 = base64.b64encode(data).decode("utf-8")
-                                    part["image_url"][
-                                        "url"
-                                    ] = f"data:{mime};base64,{b64}"
+                                    part["image_url"]["url"] = f"data:{mime};base64,{b64}"
                                 except (SafeFetchError, Exception):
                                     # Leave URL as-is if fetch fails
                                     pass
@@ -777,9 +747,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     "function": {
                         "name": tool["name"],
                         "description": tool.get("description", ""),
-                        "parameters": tool.get(
-                            "parameters", {"type": "object", "properties": {}}
-                        ),
+                        "parameters": tool.get("parameters", {"type": "object", "properties": {}}),
                     },
                 }
                 openai_tools.append(openai_tool)
@@ -896,6 +864,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             models = await self._registry_client.fetch_current_models("openai")
             if not any(m.model_name == model and m.is_active for m in models):
                 import logging
+
                 logging.getLogger(__name__).warning(
                     f"Model '{model}' not found in registry, proceeding anyway"
                 )
@@ -960,9 +929,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 if "json_schema" in response_format:
                     json_schema_format["json_schema"] = response_format["json_schema"]
                 if response_format.get("strict") is not None:
-                    json_schema_format["json_schema"]["strict"] = response_format[
-                        "strict"
-                    ]
+                    json_schema_format["json_schema"]["strict"] = response_format["strict"]
                 request_params["response_format"] = json_schema_format
             else:
                 request_params["response_format"] = response_format
@@ -1037,6 +1004,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         except Exception as e:
             # Already wrapped? Just re-raise
             from llmring.exceptions import LLMRingError
+
             if isinstance(e, LLMRingError):
                 raise
 
@@ -1047,12 +1015,13 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 pass
 
             # Handle OpenAI SDK specific exceptions
-            from openai import NotFoundError, AuthenticationError, RateLimitError
+            from openai import AuthenticationError, NotFoundError, RateLimitError
+
             from llmring.net.retry import RetryError
 
             # Check for RetryError wrapper first
             if isinstance(e, RetryError):
-                root = e.__cause__ if hasattr(e, '__cause__') else e
+                root = e.__cause__ if hasattr(e, "__cause__") else e
 
                 # Timeout after retries
                 if isinstance(root, asyncio.TimeoutError):
@@ -1080,7 +1049,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     raise ProviderRateLimitError(
                         "Rate limit exceeded",
                         provider="openai",
-                        retry_after=getattr(root, 'retry_after', None),
+                        retry_after=getattr(root, "retry_after", None),
                         original=e,
                     ) from e
 
@@ -1109,7 +1078,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 raise ProviderRateLimitError(
                     "Rate limit exceeded",
                     provider="openai",
-                    retry_after=getattr(e, 'retry_after', None),
+                    retry_after=getattr(e, "retry_after", None),
                     original=e,
                 ) from e
 

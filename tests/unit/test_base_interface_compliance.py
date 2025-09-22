@@ -8,11 +8,11 @@ fixing the LSP violation identified in the code review.
 import pytest
 
 from llmring.base import BaseLLMProvider
-from llmring.schemas import LLMRequest, Message
-from llmring.providers.openai_api import OpenAIProvider
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
 from llmring.providers.ollama_api import OllamaProvider
+from llmring.providers.openai_api import OpenAIProvider
+from llmring.schemas import LLMRequest, Message
 
 
 class TestBaseInterfaceCompliance:
@@ -59,9 +59,9 @@ class TestBaseInterfaceCompliance:
             "extra_params",
         ]
 
-        assert params == expected_params, (
-            f"Base interface signature mismatch. Expected {expected_params}, got {params}"
-        )
+        assert (
+            params == expected_params
+        ), f"Base interface signature mismatch. Expected {expected_params}, got {params}"
 
     @pytest.mark.parametrize(
         "provider_class",
@@ -98,12 +98,12 @@ class TestBaseInterfaceCompliance:
 
         for provider_class in providers:
             sig = inspect.signature(provider_class.chat)
-            assert "extra_params" in sig.parameters, (
-                f"{provider_class.__name__}.chat() missing extra_params parameter"
-            )
+            assert (
+                "extra_params" in sig.parameters
+            ), f"{provider_class.__name__}.chat() missing extra_params parameter"
 
             # Check it has correct type annotation
             param = sig.parameters["extra_params"]
-            assert param.default is None, (
-                f"{provider_class.__name__} extra_params should default to None"
-            )
+            assert (
+                param.default is None
+            ), f"{provider_class.__name__} extra_params should default to None"

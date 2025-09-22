@@ -4,16 +4,12 @@ Real integration tests for AsyncConversationManager without mocks.
 These tests verify the actual method signatures and behavior.
 """
 
-import pytest
 import os
 from uuid import uuid4
-from datetime import datetime, UTC
 
-from llmring.mcp.client.conversation_manager_async import (
-    AsyncConversationManager,
-    Conversation
-)
-from llmring.schemas import Message
+import pytest
+
+from llmring.mcp.client.conversation_manager_async import AsyncConversationManager, Conversation
 
 
 class TestConversationManagerReal:
@@ -26,10 +22,7 @@ class TestConversationManagerReal:
         server_url = os.getenv("TEST_LLMRING_SERVER_URL", "http://localhost:8001")
         api_key = os.getenv("TEST_LLMRING_API_KEY", "test-key")
 
-        return AsyncConversationManager(
-            llmring_server_url=server_url,
-            api_key=api_key
-        )
+        return AsyncConversationManager(llmring_server_url=server_url, api_key=api_key)
 
     def is_server_available(self, error):
         """Check if error is due to server not being available."""
@@ -48,7 +41,7 @@ class TestConversationManagerReal:
                 model="mcp_agent",  # Use our alias
                 temperature=0.7,
                 max_tokens=1000,
-                tool_config={"tools": [{"name": "test_tool"}]}
+                tool_config={"tools": [{"name": "test_tool"}]},
             )
 
             # If successful, verify return type
@@ -77,8 +70,8 @@ class TestConversationManagerReal:
                 token_count=15,
                 metadata={
                     "tool_calls": [{"name": "test", "args": {}}],
-                    "processing_time_ms": 100
-                }
+                    "processing_time_ms": 100,
+                },
             )
 
             # If successful, verify return type
@@ -98,8 +91,7 @@ class TestConversationManagerReal:
 
         try:
             conversation = await conversation_manager.get_conversation(
-                conversation_id=conversation_id,
-                include_messages=True
+                conversation_id=conversation_id, include_messages=True
             )
 
             # If found (unlikely with random ID), verify type
@@ -120,9 +112,7 @@ class TestConversationManagerReal:
         """Test that list_conversations exists and has correct signature."""
         try:
             conversations = await conversation_manager.list_conversations(
-                user_id="test-user-list",
-                limit=10,
-                offset=0
+                user_id="test-user-list", limit=10, offset=0
             )
 
             # If successful, verify return type
@@ -149,14 +139,12 @@ class TestConversationManagerReal:
                 title="Integration Test",
                 system_prompt="Test system prompt",
                 model="mcp_agent",
-                temperature=0.5
+                temperature=0.5,
             )
 
             # 2. Add messages
             await conversation_manager.add_message(
-                conversation_id=conv_id,
-                role="user",
-                content="Hello, this is a test"
+                conversation_id=conv_id, role="user", content="Hello, this is a test"
             )
 
             await conversation_manager.add_message(
@@ -164,13 +152,12 @@ class TestConversationManagerReal:
                 role="assistant",
                 content="Hello! I understand this is a test.",
                 token_count=10,
-                metadata={"test": True}
+                metadata={"test": True},
             )
 
             # 3. Get conversation back
             conversation = await conversation_manager.get_conversation(
-                conversation_id=conv_id,
-                include_messages=True
+                conversation_id=conv_id, include_messages=True
             )
 
             if conversation:
@@ -199,9 +186,9 @@ class TestConversationManagerReal:
                 metadata={
                     "tool_result": {
                         "tool_call_id": "call_123",
-                        "result": {"answer": 42}
+                        "result": {"answer": 42},
                     }
-                }
+                },
             )
 
             assert message_id is not None
@@ -218,9 +205,7 @@ class TestConversationManagerReal:
         fake_id = str(uuid4())
 
         try:
-            conversation = await conversation_manager.get_conversation(
-                conversation_id=fake_id
-            )
+            conversation = await conversation_manager.get_conversation(conversation_id=fake_id)
 
             # Should return None or raise an error
             assert conversation is None

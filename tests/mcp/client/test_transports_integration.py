@@ -25,6 +25,7 @@ def _find_free_port() -> int:
 async def test_streamable_http_initialize_and_headers():
     # Require fastapi/uvicorn to be importable
     import uvicorn  # noqa: F401
+
     from llmring.mcp.server import MCPServer
     from llmring.mcp.server.integrations.fastapi_streamable import (
         FastAPIStreamableTransport,
@@ -36,9 +37,7 @@ async def test_streamable_http_initialize_and_headers():
     # Build FastAPI app and MCP server/transport in-process
     mcp_transport = FastAPIStreamableTransport(enable_sessions=True)
     mcp_server = MCPServer(name="TestServer", version="1.0.0")
-    app = create_fastapi_app(
-        mcp_transport, "/mcp", title="Test MCP Server", version="1.0.0"
-    )
+    app = create_fastapi_app(mcp_transport, "/mcp", title="Test MCP Server", version="1.0.0")
     mcp_transport.set_message_callback(mcp_server._handle_message)
 
     # Start uvicorn server in background thread

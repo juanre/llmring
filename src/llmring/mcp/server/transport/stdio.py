@@ -115,9 +115,7 @@ class StdioTransport(Transport):
                 # Try to get fileno - this will fail for StringIO
                 sys.stdin.fileno()
                 protocol = asyncio.StreamReaderProtocol(self._reader)
-                self._pipe_transport, _ = await loop.connect_read_pipe(
-                    lambda: protocol, sys.stdin
-                )
+                self._pipe_transport, _ = await loop.connect_read_pipe(lambda: protocol, sys.stdin)
             except (AttributeError, io.UnsupportedOperation):
                 # For testing with StringIO
                 self._test_mode = True
@@ -190,9 +188,7 @@ class StdioTransport(Transport):
                 sys.stdout.write(json_str + "\n")
                 sys.stdout.flush()
 
-                self.logger.debug(
-                    f"Sent message: {message.get('method') or message.get('id')}"
-                )
+                self.logger.debug(f"Sent message: {message.get('method') or message.get('id')}")
                 return True
 
             except Exception as e:
@@ -267,9 +263,7 @@ class StdioTransport(Transport):
             if "jsonrpc" not in message or message["jsonrpc"] != "2.0":
                 raise ValueError("Invalid or missing JSON-RPC version")
 
-            self.logger.debug(
-                f"Received message: {message.get('method') or message.get('id')}"
-            )
+            self.logger.debug(f"Received message: {message.get('method') or message.get('id')}")
 
             # Deliver to handler (synchronously)
             self._handle_message(message)

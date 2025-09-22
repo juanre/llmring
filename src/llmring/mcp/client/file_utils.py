@@ -181,10 +181,7 @@ def process_file_from_source(
             if source.startswith(("http://", "https://")):
                 source_type = "url"
             elif source.startswith("data:") or (
-                "/" not in source
-                and "\\" not in source
-                and len(source) > 100
-                and "=" in source
+                "/" not in source and "\\" not in source and len(source) > 100 and "=" in source
             ):
                 source_type = "base64"
             elif os.path.exists(source):
@@ -214,9 +211,7 @@ def process_file_from_source(
 
     elif source_type == "path":
         if not os.path.exists(source):
-            raise FileAccessError(
-                f"File not found: {source}", filename=os.path.basename(source)
-            )
+            raise FileAccessError(f"File not found: {source}", filename=os.path.basename(source))
 
         with open(source, "rb") as f:
             result["content"] = f.read()

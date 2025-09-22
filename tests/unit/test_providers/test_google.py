@@ -112,9 +112,7 @@ class TestGoogleProviderUnit:
 
     @pytest.mark.asyncio
     @skip_on_quota_exceeded
-    async def test_chat_with_system_message(
-        self, google_provider, system_user_messages
-    ):
+    async def test_chat_with_system_message(self, google_provider, system_user_messages):
         """Test chat with system message."""
         response = await google_provider.chat(
             messages=system_user_messages, model="gemini-1.5-pro", max_tokens=10
@@ -126,9 +124,7 @@ class TestGoogleProviderUnit:
 
     @pytest.mark.asyncio
     @skip_on_quota_exceeded
-    async def test_chat_with_provider_prefix_removal(
-        self, google_provider, simple_user_message
-    ):
+    async def test_chat_with_provider_prefix_removal(self, google_provider, simple_user_message):
         """Test that provider prefix is correctly removed from model name."""
         response = await google_provider.chat(
             messages=simple_user_message, model="google:gemini-1.5-pro", max_tokens=10
@@ -160,7 +156,10 @@ class TestGoogleProviderUnit:
         from llmring.exceptions import ModelNotFoundError, ProviderResponseError
 
         # Now that registry validation is advisory, the API itself determines if model exists
-        with pytest.raises((ModelNotFoundError, ProviderResponseError), match="not found|NOT_FOUND|not available"):
+        with pytest.raises(
+            (ModelNotFoundError, ProviderResponseError),
+            match="not found|NOT_FOUND|not available",
+        ):
             await google_provider.chat(
                 messages=simple_user_message, model="definitely-not-a-real-model"
             )
@@ -192,9 +191,7 @@ class TestGoogleProviderUnit:
 
     @pytest.mark.asyncio
     @skip_on_quota_exceeded
-    async def test_chat_multi_turn_conversation(
-        self, google_provider, multi_turn_conversation
-    ):
+    async def test_chat_multi_turn_conversation(self, google_provider, multi_turn_conversation):
         """Test multi-turn conversation handling."""
         response = await google_provider.chat(
             messages=multi_turn_conversation, model="gemini-1.5-pro", max_tokens=20
@@ -223,9 +220,7 @@ class TestGoogleProviderUnit:
 
     @pytest.mark.asyncio
     @skip_on_quota_exceeded
-    async def test_chat_response_without_usage_metadata(
-        self, google_provider, simple_user_message
-    ):
+    async def test_chat_response_without_usage_metadata(self, google_provider, simple_user_message):
         """Test handling when usage metadata is not available."""
         response = await google_provider.chat(
             messages=simple_user_message, model="gemini-1.5-pro", max_tokens=10
@@ -256,11 +251,7 @@ class TestGoogleProviderUnit:
     @skip_on_quota_exceeded
     async def test_json_response_format(self, google_provider, json_response_format):
         """Test JSON response format."""
-        messages = [
-            Message(
-                role="user", content="Respond with JSON: answer=hello, confidence=0.9"
-            )
-        ]
+        messages = [Message(role="user", content="Respond with JSON: answer=hello, confidence=0.9")]
 
         response = await google_provider.chat(
             messages=messages,

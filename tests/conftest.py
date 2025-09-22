@@ -45,8 +45,9 @@ async def llmring_server_client(test_db_factory) -> AsyncGenerator[AsyncClient, 
         pytest.skip("llmring-server not installed, skipping integration tests")
 
     # Import inside fixture to avoid import errors when server not available
-    from llmring_server.main import app as server_app
     from pathlib import Path
+
+    from llmring_server.main import app as server_app
 
     # Create isolated test database with schema
     db = await test_db_factory.create_db(suffix="llmring", schema="llmring_test")
@@ -134,12 +135,12 @@ def openai_provider():
     provider = OpenAIProvider(api_key=api_key)
     # Use test registry for unit tests
     from pathlib import Path
+
     from llmring.registry import RegistryClient
+
     test_registry_path = Path(__file__).parent / "resources" / "registry"
     if test_registry_path.exists():
-        provider._registry_client = RegistryClient(
-            registry_url=f"file://{test_registry_path}"
-        )
+        provider._registry_client = RegistryClient(registry_url=f"file://{test_registry_path}")
     return provider
 
 
@@ -152,12 +153,12 @@ def anthropic_provider():
     provider = AnthropicProvider(api_key=api_key)
     # Use test registry for unit tests
     from pathlib import Path
+
     from llmring.registry import RegistryClient
+
     test_registry_path = Path(__file__).parent / "resources" / "registry"
     if test_registry_path.exists():
-        provider._registry_client = RegistryClient(
-            registry_url=f"file://{test_registry_path}"
-        )
+        provider._registry_client = RegistryClient(registry_url=f"file://{test_registry_path}")
     return provider
 
 
@@ -176,12 +177,12 @@ def google_provider():
     provider = GoogleProvider(api_key=api_key)
     # Use test registry for unit tests
     from pathlib import Path
+
     from llmring.registry import RegistryClient
+
     test_registry_path = Path(__file__).parent / "resources" / "registry"
     if test_registry_path.exists():
-        provider._registry_client = RegistryClient(
-            registry_url=f"file://{test_registry_path}"
-        )
+        provider._registry_client = RegistryClient(registry_url=f"file://{test_registry_path}")
     return provider
 
 
@@ -191,12 +192,12 @@ def ollama_provider():
     provider = OllamaProvider()
     # Use test registry for unit tests
     from pathlib import Path
+
     from llmring.registry import RegistryClient
+
     test_registry_path = Path(__file__).parent / "resources" / "registry"
     if test_registry_path.exists():
-        provider._registry_client = RegistryClient(
-            registry_url=f"file://{test_registry_path}"
-        )
+        provider._registry_client = RegistryClient(registry_url=f"file://{test_registry_path}")
     return provider
 
 
@@ -293,12 +294,13 @@ def sample_llm_response():
 async def llmring():
     """Create LLMRing instance with test lockfile"""
     from pathlib import Path
+
     test_lockfile = Path(__file__).parent / "llmring.lock.json"
     test_registry_path = Path(__file__).parent / "resources" / "registry"
     if test_registry_path.exists():
         service = LLMRing(
             registry_url=f"file://{test_registry_path}",
-            lockfile_path=str(test_lockfile)
+            lockfile_path=str(test_lockfile),
         )
     else:
         service = LLMRing(lockfile_path=str(test_lockfile))

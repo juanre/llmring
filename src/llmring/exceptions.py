@@ -11,7 +11,12 @@ from typing import Any, Optional
 class LLMRingError(Exception):
     """Base exception for all LLMRing errors with original exception preservation."""
 
-    def __init__(self, message: str, original: Optional[Exception] = None, details: Optional[dict[str, Any]] = None):
+    def __init__(
+        self,
+        message: str,
+        original: Optional[Exception] = None,
+        details: Optional[dict[str, Any]] = None,
+    ):
         super().__init__(message)
         self.message = message
         self.original = original
@@ -26,7 +31,7 @@ class LLMRingError(Exception):
     @property
     def root_cause(self) -> Optional[Exception]:
         """Get the root cause exception."""
-        if self.original and hasattr(self.original, 'root_cause'):
+        if self.original and hasattr(self.original, "root_cause"):
             return self.original.root_cause
         return self.original or self
 
@@ -35,14 +40,24 @@ class LLMRingError(Exception):
 class ConfigurationError(LLMRingError):
     """Error in configuration (missing keys, invalid values, etc.)."""
 
-    def __init__(self, message: str, original: Optional[Exception] = None, details: Optional[dict[str, Any]] = None):
+    def __init__(
+        self,
+        message: str,
+        original: Optional[Exception] = None,
+        details: Optional[dict[str, Any]] = None,
+    ):
         super().__init__(message, original, details)
 
 
 class InitializationError(LLMRingError):
     """Raised when initialization of a component fails."""
 
-    def __init__(self, message: str, original: Optional[Exception] = None, details: Optional[dict[str, Any]] = None):
+    def __init__(
+        self,
+        message: str,
+        original: Optional[Exception] = None,
+        details: Optional[dict[str, Any]] = None,
+    ):
         super().__init__(message, original, details)
 
 
@@ -74,11 +89,13 @@ class ProviderError(LLMRingError):
 
 class ProviderNotFoundError(ProviderError):
     """Requested provider is not available."""
+
     pass
 
 
 class ProviderAuthenticationError(ProviderError):
     """Provider authentication failed (invalid API key, etc.)."""
+
     pass
 
 
@@ -99,11 +116,13 @@ class ProviderRateLimitError(ProviderError):
 
 class ProviderTimeoutError(ProviderError):
     """Provider request timed out."""
+
     pass
 
 
 class ProviderResponseError(ProviderError):
     """Invalid or unexpected response from provider."""
+
     pass
 
 
@@ -126,6 +145,7 @@ class ModelError(LLMRingError):
 
 class ModelNotFoundError(ModelError):
     """Requested model is not available."""
+
     pass
 
 

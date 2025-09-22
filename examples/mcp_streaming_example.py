@@ -9,10 +9,9 @@ This example demonstrates:
 """
 
 import asyncio
-import json
 from datetime import datetime
 
-from llmring.mcp.client.enhanced_llm import EnhancedLLM, create_enhanced_llm
+from llmring.mcp.client.enhanced_llm import create_enhanced_llm
 from llmring.schemas import Message
 
 
@@ -25,10 +24,10 @@ def get_current_time():
 def calculate(expression: str):
     """
     Safely evaluate a mathematical expression.
-    
+
     Args:
         expression: Mathematical expression to evaluate
-        
+
     Returns:
         The result of the calculation
     """
@@ -40,7 +39,7 @@ def calculate(expression: str):
         "max": max,
         "min": min,
     }
-    
+
     try:
         # Use eval with restricted namespace for safety
         result = eval(expression, {"__builtins__": {}}, allowed_names)
@@ -54,28 +53,23 @@ async def example_streaming_without_tools():
     print("=" * 60)
     print("Example 1: Streaming without tools")
     print("=" * 60)
-    
+
     # Create enhanced LLM
-    llm = create_enhanced_llm(
-        llm_model="fast",  # Use semantic alias
-        origin="streaming-example"
-    )
-    
+    llm = create_enhanced_llm(llm_model="fast", origin="streaming-example")  # Use semantic alias
+
     # Simple streaming request
-    messages = [
-        Message(role="user", content="Count from 1 to 5 slowly")
-    ]
-    
+    messages = [Message(role="user", content="Count from 1 to 5 slowly")]
+
     print("User: Count from 1 to 5 slowly")
     print("Assistant: ", end="", flush=True)
-    
+
     # Stream the response
     stream = await llm.chat(messages, stream=True, max_tokens=50)
-    
+
     async for chunk in stream:
         if chunk.delta:
             print(chunk.delta, end="", flush=True)
-    
+
     print("\n")
 
 
@@ -84,26 +78,19 @@ async def example_streaming_with_tools():
     print("=" * 60)
     print("Example 2: Streaming with tools")
     print("=" * 60)
-    
+
     # Create enhanced LLM
-    llm = create_enhanced_llm(
-        llm_model="fast",  # Use semantic alias
-        origin="streaming-example"
-    )
-    
+    llm = create_enhanced_llm(llm_model="fast", origin="streaming-example")  # Use semantic alias
+
     # Register custom tools
     llm.register_tool(
         name="get_current_time",
         description="Get the current date and time",
-        parameters={
-            "type": "object",
-            "properties": {},
-            "required": []
-        },
+        parameters={"type": "object", "properties": {}, "required": []},
         handler=get_current_time,
-        module_name="time_tools"
+        module_name="time_tools",
     )
-    
+
     llm.register_tool(
         name="calculate",
         description="Safely evaluate a mathematical expression",
@@ -112,33 +99,28 @@ async def example_streaming_with_tools():
             "properties": {
                 "expression": {
                     "type": "string",
-                    "description": "Mathematical expression to evaluate"
+                    "description": "Mathematical expression to evaluate",
                 }
             },
-            "required": ["expression"]
+            "required": ["expression"],
         },
         handler=calculate,
-        module_name="math_tools"
+        module_name="math_tools",
     )
-    
+
     # Request that will trigger tool use
-    messages = [
-        Message(
-            role="user",
-            content="What's the current time? Also, what's 42 * 17 + 89?"
-        )
-    ]
-    
+    messages = [Message(role="user", content="What's the current time? Also, what's 42 * 17 + 89?")]
+
     print("User: What's the current time? Also, what's 42 * 17 + 89?")
     print("Assistant: ", end="", flush=True)
-    
+
     # Stream the response (will handle tool calls automatically)
     stream = await llm.chat(messages, stream=True)
-    
+
     async for chunk in stream:
         if chunk.delta:
             print(chunk.delta, end="", flush=True)
-    
+
     print("\n")
 
 
@@ -147,13 +129,10 @@ async def example_non_streaming_with_tools():
     print("=" * 60)
     print("Example 3: Non-streaming with tools (for comparison)")
     print("=" * 60)
-    
+
     # Create enhanced LLM
-    llm = create_enhanced_llm(
-        llm_model="fast",  # Use semantic alias
-        origin="streaming-example"
-    )
-    
+    llm = create_enhanced_llm(llm_model="fast", origin="streaming-example")  # Use semantic alias
+
     # Register the calculate tool
     llm.register_tool(
         name="calculate",
@@ -163,33 +142,33 @@ async def example_non_streaming_with_tools():
             "properties": {
                 "expression": {
                     "type": "string",
-                    "description": "Mathematical expression to evaluate"
+                    "description": "Mathematical expression to evaluate",
                 }
             },
-            "required": ["expression"]
+            "required": ["expression"],
         },
         handler=calculate,
-        module_name="math_tools"
+        module_name="math_tools",
     )
-    
+
     # Request that will trigger tool use
     messages = [
         Message(
             role="user",
-            content="Calculate the sum of squares: (3**2) + (4**2) + (5**2)"
+            content="Calculate the sum of squares: (3**2) + (4**2) + (5**2)",
         )
     ]
-    
+
     print("User: Calculate the sum of squares: (3**2) + (4**2) + (5**2)")
-    
+
     # Non-streaming response
     response = await llm.chat(messages, stream=False)
-    
+
     print(f"Assistant: {response.content}")
-    
+
     if response.usage:
         print(f"\nUsage: {response.usage.get('total_tokens', 0)} tokens")
-    
+
     print()
 
 
@@ -198,27 +177,29 @@ async def main():
     try:
         # Example 1: Simple streaming
         await example_streaming_without_tools()
-        
+
         # Example 2: Streaming with tools
         await example_streaming_with_tools()
-        
+
         # Example 3: Non-streaming with tools for comparison
         await example_non_streaming_with_tools()
-        
+
         print("=" * 60)
         print("All examples completed successfully!")
         print("=" * 60)
-        
+
     except Exception as e:
         print(f"Error: {e}")
         import traceback
+
         traceback.print_exc()
 
 
 if __name__ == "__main__":
     # Load environment variables
     from dotenv import load_dotenv
+
     load_dotenv()
-    
+
     # Run examples
     asyncio.run(main())

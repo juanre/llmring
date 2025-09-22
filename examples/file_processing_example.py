@@ -28,9 +28,7 @@ from llmring import (
 def create_sample_text_file() -> str:
     """Create a sample text file for demonstration."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        f.write(
-            "This is a sample text file for the LLM Service file processing demo.\n"
-        )
+        f.write("This is a sample text file for the LLM Service file processing demo.\n")
         f.write("File processing made easy!")
         return f.name
 

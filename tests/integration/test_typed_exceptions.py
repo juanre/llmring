@@ -5,19 +5,19 @@ Tests that providers now raise appropriate typed exceptions instead of
 generic ValueError/Exception for different error scenarios.
 """
 
-import pytest
 from unittest.mock import patch
 
-from llmring.service import LLMRing
-from llmring.schemas import LLMRequest, Message
+import pytest
+
 from llmring.exceptions import (
+    CircuitBreakerError,
+    ModelNotFoundError,
     ProviderAuthenticationError,
     ProviderRateLimitError,
-    ModelNotFoundError,
     ProviderResponseError,
     ProviderTimeoutError,
-    CircuitBreakerError,
 )
+from llmring.schemas import LLMRequest, Message
 
 
 class TestTypedExceptions:
@@ -49,14 +49,10 @@ class TestTypedExceptions:
 
         assert exc_info.value.provider == "openai"
         assert "authentication" in str(exc_info.value).lower()
-        print(
-            f"✓ OpenAI auth error raises ProviderAuthenticationError: {exc_info.value}"
-        )
+        print(f"✓ OpenAI auth error raises ProviderAuthenticationError: {exc_info.value}")
 
     @pytest.mark.asyncio
-    async def test_invalid_anthropic_api_key_raises_typed_exception(
-        self, sample_request
-    ):
+    async def test_invalid_anthropic_api_key_raises_typed_exception(self, sample_request):
         """Test that invalid Anthropic API key raises ProviderAuthenticationError."""
         from llmring.providers.anthropic_api import AnthropicProvider
 
@@ -72,9 +68,7 @@ class TestTypedExceptions:
 
         assert exc_info.value.provider == "anthropic"
         assert "authentication" in str(exc_info.value).lower()
-        print(
-            f"✓ Anthropic auth error raises ProviderAuthenticationError: {exc_info.value}"
-        )
+        print(f"✓ Anthropic auth error raises ProviderAuthenticationError: {exc_info.value}")
 
     @pytest.mark.asyncio
     async def test_invalid_model_raises_typed_exception(self, service, sample_request):
@@ -107,17 +101,15 @@ class TestTypedExceptions:
     @pytest.mark.asyncio
     async def test_timeout_raises_typed_exception(self, sample_request):
         """Test that timeouts raise ProviderTimeoutError."""
+        from llmring.exceptions import ProviderResponseError, ProviderTimeoutError
         from llmring.providers.openai_api import OpenAIProvider
-        from llmring.exceptions import ProviderTimeoutError, ProviderResponseError
 
         # Create provider with invalid API key and very short timeout
         provider = OpenAIProvider(api_key="sk-invalid-key-for-timeout-test")
 
         # Use extremely short timeout to force timeout error
         with patch.dict("os.environ", {"LLMRING_PROVIDER_TIMEOUT_S": "0.001"}):
-            with pytest.raises(
-                (ProviderTimeoutError, ProviderResponseError)
-            ) as exc_info:
+            with pytest.raises((ProviderTimeoutError, ProviderResponseError)) as exc_info:
                 await provider.chat(
                     messages=sample_request.messages, model="openai_fast", max_tokens=10
                 )
@@ -130,9 +122,10 @@ class TestTypedExceptions:
     @pytest.mark.asyncio
     async def test_circuit_breaker_raises_typed_exception(self, sample_request):
         """Test that circuit breaker raises CircuitBreakerError."""
-        from llmring.providers.openai_api import OpenAIProvider
-        from llmring.exceptions import CircuitBreakerError
         from unittest.mock import patch
+
+        from llmring.exceptions import CircuitBreakerError
+        from llmring.providers.openai_api import OpenAIProvider
 
         provider = OpenAIProvider(api_key="sk-test-key")
 
@@ -149,7 +142,7 @@ class TestTypedExceptions:
 
     def test_exception_hierarchy(self):
         """Test that all typed exceptions inherit from the correct base classes."""
-        from llmring.exceptions import LLMRingError, ProviderError, ModelError
+        from llmring.exceptions import LLMRingError, ModelError, ProviderError
 
         # Test provider exception inheritance
         assert issubclass(ProviderAuthenticationError, ProviderError)

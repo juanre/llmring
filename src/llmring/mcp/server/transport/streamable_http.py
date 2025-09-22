@@ -100,9 +100,7 @@ class StreamableHTTPTransport(Transport):
         enable_sessions: bool = True,
         session_timeout_hours: int = 24,
         streaming_operations: Optional[Set[str]] = None,
-        response_mode_decider: Optional[
-            Callable[[Dict[str, Any]], ResponseMode]
-        ] = None,
+        response_mode_decider: Optional[Callable[[Dict[str, Any]], ResponseMode]] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -134,9 +132,7 @@ class StreamableHTTPTransport(Transport):
         }
 
         # Response mode decision function
-        self.response_mode_decider = (
-            response_mode_decider or self._default_response_mode_decider
-        )
+        self.response_mode_decider = response_mode_decider or self._default_response_mode_decider
 
         self._running = False
 
@@ -148,9 +144,7 @@ class StreamableHTTPTransport(Transport):
         if self.enable_sessions and not self._cleanup_task:
             self._cleanup_task = asyncio.create_task(self._cleanup_sessions_loop())
 
-        logger.info(
-            f"Streamable HTTP transport started on endpoint {self.endpoint_path}"
-        )
+        logger.info(f"Streamable HTTP transport started on endpoint {self.endpoint_path}")
         return True
 
     async def stop(self) -> None:
@@ -230,9 +224,7 @@ class StreamableHTTPTransport(Transport):
         # Default to JSON for simple operations
         return ResponseMode.JSON
 
-    async def handle_request(
-        self, request: Any
-    ) -> Union[Dict[str, Any], AsyncIterator[str], None]:
+    async def handle_request(self, request: Any) -> Union[Dict[str, Any], AsyncIterator[str], None]:
         """
         Handle an incoming HTTP request.
 
@@ -431,9 +423,7 @@ class StreamableHTTPTransport(Transport):
                 # Stream responses
                 while True:
                     try:
-                        response = await asyncio.wait_for(
-                            response_queue.get(), timeout=30.0
-                        )
+                        response = await asyncio.wait_for(response_queue.get(), timeout=30.0)
 
                         # Add to session history if enabled
                         event_id = None
@@ -479,9 +469,7 @@ class StreamableHTTPTransport(Transport):
             if last_event_id is not None:
                 missed_events = session.get_events_after(last_event_id)
                 for event in missed_events:
-                    yield self._format_sse_event(
-                        event.event_type, event.data, event.event_id
-                    )
+                    yield self._format_sse_event(event.event_type, event.data, event.event_id)
 
             # Then stream new events (implementation depends on framework)
             # This is a placeholder that sends periodic pings

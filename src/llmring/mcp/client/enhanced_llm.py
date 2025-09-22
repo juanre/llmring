@@ -144,9 +144,7 @@ class EnhancedLLM:
         self.streaming_handler = StreamingToolHandler(self)
         if mcp_server_url:
             # Parse URL to determine transport type
-            if mcp_server_url.startswith("ws://") or mcp_server_url.startswith(
-                "wss://"
-            ):
+            if mcp_server_url.startswith("ws://") or mcp_server_url.startswith("wss://"):
                 self.mcp_client = AsyncMCPClient.websocket(mcp_server_url)
             elif mcp_server_url.startswith("stdio://"):
                 # Extract command from URL
@@ -308,9 +306,7 @@ class EnhancedLLM:
             else:
                 # Run sync function in executor
                 loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None, lambda: tool_def.handler(**arguments)
-                )
+                return await loop.run_in_executor(None, lambda: tool_def.handler(**arguments))
 
         # Check if it's an MCP tool
         if tool_name.startswith("mcp_") and self.mcp_client:
@@ -345,9 +341,7 @@ class EnhancedLLM:
             else:
                 # Run sync function in executor
                 loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(
-                    None, lambda: tool_def.handler(**arguments)
-                )
+                result = await loop.run_in_executor(None, lambda: tool_def.handler(**arguments))
 
             return {"result": result}
 
@@ -501,9 +495,7 @@ class EnhancedLLM:
                         {
                             "tool_call_id": tool_call["id"],
                             "content": (
-                                json.dumps(result)
-                                if not isinstance(result, str)
-                                else result
+                                json.dumps(result) if not isinstance(result, str) else result
                             ),
                         }
                     )
@@ -680,13 +672,9 @@ class EnhancedLLM:
             content_type = guess_content_type_from_bytes(file_bytes)
             return file_bytes, content_type
         except (NetworkError, FileProcessingError) as e:
-            raise FileProcessingError(
-                f"Failed to fetch file from URL: {e}", details={"url": url}
-            )
+            raise FileProcessingError(f"Failed to fetch file from URL: {e}", details={"url": url})
         except Exception as e:
-            raise FileProcessingError(
-                f"Unexpected error fetching file: {e}", details={"url": url}
-            )
+            raise FileProcessingError(f"Unexpected error fetching file: {e}", details={"url": url})
 
     async def _decode_base64_file(
         self, base64_data: str, content_type: str | None = None
@@ -725,9 +713,7 @@ class EnhancedLLM:
 
             elif source_type == "url":
                 # Fetch file from URL
-                file_bytes, detected_content_type = await self._fetch_file_from_url(
-                    source_data
-                )
+                file_bytes, detected_content_type = await self._fetch_file_from_url(source_data)
                 content_type = content_type or detected_content_type
 
             elif source_type == "base64":
@@ -796,9 +782,7 @@ class EnhancedLLM:
                 },
             ]
 
-    async def get_transparency_report(
-        self, user_id: str | None = None
-    ) -> dict[str, Any]:
+    async def get_transparency_report(self, user_id: str | None = None) -> dict[str, Any]:
         """
         Get a comprehensive transparency report for a user.
 
@@ -847,9 +831,7 @@ class EnhancedLLM:
                 logger.warning(f"Failed to get MCP tools for transparency report: {e}")
                 report["mcp_tools"] = []
             except Exception as e:
-                logger.error(
-                    f"Unexpected error getting MCP tools for transparency report: {e}"
-                )
+                logger.error(f"Unexpected error getting MCP tools for transparency report: {e}")
                 report["mcp_tools"] = []
 
         return report

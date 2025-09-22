@@ -158,7 +158,5 @@ class OAuthConfig(BaseModel):
     client_id: str
     client_secret: str | None = None
     redirect_uri: str = "http://localhost:8080/callback"
-    scopes: list[str] = Field(
-        default_factory=lambda: ["profile", "email", "mcp:read", "mcp:write"]
-    )
+    scopes: list[str] = Field(default_factory=lambda: ["profile", "email", "mcp:read", "mcp:write"])
     client_type: Literal["public", "confidential"] = "public"

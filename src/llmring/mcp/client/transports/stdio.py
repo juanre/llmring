@@ -210,9 +210,7 @@ class STDIOTransport(Transport):
         # Additional security checks for shell injection
         for arg in command[1:]:
             if any(char in arg for char in ["&", "|", ";", "$", "`", "\n", "\r"]):
-                logger.warning(
-                    f"Potentially dangerous character in command argument: {arg}"
-                )
+                logger.warning(f"Potentially dangerous character in command argument: {arg}")
 
     def _validate_cwd(self, cwd: str | None) -> str | None:
         """Validate and normalize working directory."""
@@ -382,9 +380,7 @@ class STDIOTransport(Transport):
                     # For asyncio subprocess, returncode is automatically updated
                     if self.process.returncode is not None:
                         # Process has actually ended
-                        logger.debug(
-                            f"Process ended with return code: {self.process.returncode}"
-                        )
+                        logger.debug(f"Process ended with return code: {self.process.returncode}")
                         break
                     else:
                         # EOF but process still running - this happens with stdio servers
@@ -395,10 +391,7 @@ class STDIOTransport(Transport):
 
         except Exception as e:
             logger.error(f"Error reading responses: {e}", exc_info=True)
-            if (
-                self.restart_on_failure
-                and self.restart_count < self.max_restart_attempts
-            ):
+            if self.restart_on_failure and self.restart_count < self.max_restart_attempts:
                 await self._attempt_restart()
         except asyncio.CancelledError:
             logger.debug("Reader agent was cancelled")
@@ -415,9 +408,7 @@ class STDIOTransport(Transport):
                     self._set_state(ConnectionState.DISCONNECTED)
                     self._handle_close()
             else:
-                logger.debug(
-                    "Reader agent ended but process still running, keeping connection"
-                )
+                logger.debug("Reader agent ended but process still running, keeping connection")
 
     async def _handle_response(self, message: dict[str, Any]) -> None:
         """Handle JSON-RPC response or notification from process."""
@@ -433,18 +424,14 @@ class STDIOTransport(Transport):
                     if isinstance(error, dict):
                         error_msg = error.get("message", str(error))
                         code = error.get("code", -32000)
-                        future.set_exception(
-                            ValueError(f"JSON-RPC error {code}: {error_msg}")
-                        )
+                        future.set_exception(ValueError(f"JSON-RPC error {code}: {error_msg}"))
                     else:
                         future.set_exception(ValueError(f"JSON-RPC error: {error}"))
                 else:
                     # Successful response
                     future.set_result(message.get("result", {}))
             else:
-                logger.warning(
-                    f"Received response for unknown request ID: {request_id}"
-                )
+                logger.warning(f"Received response for unknown request ID: {request_id}")
         else:
             # This is a notification (no id field)
             self._handle_message(message)
@@ -598,9 +585,7 @@ class STDIOTransport(Transport):
                 logger.debug(f"Process {self.process.pid} exited gracefully")
             except asyncio.TimeoutError:
                 # Force termination
-                logger.warning(
-                    f"Process {self.process.pid} did not exit gracefully, terminating"
-                )
+                logger.warning(f"Process {self.process.pid} did not exit gracefully, terminating")
                 await self._terminate_process()
 
         except Exception as e:

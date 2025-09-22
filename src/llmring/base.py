@@ -93,25 +93,11 @@ class ProviderCapabilities(BaseModel):
     provider_name: str = Field(..., description="Name of the provider")
     supported_models: List[str] = Field(..., description="List of supported model IDs")
     supports_streaming: bool = Field(True, description="Whether streaming is supported")
-    supports_tools: bool = Field(
-        True, description="Whether function calling is supported"
-    )
-    supports_vision: bool = Field(
-        False, description="Whether image inputs are supported"
-    )
-    supports_audio: bool = Field(
-        False, description="Whether audio inputs are supported"
-    )
-    supports_documents: bool = Field(
-        False, description="Whether document inputs are supported"
-    )
-    supports_json_mode: bool = Field(
-        False, description="Whether JSON mode is supported"
-    )
-    supports_caching: bool = Field(
-        False, description="Whether prompt caching is supported"
-    )
-    max_context_window: Optional[int] = Field(
-        None, description="Maximum context window size"
-    )
+    supports_tools: bool = Field(True, description="Whether function calling is supported")
+    supports_vision: bool = Field(False, description="Whether image inputs are supported")
+    supports_audio: bool = Field(False, description="Whether audio inputs are supported")
+    supports_documents: bool = Field(False, description="Whether document inputs are supported")
+    supports_json_mode: bool = Field(False, description="Whether JSON mode is supported")
+    supports_caching: bool = Field(False, description="Whether prompt caching is supported")
+    max_context_window: Optional[int] = Field(None, description="Maximum context window size")
     default_model: str = Field(..., description="Default model for this provider")

@@ -6,11 +6,7 @@ import logging
 from typing import Any, Callable, Dict, Optional
 
 from llmring.mcp.server.protocol.handlers import ProtocolError
-from llmring.mcp.server.protocol.json_rpc import (
-    JSONRPCError,
-    JSONRPCRequest,
-    JSONRPCResponse,
-)
+from llmring.mcp.server.protocol.json_rpc import JSONRPCError, JSONRPCRequest, JSONRPCResponse
 
 
 class JSONRPCRouter:
@@ -141,9 +137,7 @@ class JSONRPCRouter:
         # Handle regular methods
         return await self._handle_method(request, context)
 
-    async def _handle_method(
-        self, request: JSONRPCRequest, context: Any = None
-    ) -> JSONRPCResponse:
+    async def _handle_method(self, request: JSONRPCRequest, context: Any = None) -> JSONRPCResponse:
         """Handle a regular JSON-RPC method call."""
         # Method existence already checked in handle_request
 
@@ -156,33 +150,21 @@ class JSONRPCRouter:
             return JSONRPCResponse(id=request.id, result=result)
         except ProtocolError as e:
             # Handle protocol-specific errors with their error codes
-            self.logger.warning(
-                f"Protocol error in method {request.method}: {e.message}"
-            )
+            self.logger.warning(f"Protocol error in method {request.method}: {e.message}")
             error = {"code": e.code, "message": e.message}
             if e.data is not None:
                 error["data"] = e.data
             return JSONRPCResponse(id=request.id, error=error)
         except ValueError as e:
             # Specific handling for validation errors
-            self.logger.warning(
-                f"Invalid parameters for method {request.method}: {str(e)}"
-            )
-            return JSONRPCResponse(
-                id=request.id, error=JSONRPCError.invalid_params(str(e))
-            )
+            self.logger.warning(f"Invalid parameters for method {request.method}: {str(e)}")
+            return JSONRPCResponse(id=request.id, error=JSONRPCError.invalid_params(str(e)))
         except Exception as e:
             # Log the error for debugging
-            self.logger.error(
-                f"Error handling method {request.method}: {str(e)}", exc_info=True
-            )
-            return JSONRPCResponse(
-                id=request.id, error=JSONRPCError.application_error(str(e))
-            )
+            self.logger.error(f"Error handling method {request.method}: {str(e)}", exc_info=True)
+            return JSONRPCResponse(id=request.id, error=JSONRPCError.application_error(str(e)))
 
-    async def _handle_notification(
-        self, request: JSONRPCRequest, context: Any = None
-    ) -> None:
+    async def _handle_notification(self, request: JSONRPCRequest, context: Any = None) -> None:
         """Handle a JSON-RPC notification (no response)."""
         # Check if notification handler exists
         if request.method not in self.notifications:

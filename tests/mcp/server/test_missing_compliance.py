@@ -6,12 +6,12 @@ ensuring full coverage of the MCP STDIO specification requirements.
 """
 
 import asyncio
-import pytest
 import time
 
-from llmring.mcp.server import MCPServer
-
+import pytest
 from test_protocol_compliance import MockTransport
+
+from llmring.mcp.server import MCPServer
 
 
 class TestMissingProtocolCases:
@@ -117,9 +117,7 @@ class TestMissingProtocolCases:
             await asyncio.sleep(0.3)
 
             # Check responses have correct IDs
-            responses = {
-                msg["id"]: msg for msg in transport.messages_sent if "id" in msg
-            }
+            responses = {msg["id"]: msg for msg in transport.messages_sent if "id" in msg}
 
             assert len(responses) == 3
             assert "req-slow" in responses
@@ -127,13 +125,9 @@ class TestMissingProtocolCases:
             assert "req-fast-2" in responses
 
             # Verify each response matches its request
-            assert (
-                "slow result" in responses["req-slow"]["result"]["content"][0]["text"]
-            )
+            assert "slow result" in responses["req-slow"]["result"]["content"][0]["text"]
             assert "fast result" in responses[42]["result"]["content"][0]["text"]
-            assert (
-                "fast result" in responses["req-fast-2"]["result"]["content"][0]["text"]
-            )
+            assert "fast result" in responses["req-fast-2"]["result"]["content"][0]["text"]
 
         finally:
             server._running = False
@@ -247,9 +241,7 @@ class TestMissingProtocolCases:
             response = transport.get_last_message()
             assert response["id"] == 2
             assert "result" in response
-            assert (
-                response["result"]["messages"][0]["content"]["text"] == "Hello, World!"
-            )
+            assert response["result"]["messages"][0]["content"]["text"] == "Hello, World!"
 
             # Get prompt with partial arguments
             transport.clear_messages()
@@ -265,9 +257,7 @@ class TestMissingProtocolCases:
             await asyncio.sleep(0.1)
 
             response = transport.get_last_message()
-            assert (
-                response["result"]["messages"][0]["content"]["text"] == "Hello, Alice!"
-            )
+            assert response["result"]["messages"][0]["content"]["text"] == "Hello, Alice!"
 
         finally:
             server._running = False
@@ -280,9 +270,7 @@ class TestMissingProtocolCases:
         transport = MockTransport()
 
         # Simple echo tool for performance testing
-        server.register_tool(
-            name="echo", handler=lambda text: text, description="Echo tool"
-        )
+        server.register_tool(name="echo", handler=lambda text: text, description="Echo tool")
 
         server_task = asyncio.create_task(server.run(transport))
         await asyncio.sleep(0.1)

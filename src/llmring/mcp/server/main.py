@@ -42,9 +42,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
         raise RuntimeError(f"Error loading configuration: {e}")
 
 
-def register_static_tools(
-    server: MCPServer, tools_config: List[Dict[str, Any]]
-) -> None:
+def register_static_tools(server: MCPServer, tools_config: List[Dict[str, Any]]) -> None:
     """Register static tools that return predefined content."""
     for tool in tools_config:
         name = tool.get("name")
@@ -70,9 +68,7 @@ def register_static_tools(
         logger.info(f"Registered static tool: {name}")
 
 
-def register_resources(
-    server: MCPServer, resources_config: List[Dict[str, Any]]
-) -> None:
+def register_resources(server: MCPServer, resources_config: List[Dict[str, Any]]) -> None:
     """Register static resources."""
     for resource in resources_config:
         uri = resource.get("uri")

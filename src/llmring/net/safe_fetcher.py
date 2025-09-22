@@ -41,9 +41,7 @@ def get_default_config() -> Dict[str, object]:
     return {
         "allow_remote_urls": _get_bool_env("LLMRING_ALLOW_REMOTE_URLS", False),
         "allowed_hosts": allowed_hosts_list,
-        "max_size_bytes": int(
-            os.getenv("LLMRING_MAX_DOWNLOAD_SIZE_BYTES", str(8 * 1024 * 1024))
-        ),
+        "max_size_bytes": int(os.getenv("LLMRING_MAX_DOWNLOAD_SIZE_BYTES", str(8 * 1024 * 1024))),
         "connect_timeout_s": float(os.getenv("LLMRING_CONNECT_TIMEOUT_S", "2.0")),
         "read_timeout_s": float(os.getenv("LLMRING_READ_TIMEOUT_S", "5.0")),
         "total_timeout_s": float(os.getenv("LLMRING_TOTAL_TIMEOUT_S", "10.0")),
@@ -75,9 +73,7 @@ def _is_private_or_local_host(host: str) -> bool:
     return False
 
 
-async def fetch_bytes(
-    url: str, config: Optional[Dict[str, object]] = None
-) -> Tuple[bytes, str]:
+async def fetch_bytes(url: str, config: Optional[Dict[str, object]] = None) -> Tuple[bytes, str]:
     """Fetch a remote URL safely and return (data, content_type).
 
     Raises SafeFetchError on violations or failures.
@@ -122,9 +118,7 @@ async def fetch_bytes(
             if cl is not None:
                 try:
                     if int(cl) > max_size:
-                        raise SafeFetchError(
-                            "Content length exceeds maximum allowed size"
-                        )
+                        raise SafeFetchError("Content length exceeds maximum allowed size")
                 except ValueError:
                     pass
             ct = (head.headers.get("content-type") or "").split(";")[0].lower()

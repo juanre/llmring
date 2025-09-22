@@ -32,9 +32,7 @@ class LLMRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     json_response: Optional[bool] = None
     stream: Optional[bool] = False  # Support for streaming responses
-    extra_params: Dict[str, Any] = Field(
-        default_factory=dict
-    )  # Provider-specific parameters
+    extra_params: Dict[str, Any] = Field(default_factory=dict)  # Provider-specific parameters
 
 
 class LLMResponse(BaseModel):
