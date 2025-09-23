@@ -28,15 +28,11 @@ class TestLockfile:
             assert "staging" in lockfile.profiles
             assert "dev" in lockfile.profiles
 
-            # Should have minimal bindings without API keys (only local ollama)
+            # Should have no bindings without API keys (no hardcoded models)
             default_profile = lockfile.get_profile("default")
             assert (
-                len(default_profile.bindings) == 1
-            )  # Only local ollama alias without hardcoded models
-            # Verify the local alias uses the correct model
-            local_binding = next((b for b in default_profile.bindings if b.alias == "local"), None)
-            assert local_binding is not None
-            assert local_binding.model == "llama3:latest"
+                len(default_profile.bindings) == 0
+            )  # No hardcoded models per source-of-truth
 
     def test_create_default_with_openai_key(self):
         """Test creating default lockfile with OpenAI API key."""
@@ -46,10 +42,9 @@ class TestLockfile:
             default_profile = lockfile.get_profile("default")
             aliases = {b.alias for b in default_profile.bindings}
 
-            # Without registry data, basic create_default() doesn't add provider-specific bindings
-            # Only local ollama binding is added
-            assert "local" in aliases
-            assert len(default_profile.bindings) == 1
+            # Without registry data, basic create_default() doesn't add any bindings
+            # No hardcoded models
+            assert len(default_profile.bindings) == 0
 
     def test_create_default_with_anthropic_key(self):
         """Test creating default lockfile with Anthropic API key."""
@@ -59,16 +54,9 @@ class TestLockfile:
             default_profile = lockfile.get_profile("default")
             aliases = {b.alias for b in default_profile.bindings}
 
-            # Without registry data, basic create_default() doesn't add provider-specific bindings
-            # Only local ollama binding is added
-            assert "local" in aliases
-            assert len(default_profile.bindings) == 1
-
-            # Check correct model assignments
-            for binding in default_profile.bindings:
-                if binding.alias == "deep":
-                    assert binding.provider == "anthropic"
-                    assert "opus" in binding.model or "sonnet" in binding.model
+            # Without registry data, basic create_default() doesn't add any bindings
+            # No hardcoded models
+            assert len(default_profile.bindings) == 0
 
     def test_save_and_load_toml(self, tmp_path):
         """Test saving and loading lockfile in TOML format."""

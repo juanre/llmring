@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, Union
 
 from llmring.base import BaseLLMProvider
 from llmring.exceptions import ProviderNotFoundError
-from llmring.lockfile import Lockfile
+from llmring.lockfile_core import Lockfile
 from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
 from llmring.providers.ollama_api import OllamaProvider

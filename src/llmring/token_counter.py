@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 _tokenizer_cache: Dict[str, Any] = {}
 
 
-def count_tokens_openai(messages: List[Dict[str, Any]], model: str = "gpt-4") -> int:
+def count_tokens_openai(messages: List[Dict[str, Any]], model: str) -> int:
     """
     Count tokens for OpenAI models using tiktoken.
 
@@ -82,7 +82,7 @@ def count_tokens_openai(messages: List[Dict[str, Any]], model: str = "gpt-4") ->
     return num_tokens
 
 
-def count_tokens_anthropic(messages: List[Dict[str, Any]], model: str = "claude-3-sonnet") -> int:
+def count_tokens_anthropic(messages: List[Dict[str, Any]], model: str) -> int:
     """
     Count tokens for Anthropic models.
 
@@ -121,7 +121,7 @@ def count_tokens_anthropic(messages: List[Dict[str, Any]], model: str = "claude-
         return _estimate_tokens_from_messages(messages)
 
 
-def count_tokens_google(messages: List[Dict[str, Any]], model: str = "gemini-1.5-pro") -> int:
+def count_tokens_google(messages: List[Dict[str, Any]], model: str) -> int:
     """
     Count tokens for Google models.
 
@@ -200,7 +200,7 @@ def count_tokens(messages: List[Dict[str, Any]], provider: str, model: str) -> i
         return _estimate_tokens_from_messages(messages)
 
 
-def count_string_tokens(text: str, provider: str = "openai", model: str = "gpt-4") -> int:
+def count_string_tokens(text: str, provider: str, model: str) -> int:
     """
     Count tokens in a simple string.
 

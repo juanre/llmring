@@ -94,6 +94,12 @@ class Lockfile(BaseModel):
 
     default_profile: str = Field(default="default", description="Default profile name")
 
+    # Metadata field for intelligent creation rationale and other info
+    metadata: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Metadata including rationale from intelligent creation"
+    )
+
     @classmethod
     def create_default(cls) -> "Lockfile":
         """Create a default lockfile with sensible defaults based on available API keys.
@@ -164,9 +170,9 @@ class Lockfile(BaseModel):
         """
         defaults = {}
 
-        # Only add Ollama local option as it doesn't require API keys
-        # and user can specify any local model
-        defaults["local"] = "ollama:llama3:latest"
+        # Return empty defaults - let user explicitly configure
+        # or use intelligent creation with registry data
+        # No hardcoded models per source-of-truth principles
 
         return defaults
 
@@ -316,8 +322,8 @@ class Lockfile(BaseModel):
 
                 logging.warning(f"Could not fetch Google models from registry: {e}")
 
-        # Always add local option
-        defaults["local"] = "ollama:llama3:latest"
+        # Don't add hardcoded local option - let user configure explicitly
+        # or use registry data if available
 
         return defaults
 
@@ -369,6 +375,10 @@ class Lockfile(BaseModel):
         data["created_at"] = self.created_at.isoformat()
         data["updated_at"] = self.updated_at.isoformat()
 
+        # Ensure metadata is properly serialized (it's already a dict)
+        if "metadata" not in data:
+            data["metadata"] = {}
+
         # Save as TOML or JSON based on preference
         if path.suffix == ".json":
             with open(path, "w") as f:
@@ -413,6 +423,10 @@ class Lockfile(BaseModel):
                             bindings.append(AliasBinding(**binding_data))
                     profile_data["bindings"] = bindings
                     data["profiles"][profile_name] = ProfileConfig(**profile_data)
+
+        # Ensure backward compatibility - add empty metadata if not present
+        if "metadata" not in data:
+            data["metadata"] = {}
 
         return cls(**data)
 

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
-from llmring.lockfile import AliasBinding, Lockfile, ProfileConfig
+from llmring.lockfile_core import AliasBinding, Lockfile, ProfileConfig
 from llmring.registry import RegistryClient
 from llmring.schemas import LLMRequest, Message
 from llmring.service import LLMRing
@@ -22,15 +22,20 @@ logger = logging.getLogger(__name__)
 class IntelligentLockfileCreator:
     """Creates lockfiles through intelligent conversation using LLMRing's own API."""
 
-    def __init__(self, bootstrap_lockfile: str = "bootstrap.llmring.lock"):
+    def __init__(self, bootstrap_lockfile: str = None):
         """
-        Initialize with bootstrap lockfile for self-hosting.
+        Initialize the intelligent lockfile creator.
 
         Args:
-            bootstrap_lockfile: Path to bootstrap lockfile with advisor model
+            bootstrap_lockfile: Optional path to bootstrap lockfile with advisor model.
+                               If None, works without LLM advisor (simpler mode).
         """
-        # Use bootstrap lockfile to power the system (self-hosting)
-        self.service = LLMRing(lockfile_path=bootstrap_lockfile)
+        # Optional: Use bootstrap lockfile to power the system (self-hosting)
+        if bootstrap_lockfile:
+            self.service = LLMRing(lockfile_path=bootstrap_lockfile)
+        else:
+            self.service = None  # Work without LLM advisor
+
         self.registry = RegistryClient()
         self.conversation_state = {
             "user_needs": {},
@@ -71,188 +76,200 @@ class IntelligentLockfileCreator:
         return await self._create_lockfile_with_rationale(profile_name)
 
     async def _analyze_registry(self):
-        """Use advisor LLM to analyze current registry state."""
-        # Use our own API with "advisor" alias from bootstrap lockfile
-        request = LLMRequest(
-            model="advisor",  # Self-hosted: uses bootstrap lockfile
-            messages=[
-                Message(
-                    role="system",
-                    content="""You are a registry analyst for LLMRing. Analyze the current state
-                of all provider registries to understand the model landscape.
+        """Directly analyze registry without LLM tools (simpler approach)."""
+        import os
+        from datetime import datetime
 
-                Use the available tools to:
-                1. Get current models for each provider
-                2. Identify the best models in key categories:
-                   - Most capable (reasoning, complex tasks)
-                   - Most cost-effective (good performance per dollar)
-                   - Fastest response (low latency)
-                   - Best specialized capabilities (vision, function calling, etc.)
+        logger.info("Analyzing registry for all providers")
 
-                Respond with structured analysis in JSON format with your findings.""",
-                ),
-                Message(
-                    role="user",
-                    content="Analyze the current registry and categorize the best available models",
-                ),
-            ],
-            tools=self._get_registry_tools(),
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "registry_analysis",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "analysis_date": {"type": "string"},
-                            "providers": {
-                                "type": "object",
-                                "properties": {
-                                    "openai": {"type": "object"},
-                                    "anthropic": {"type": "object"},
-                                    "google": {"type": "object"},
-                                },
-                            },
-                            "recommendations": {
-                                "type": "object",
-                                "properties": {
-                                    "most_capable": {"type": "string"},
-                                    "most_cost_effective": {"type": "string"},
-                                    "fastest": {"type": "string"},
-                                    "best_vision": {"type": "string"},
-                                },
-                            },
-                        },
-                        "required": ["analysis_date", "providers", "recommendations"],
-                    },
-                },
-                "strict": True,
-            },
-        )
+        analysis = {
+            "analysis_date": datetime.now(timezone.utc).isoformat(),
+            "providers": {},
+            "recommendations": {}
+        }
 
-        response = await self.service.chat(request)
-        self.conversation_state["registry_analysis"] = response.parsed
+        # Analyze each provider's models directly
+        providers_to_check = []
+        if os.environ.get("OPENAI_API_KEY"):
+            providers_to_check.append("openai")
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            providers_to_check.append("anthropic")
+        if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
+            providers_to_check.append("google")
+
+        for provider in providers_to_check:
+            try:
+                models = await self.registry.fetch_current_models(provider)
+                active_models = [m for m in models if m.is_active]
+
+                provider_info = {
+                    "total_models": len(active_models),
+                    "models": []
+                }
+
+                for model in active_models[:5]:  # Limit to top 5 for analysis
+                    provider_info["models"].append({
+                        "name": model.model_name,
+                        "max_input": model.max_input_tokens,
+                        "cost_input": model.dollars_per_million_tokens_input,
+                        "supports_vision": model.supports_vision,
+                        "supports_functions": model.supports_function_calling
+                    })
+
+                analysis["providers"][provider] = provider_info
+
+                # Find best models in categories
+                if active_models:
+                    # Most capable (highest input tokens)
+                    if not analysis["recommendations"].get("most_capable"):
+                        capable = max(active_models, key=lambda m: m.max_input_tokens or 0)
+                        analysis["recommendations"]["most_capable"] = f"{provider}:{capable.model_name}"
+
+                    # Most cost effective
+                    models_with_cost = [m for m in active_models if m.dollars_per_million_tokens_input]
+                    if models_with_cost and not analysis["recommendations"].get("most_cost_effective"):
+                        cheap = min(models_with_cost, key=lambda m: m.dollars_per_million_tokens_input)
+                        analysis["recommendations"]["most_cost_effective"] = f"{provider}:{cheap.model_name}"
+
+                    # Best vision
+                    vision_models = [m for m in active_models if m.supports_vision]
+                    if vision_models and not analysis["recommendations"].get("best_vision"):
+                        vision = vision_models[0]
+                        analysis["recommendations"]["best_vision"] = f"{provider}:{vision.model_name}"
+
+            except Exception as e:
+                logger.warning(f"Could not analyze {provider}: {e}")
+                analysis["providers"][provider] = {"error": str(e)}
+
+        self.conversation_state["registry_analysis"] = analysis
 
     async def _discover_user_needs(self):
-        """Interactive conversation to understand user requirements."""
-        # Multi-turn conversation using advisor
-        conversation_messages = [
-            Message(
-                role="system",
-                content=f"""You are an expert LLM configuration advisor. Help users create
-            optimal lockfile configurations based on their specific needs.
+        """Simplified user needs discovery - can be enhanced with interactive prompts later."""
+        # For now, use sensible defaults based on common use cases
+        # In a full implementation, this would be interactive
 
-            Current registry analysis: {json.dumps(self.conversation_state['registry_analysis'], indent=2)}
+        print("\n📝 Determining optimal configuration based on available models...")
 
-            Your job:
-            1. Ask focused questions to understand their use cases
-            2. Understand their budget preferences and usage patterns
-            3. Identify required capabilities (vision, function calling, etc.)
-            4. Determine optimal alias configuration for their workflow
+        # Analyze available capabilities from registry
+        has_vision = False
+        has_functions = False
 
-            Ask 2-3 targeted questions total. Be conversational and helpful.
-            End with a summary of their needs in structured format.""",
-            )
-        ]
+        for provider_data in self.conversation_state["registry_analysis"]["providers"].values():
+            if isinstance(provider_data, dict) and "models" in provider_data:
+                for model in provider_data["models"]:
+                    if model.get("supports_vision"):
+                        has_vision = True
+                    if model.get("supports_functions"):
+                        has_functions = True
 
-        # Simulated conversation for now (in CLI implementation, this would be interactive)
-        # For the design, assume user has mixed use cases with balanced budget
-        user_responses = [
-            "I need LLMs for data analysis, some creative writing, and general Q&A. Budget is important but I want good quality.",
-            "I'd like vision capabilities for document processing, and I do expect moderate usage - maybe 100-200 requests per month.",
-            "I prefer reliable, established models over cutting-edge experimental ones.",
-        ]
-
-        for user_response in user_responses:
-            conversation_messages.append(Message(role="user", content=user_response))
-
-            request = LLMRequest(
-                model="advisor",
-                messages=conversation_messages,
-                max_tokens=300,
-                temperature=0.7,
-            )
-
-            response = await self.service.chat(request)
-            conversation_messages.append(Message(role="assistant", content=response.content))
+        # Set defaults based on what's available
+        capabilities = []
+        if has_vision:
+            capabilities.append("vision")
+        if has_functions:
+            capabilities.append("function_calling")
 
         self.conversation_state["user_needs"] = {
             "use_cases": [
-                "data_analysis",
-                "creative_writing",
                 "general_qa",
+                "data_analysis",
                 "document_processing",
             ],
             "budget_preference": "balanced",
-            "required_capabilities": ["vision", "function_calling"],
+            "required_capabilities": capabilities,
             "usage_volume": "moderate",
             "stability_preference": "established",
         }
 
+        print("   ✓ Identified capabilities:", ", ".join(capabilities) if capabilities else "basic text")
+        print("   ✓ Optimization goal: balanced cost and performance")
+
     async def _generate_recommendations(self):
-        """Generate structured alias recommendations."""
-        request = LLMRequest(
-            model="advisor",
-            messages=[
-                Message(
-                    role="system",
-                    content=f"""You are creating optimal alias recommendations for a lockfile.
+        """Generate structured alias recommendations based on registry analysis."""
 
-                Registry Analysis: {json.dumps(self.conversation_state['registry_analysis'], indent=2)}
-                User Needs: {json.dumps(self.conversation_state['user_needs'], indent=2)}
+        print("\n🎯 Generating optimal alias configuration...")
 
-                Create 5-6 semantic aliases that match the user's workflow.
-                For each alias, recommend the optimal model from the registry analysis.
+        recommendations = {
+            "aliases": [],
+            "total_estimated_monthly_cost": 0,
+            "coverage_analysis": "Comprehensive coverage for general use cases"
+        }
 
-                Respond with structured recommendations.""",
-                ),
-                Message(
-                    role="user",
-                    content="Generate optimal alias configuration based on the analysis and user needs",
-                ),
-            ],
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "recommendations",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "aliases": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "alias": {"type": "string"},
-                                        "provider": {"type": "string"},
-                                        "model": {"type": "string"},
-                                        "rationale": {"type": "string"},
-                                        "use_cases": {
-                                            "type": "array",
-                                            "items": {"type": "string"},
-                                        },
-                                        "estimated_cost_per_request": {"type": "number"},
-                                    },
-                                    "required": [
-                                        "alias",
-                                        "provider",
-                                        "model",
-                                        "rationale",
-                                    ],
-                                },
-                            },
-                            "total_estimated_monthly_cost": {"type": "number"},
-                            "coverage_analysis": {"type": "string"},
-                        },
-                        "required": ["aliases"],
-                    },
-                },
-                "strict": True,
-            },
-        )
+        analysis = self.conversation_state["registry_analysis"]
 
-        response = await self.service.chat(request)
-        self.conversation_state["recommendations"] = response.parsed
+        # Helper to add recommendation
+        def add_recommendation(alias_name, model_ref, rationale, use_cases):
+            if not model_ref:
+                return
+            provider, model = model_ref.split(":", 1)
+            recommendations["aliases"].append({
+                "alias": alias_name,
+                "provider": provider,
+                "model": model,
+                "rationale": rationale,
+                "use_cases": use_cases
+            })
+
+        # Generate recommendations based on analysis
+        recs = analysis.get("recommendations", {})
+
+        # 1. Fast/low-cost alias
+        if recs.get("most_cost_effective"):
+            add_recommendation(
+                "fast",
+                recs["most_cost_effective"],
+                "Most cost-effective model for quick, simple tasks",
+                ["general_qa", "simple_analysis"]
+            )
+            add_recommendation(
+                "low_cost",
+                recs["most_cost_effective"],
+                "Optimized for high-volume, cost-sensitive operations",
+                ["batch_processing", "simple_tasks"]
+            )
+
+        # 2. Deep/capable alias
+        if recs.get("most_capable"):
+            add_recommendation(
+                "deep",
+                recs["most_capable"],
+                "Most capable model for complex reasoning and analysis",
+                ["complex_analysis", "research", "reasoning"]
+            )
+            add_recommendation(
+                "long_context",
+                recs["most_capable"],
+                "Handles large documents and extensive context",
+                ["document_processing", "long_form_content"]
+            )
+
+        # 3. Vision alias
+        if recs.get("best_vision"):
+            add_recommendation(
+                "vision",
+                recs["best_vision"],
+                "Specialized for image and visual content analysis",
+                ["image_analysis", "document_ocr", "visual_understanding"]
+            )
+
+        # 4. Balanced/default alias - pick a middle ground
+        for provider_name, provider_data in analysis["providers"].items():
+            if isinstance(provider_data, dict) and "models" in provider_data:
+                models = provider_data["models"]
+                if len(models) > 1:
+                    # Pick second model as balanced option (first is often most expensive)
+                    balanced_model = models[1]
+                    add_recommendation(
+                        "balanced",
+                        f"{provider_name}:{balanced_model['name']}",
+                        "Balanced performance and cost for general use",
+                        ["general_qa", "data_analysis"]
+                    )
+                    break
+
+        self.conversation_state["recommendations"] = recommendations
+
+        print(f"   ✓ Generated {len(recommendations['aliases'])} alias configurations")
 
     async def _create_lockfile_with_rationale(self, profile_name: str) -> Lockfile:
         """Create final lockfile with rationale metadata."""
@@ -290,53 +307,19 @@ class IntelligentLockfileCreator:
 
         return lockfile
 
-    def _get_registry_tools(self) -> List[Dict[str, Any]]:
-        """Get MCP tools for registry analysis."""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_provider_models",
-                    "description": "Get all active models for a provider with capabilities and pricing",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "provider": {
-                                "type": "string",
-                                "enum": ["openai", "anthropic", "google", "ollama"],
-                            }
-                        },
-                        "required": ["provider"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "compare_models_by_cost",
-                    "description": "Compare models by cost efficiency",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "model_refs": {"type": "array", "items": {"type": "string"}}
-                        },
-                        "required": ["model_refs"],
-                    },
-                },
-            },
-        ]
 
 
 async def create_intelligent_lockfile(
     output_path: str = "llmring.lock",
-    bootstrap_lockfile: str = "bootstrap.llmring.lock",
+    bootstrap_lockfile: str = None,
 ) -> bool:
     """
     Create an intelligent lockfile using the conversation system.
 
     Args:
         output_path: Where to save the generated lockfile
-        bootstrap_lockfile: Bootstrap lockfile for powering the advisor
+        bootstrap_lockfile: Optional bootstrap lockfile for powering the advisor.
+                          If None, works without LLM advisor.
 
     Returns:
         True if successful, False otherwise

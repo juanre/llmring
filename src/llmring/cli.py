@@ -9,7 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from llmring import LLMRequest, LLMRing, Message
-from llmring.lockfile import Lockfile
+from llmring.lockfile_core import Lockfile
 from llmring.registry import RegistryClient
 
 # Alias sync removed per source-of-truth v3.8 - aliases are purely local
@@ -64,103 +64,43 @@ async def cmd_lock_init(args):
 
 
 async def cmd_lock_init_intelligent(path: Path):
-    """Create lockfile using intelligent advisor system."""
+    """Create lockfile using intelligent system (simplified without requiring advisor)."""
     print("🤖 LLMRing Intelligent Lockfile Creator")
-    print("   Using our own API to create optimal configuration")
+    print("   Analyzing registry to create optimal configuration")
     print()
 
     try:
-        # Step 1: Initialize advisor service
-        print("🧠 Initializing advisor...")
+        # Use the simplified intelligent creator that doesn't require an advisor
+        from llmring.lockfile.intelligent_creator import IntelligentLockfileCreator
 
-        # Check if we have a current lockfile with advisor
-        try:
-            service = LLMRing()  # Uses current lockfile
-            advisor_model = service.resolve_alias("advisor")
+        # Create without bootstrap (uses registry analysis directly)
+        creator = IntelligentLockfileCreator(bootstrap_lockfile=None)
 
-            if advisor_model:
-                print(f"   Using existing advisor: {advisor_model}")
-            else:
-                raise ValueError("No advisor alias found")
+        # Run the intelligent creation process
+        lockfile = await creator.create_lockfile_interactively()
 
-        except Exception:
-            # No lockfile or no advisor - create bootstrap advisor
-            print("   No advisor found, creating bootstrap advisor...")
-            advisor_model = await _create_bootstrap_advisor()
-            service = LLMRing()  # Reload after creating bootstrap
-            print(f"   Bootstrap advisor created: {advisor_model}")
-
-        # Step 2: Get registry analysis using our own API
-        print("📊 Analyzing current registry...")
-
-        analysis_request = LLMRequest(
-            model="advisor",  # Uses our own API!
-            messages=[
-                Message(
-                    role="system",
-                    content="""You are an expert LLM configuration advisor. Analyze the current
-                model landscape and recommend optimal lockfile aliases.
-
-                Consider:
-                1. Most capable models for complex reasoning ("deep")
-                2. Best balanced models for general use ("balanced")
-                3. Fastest/cheapest models for simple tasks ("fast")
-                4. Models with special capabilities (vision, etc.)
-
-                Provide 4-5 recommendations with clear rationale.""",
-                ),
-                Message(
-                    role="user",
-                    content="Based on current available models, recommend optimal lockfile aliases for a general-purpose user",
-                ),
-            ],
-        )
-
-        print("   Consulting advisor for recommendations...")
-        await service.chat(analysis_request)
-
-        # Step 3: Use advisor recommendations to create lockfile
-        print("🔧 Creating optimized lockfile...")
-
-        # Parse the advisor's recommendations from the structured response
-        # For now, extract key content and create basic intelligent defaults
-        # Full parsing would extract structured JSON from the advisor response
-
-        from llmring.lockfile import AliasBinding, Lockfile, ProfileConfig
-
-        lockfile = Lockfile()
-        profile = ProfileConfig(name="default")
-
-        # Generate registry-based recommendations (no hardcoded models)
-        recommended_bindings = await _generate_registry_based_bindings(advisor_model)
-
-        for binding_info in recommended_bindings:
-            binding = AliasBinding(
-                alias=binding_info["alias"],
-                provider=binding_info["provider"],
-                model=binding_info["model"],
-            )
-            profile.bindings.append(binding)
-
-        lockfile.profiles["default"] = profile
-
-        # Save lockfile
+        # Save the lockfile
         lockfile.save(path)
 
-        print(f"✅ Created intelligent lockfile: {path}")
-        print("\n📊 Recommended Configuration:")
-        print(f"   Based on advisor analysis: {advisor_model}")
-        print()
+        print(f"\n✅ Created intelligent lockfile: {path}")
+        print("\n📊 Configuration Summary:")
 
-        for binding_info in recommended_bindings:
-            print(
-                f"  {binding_info['alias']:<10} → {binding_info['provider']}:{binding_info['model']}"
-            )
-            print(f"             {binding_info['rationale']}")
-            print()
+        # Display the created aliases
+        default_profile = lockfile.get_profile("default")
+        if default_profile.bindings:
+            for binding in default_profile.bindings:
+                print(f"  {binding.alias:<12} → {binding.model_ref}")
 
-        print("🎉 Your lockfile is now optimized with current models!")
-        print("   Use these aliases in your code: 'fast', 'balanced', 'deep'")
+                # Show rationale if available in metadata
+                if lockfile.metadata and "recommendations_rationale" in lockfile.metadata:
+                    rationale = lockfile.metadata["recommendations_rationale"].get(binding.alias)
+                    if rationale:
+                        print(f"               {rationale}")
+
+        print("\n🎉 Your lockfile is optimized based on:")
+        print("   • Current registry data")
+        print("   • Available API keys")
+        print("   • Balanced cost and performance")
 
         return 0
 
@@ -207,8 +147,9 @@ async def _create_bootstrap_advisor() -> str:
             for model in models:
                 if model.is_active and model.supports_function_calling:
                     score = 10  # OpenAI models generally capable
-                    if "gpt-4" in model.model_name and "mini" not in model.model_name:
-                        score += 5  # Prefer full GPT-4 for advisor
+                    # Prefer models with higher max_input_tokens for advisor role
+                    if model.max_input_tokens and model.max_input_tokens > 100000:
+                        score += 5  # Prefer high-context models for advisor
                     advisor_candidates.append(("openai", model.model_name, score))
         except Exception as e:
             print(f"   ⚠️  Could not access OpenAI registry: {e}")
@@ -241,7 +182,7 @@ async def _create_bootstrap_advisor() -> str:
         return None
 
     # Create minimal lockfile with advisor
-    from llmring.lockfile import AliasBinding, Lockfile, ProfileConfig
+    from llmring.lockfile_core import AliasBinding, Lockfile, ProfileConfig
 
     lockfile = Lockfile()
     profile = ProfileConfig(name="default")
