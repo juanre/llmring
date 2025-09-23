@@ -38,63 +38,86 @@ pip install llmring
 from llmring.service import LLMRing
 from llmring.schemas import LLMRequest, Message
 
-# Initialize service (auto-detects API keys)
-service = LLMRing()
+# Initialize service with context manager (auto-closes resources)
+async with LLMRing() as service:
+    # Simple chat
+    request = LLMRequest(
+        model="fast",
+        messages=[
+            Message(role="system", content="You are a helpful assistant."),
+            Message(role="user", content="Hello!")
+        ]
+    )
 
-# Simple chat
-request = LLMRequest(
-    model="fast",
-    messages=[
-        Message(role="system", content="You are a helpful assistant."),
-        Message(role="user", content="Hello!")
-    ]
-)
-
-response = await service.chat(request)
-print(response.content)
+    response = await service.chat(request)
+    print(response.content)
 ```
 
 ### Streaming
 
 ```python
-# Real streaming for all providers
-request = LLMRequest(
-    model="balanced",
-    messages=[Message(role="user", content="Count to 10")],
-    stream=True
-)
+async with LLMRing() as service:
+    # Real streaming for all providers
+    request = LLMRequest(
+        model="balanced",
+        messages=[Message(role="user", content="Count to 10")],
+        stream=True
+    )
 
-async for chunk in await service.chat(request):
-    print(chunk.delta, end="", flush=True)
+    async for chunk in await service.chat(request):
+        print(chunk.delta, end="", flush=True)
 ```
 
 ### Tool Calling
 
 ```python
-tools = [{
-    "type": "function",
-    "function": {
-        "name": "get_weather",
-        "description": "Get weather for a location",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "location": {"type": "string"}
-            },
-            "required": ["location"]
+async with LLMRing() as service:
+    tools = [{
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"}
+                },
+                "required": ["location"]
+            }
         }
-    }
-}]
+    }]
 
-request = LLMRequest(
-    model="balanced",
-    messages=[Message(role="user", content="What's the weather in NYC?")],
-    tools=tools
-)
+    request = LLMRequest(
+        model="balanced",
+        messages=[Message(role="user", content="What's the weather in NYC?")],
+        tools=tools
+    )
 
-response = await service.chat(request)
-if response.tool_calls:
-    print("Function called:", response.tool_calls[0]["function"]["name"])
+    response = await service.chat(request)
+    if response.tool_calls:
+        print("Function called:", response.tool_calls[0]["function"]["name"])
+```
+
+## 📚 Resource Management
+
+### Context Manager (Recommended)
+
+```python
+# Automatic resource cleanup with context manager
+async with LLMRing() as service:
+    response = await service.chat(request)
+    # Resources are automatically cleaned up when exiting the context
+```
+
+### Manual Cleanup
+
+```python
+# Manual resource management
+service = LLMRing()
+try:
+    response = await service.chat(request)
+finally:
+    await service.close()  # Ensure resources are cleaned up
 ```
 
 ## 🔧 Advanced Features

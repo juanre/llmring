@@ -1221,3 +1221,11 @@ class LLMRing:
         for provider in self.providers.values():
             if hasattr(provider, "aclose"):
                 await provider.aclose()
+
+    async def __aenter__(self):
+        """Enter context manager."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager and clean up resources."""
+        await self.close()

@@ -17,35 +17,34 @@ The same `response_format` with JSON schema works across all providers:
 from llmring.service import LLMRing
 from llmring.schemas import LLMRequest, Message
 
-service = LLMRing()
+async with LLMRing() as service:
+    # This works identically across ALL providers
+    request = LLMRequest(
+        model="balanced",  # or test, fast, local
+        messages=[Message(role="user", content="Generate a person")],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "person",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "age": {"type": "integer"},
+                        "email": {"type": "string"}
+                    },
+                    "required": ["name", "age"]
+                }
+            },
+            "strict": True
+        }
+    )
 
-# This works identically across ALL providers
-request = LLMRequest(
-    model="balanced",  # or test, fast, local
-    messages=[Message(role="user", content="Generate a person")],
-    response_format={
-        "type": "json_schema",
-        "json_schema": {
-            "name": "person",
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "age": {"type": "integer"},
-                    "email": {"type": "string"}
-                },
-                "required": ["name", "age"]
-            }
-        },
-        "strict": True
-    }
-)
+    response = await service.chat(request)
 
-response = await service.chat(request)
-
-# Access structured data
-print("JSON content:", response.content)        # JSON string
-print("Parsed object:", response.parsed)        # Python dict
+    # Access structured data
+    print("JSON content:", response.content)        # JSON string
+    print("Parsed object:", response.parsed)        # Python dict
 ```
 
 ## Response Fields

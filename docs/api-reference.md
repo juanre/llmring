@@ -9,11 +9,21 @@ Main service class for LLM interactions.
 ```python
 from llmring.service import LLMRing
 
-service = LLMRing(
+# Using context manager (recommended for automatic cleanup)
+async with LLMRing(
     origin="myapp",                    # Optional: Origin identifier
     registry_url=None,                 # Optional: Custom registry URL
     lockfile_path="./llmring.lock"     # Optional: Custom lockfile path
-)
+) as service:
+    # Use service here
+    response = await service.chat(request)
+
+# Or manual resource management
+service = LLMRing()
+try:
+    response = await service.chat(request)
+finally:
+    await service.close()  # Ensure resources are cleaned up
 ```
 
 **Methods:**
@@ -21,6 +31,9 @@ service = LLMRing(
 - `get_provider(name: str) -> BaseLLMProvider`
 - `resolve_alias(alias: str, profile: str = None) -> str`
 - `calculate_cost(response: LLMResponse) -> Dict[str, float]`
+- `async close() -> None` - Clean up resources
+- `async __aenter__() -> LLMRing` - Context manager entry
+- `async __aexit__(...) -> None` - Context manager exit with automatic cleanup
 
 ### LLMRequest
 

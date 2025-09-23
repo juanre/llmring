@@ -18,22 +18,21 @@ Pass provider-specific parameters via `extra_params` in your `LLMRequest`:
 from llmring.service import LLMRing
 from llmring.schemas import LLMRequest, Message
 
-service = LLMRing()
+async with LLMRing() as service:
+    request = LLMRequest(
+        model="fast",
+        messages=[Message(role="user", content="Hello")],
+        extra_params={
+            "logprobs": True,
+            "top_logprobs": 5,
+            "presence_penalty": 0.1,
+            "frequency_penalty": 0.1,
+            "seed": 12345,
+            "top_p": 0.9
+        }
+    )
 
-request = LLMRequest(
-    model="fast",
-    messages=[Message(role="user", content="Hello")],
-    extra_params={
-        "logprobs": True,
-        "top_logprobs": 5,
-        "presence_penalty": 0.1,
-        "frequency_penalty": 0.1,
-        "seed": 12345,
-        "top_p": 0.9
-    }
-)
-
-response = await service.chat(request)
+    response = await service.chat(request)
 ```
 
 ### Anthropic Extra Params
@@ -116,18 +115,18 @@ For maximum SDK power, access the underlying clients directly:
 ```python
 from llmring.service import LLMRing
 
-service = LLMRing()
-openai_client = service.get_provider("openai").client
+async with LLMRing() as service:
+    openai_client = service.get_provider("openai").client
 
-# Use full OpenAI SDK capabilities
-response = await openai_client.chat.completions.create(
-    model="fast",  # Use alias or provider:model format when needed
-    messages=[{"role": "user", "content": "Hello"}],
-    logprobs=True,
-    top_logprobs=10,
-    stream=True,
-    # Any OpenAI parameter supported
-)
+    # Use full OpenAI SDK capabilities
+    response = await openai_client.chat.completions.create(
+        model="fast",  # Use alias or provider:model format when needed
+        messages=[{"role": "user", "content": "Hello"}],
+        logprobs=True,
+        top_logprobs=10,
+        stream=True,
+        # Any OpenAI parameter supported
+    )
 ```
 
 ### Anthropic Raw Client

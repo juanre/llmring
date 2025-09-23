@@ -526,14 +526,14 @@ async def cmd_lock_bump_registry(args):
 
 async def cmd_list_models(args):
     """List available models."""
-    ring = LLMRing()
-    models = ring.get_available_models()
+    async with LLMRing() as ring:
+        models = ring.get_available_models()
 
-    if args.provider:
-        # Filter by provider
-        models = {k: v for k, v in models.items() if k == args.provider}
+        if args.provider:
+            # Filter by provider
+            models = {k: v for k, v in models.items() if k == args.provider}
 
-    print(format_model_table(models, show_all=True))
+        print(format_model_table(models, show_all=True))
 
 
 async def cmd_chat(args):
@@ -554,145 +554,143 @@ async def cmd_chat(args):
                 print(f"[Using alias '{args.model}' → '{model_ref}']")
                 args.model = model_ref
 
-    ring = LLMRing()
+    async with LLMRing() as ring:
+        # Create message
+        messages = [Message(role="user", content=args.message)]
+        if args.system:
+            messages.insert(0, Message(role="system", content=args.system))
 
-    # Create message
-    messages = [Message(role="user", content=args.message)]
-    if args.system:
-        messages.insert(0, Message(role="system", content=args.system))
+        # Create request
+        request = LLMRequest(
+            messages=messages,
+            model=args.model,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            stream=args.stream if hasattr(args, "stream") else False,
+        )
 
-    # Create request
-    request = LLMRequest(
-        messages=messages,
-        model=args.model,
-        temperature=args.temperature,
-        max_tokens=args.max_tokens,
-        stream=args.stream if hasattr(args, "stream") else False,
-    )
+        try:
+            # Send request
+            response = await ring.chat(request)
 
-    try:
-        # Send request
-        response = await ring.chat(request)
+            # Handle streaming response
+            if args.stream if hasattr(args, "stream") else False:
+                # Stream response chunks
+                import sys
 
-        # Handle streaming response
-        if args.stream if hasattr(args, "stream") else False:
-            # Stream response chunks
-            import sys
+                full_content = ""
+                accumulated_usage = None
 
-            full_content = ""
-            accumulated_usage = None
+                async for chunk in response:
+                    if chunk.delta:
+                        if not args.json:
+                            # Print chunks as they arrive
+                            sys.stdout.write(chunk.delta)
+                            sys.stdout.flush()
+                        full_content += chunk.delta
 
-            async for chunk in response:
-                if chunk.delta:
-                    if not args.json:
-                        # Print chunks as they arrive
-                        sys.stdout.write(chunk.delta)
-                        sys.stdout.flush()
-                    full_content += chunk.delta
+                    # Capture final usage stats
+                    if chunk.usage:
+                        accumulated_usage = chunk.usage
 
-                # Capture final usage stats
-                if chunk.usage:
-                    accumulated_usage = chunk.usage
-
-            if args.json:
-                # For JSON output, collect all chunks first
-                print(
-                    json.dumps(
-                        {
-                            "content": full_content,
-                            "model": (chunk.model if chunk and chunk.model else args.model),
-                            "usage": accumulated_usage,
-                            "finish_reason": chunk.finish_reason if chunk else None,
-                        },
-                        indent=2,
-                    )
-                )
-            else:
-                # Print newline after streaming
-                print()
-
-                if args.verbose and accumulated_usage:
-                    print(f"\n[Model: {chunk.model if chunk and chunk.model else args.model}]")
+                if args.json:
+                    # For JSON output, collect all chunks first
                     print(
-                        f"[Tokens: {accumulated_usage.get('prompt_tokens', 0)} in, {accumulated_usage.get('completion_tokens', 0)} out]"
+                        json.dumps(
+                            {
+                                "content": full_content,
+                                "model": (chunk.model if chunk and chunk.model else args.model),
+                                "usage": accumulated_usage,
+                                "finish_reason": chunk.finish_reason if chunk else None,
+                            },
+                            indent=2,
+                        )
                     )
-                    if "cost" in accumulated_usage:
-                        print(f"[Cost: ${accumulated_usage['cost']:.6f}]")
-        else:
-            # Non-streaming response (existing code)
-            # Display response
-            if args.json:
-                print(
-                    json.dumps(
-                        {
-                            "content": response.content,
-                            "model": response.model,
-                            "usage": response.usage,
-                            "finish_reason": response.finish_reason,
-                        },
-                        indent=2,
-                    )
-                )
+                else:
+                    # Print newline after streaming
+                    print()
+
+                    if args.verbose and accumulated_usage:
+                        print(f"\n[Model: {chunk.model if chunk and chunk.model else args.model}]")
+                        print(
+                            f"[Tokens: {accumulated_usage.get('prompt_tokens', 0)} in, {accumulated_usage.get('completion_tokens', 0)} out]"
+                        )
+                        if "cost" in accumulated_usage:
+                            print(f"[Cost: ${accumulated_usage['cost']:.6f}]")
             else:
-                print(response.content)
-
-                if args.verbose and response.usage:
-                    print(f"\n[Model: {response.model}]")
+                # Non-streaming response (existing code)
+                # Display response
+                if args.json:
                     print(
-                        f"[Tokens: {response.usage.get('prompt_tokens', 0)} in, {response.usage.get('completion_tokens', 0)} out]"
+                        json.dumps(
+                            {
+                                "content": response.content,
+                                "model": response.model,
+                                "usage": response.usage,
+                                "finish_reason": response.finish_reason,
+                            },
+                            indent=2,
+                        )
                     )
-                    if "cost" in response.usage:
-                        print(f"[Cost: ${response.usage['cost']:.6f}]")
+                else:
+                    print(response.content)
 
-    except Exception as e:
-        print(f"Error: {e}")
-        return 1
+                    if args.verbose and response.usage:
+                        print(f"\n[Model: {response.model}]")
+                        print(
+                            f"[Tokens: {response.usage.get('prompt_tokens', 0)} in, {response.usage.get('completion_tokens', 0)} out]"
+                        )
+                        if "cost" in response.usage:
+                            print(f"[Cost: ${response.usage['cost']:.6f}]")
+
+        except Exception as e:
+            print(f"Error: {e}")
+            return 1
 
     return 0
 
 
 async def cmd_info(args):
     """Show information about a specific model."""
-    ring = LLMRing()
+    async with LLMRing() as ring:
+        try:
+            # Get enhanced info including registry data
+            info = await ring.get_enhanced_model_info(args.model)
 
-    try:
-        # Get enhanced info including registry data
-        info = await ring.get_enhanced_model_info(args.model)
+            if args.json:
+                print(json.dumps(info, indent=2, default=str))
+            else:
+                print(f"Model: {info['model']}")
+                print(f"Provider: {info['provider']}")
+                print(f"Supported: {info['supported']}")
 
-        if args.json:
-            print(json.dumps(info, indent=2, default=str))
-        else:
-            print(f"Model: {info['model']}")
-            print(f"Provider: {info['provider']}")
-            print(f"Supported: {info['supported']}")
+                # Show additional info if available
+                if "display_name" in info:
+                    print(f"Display Name: {info['display_name']}")
+                if "description" in info:
+                    print(f"Description: {info['description']}")
+                if "max_input_tokens" in info:
+                    print(f"Max Input: {info['max_input_tokens']:,} tokens")
+                if "max_output_tokens" in info:
+                    print(f"Max Output: {info['max_output_tokens']:,} tokens")
+                if "dollars_per_million_tokens_input" in info:
+                    print(f"Input Cost: ${info['dollars_per_million_tokens_input']:.2f}/M tokens")
+                if "dollars_per_million_tokens_output" in info:
+                    print(f"Output Cost: ${info['dollars_per_million_tokens_output']:.2f}/M tokens")
+                if "supports_vision" in info and info["supports_vision"]:
+                    print("Supports: Vision")
+                if "supports_function_calling" in info and info["supports_function_calling"]:
+                    print("Supports: Function Calling")
+                if "supports_json_mode" in info and info["supports_json_mode"]:
+                    print("Supports: JSON Mode")
+                if "is_default" in info:
+                    print(f"Default: {info['is_default']}")
 
-            # Show additional info if available
-            if "display_name" in info:
-                print(f"Display Name: {info['display_name']}")
-            if "description" in info:
-                print(f"Description: {info['description']}")
-            if "max_input_tokens" in info:
-                print(f"Max Input: {info['max_input_tokens']:,} tokens")
-            if "max_output_tokens" in info:
-                print(f"Max Output: {info['max_output_tokens']:,} tokens")
-            if "dollars_per_million_tokens_input" in info:
-                print(f"Input Cost: ${info['dollars_per_million_tokens_input']:.2f}/M tokens")
-            if "dollars_per_million_tokens_output" in info:
-                print(f"Output Cost: ${info['dollars_per_million_tokens_output']:.2f}/M tokens")
-            if "supports_vision" in info and info["supports_vision"]:
-                print("Supports: Vision")
-            if "supports_function_calling" in info and info["supports_function_calling"]:
-                print("Supports: Function Calling")
-            if "supports_json_mode" in info and info["supports_json_mode"]:
-                print("Supports: JSON Mode")
-            if "is_default" in info:
-                print(f"Default: {info['is_default']}")
+        except Exception as e:
+            print(f"Error: {e}")
+            return 1
 
-    except Exception as e:
-        print(f"Error: {e}")
-        return 1
-
-    return 0
+        return 0
 
 
 # Push/pull commands removed per source-of-truth v3.8
