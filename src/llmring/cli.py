@@ -28,7 +28,24 @@ async def cmd_lock_init(args):
 
     # Check if intelligent creation is requested
     if hasattr(args, "interactive") and args.interactive:
-        return await cmd_lock_init_intelligent(path)
+        requirements_text = None
+
+        # Check for requirements from file
+        if hasattr(args, "requirements_file") and args.requirements_file:
+            req_path = Path(args.requirements_file)
+            if req_path.exists():
+                requirements_text = req_path.read_text()
+                print(f"📄 Using requirements from: {req_path}")
+            else:
+                print(f"❌ Requirements file not found: {req_path}")
+                return 1
+
+        # Check for requirements from command line
+        elif hasattr(args, "requirements") and args.requirements:
+            requirements_text = args.requirements
+            print(f"📝 Using requirements from command line")
+
+        return await cmd_lock_init_intelligent(path, requirements_text)
 
     # Basic creation with recommendation to use intelligent system
     print("💡 Creating lockfile with registry-based recommendations...")
@@ -63,10 +80,13 @@ async def cmd_lock_init(args):
     return 0
 
 
-async def cmd_lock_init_intelligent(path: Path):
+async def cmd_lock_init_intelligent(path: Path, requirements_text: str = None):
     """Create lockfile using intelligent system (simplified without requiring advisor)."""
     print("🤖 LLMRing Intelligent Lockfile Creator")
-    print("   Analyzing registry to create optimal configuration")
+    if requirements_text:
+        print("   Using provided requirements to create optimal configuration")
+    else:
+        print("   Interactive mode - I'll ask you some questions")
     print()
 
     try:
@@ -76,8 +96,8 @@ async def cmd_lock_init_intelligent(path: Path):
         # Create without bootstrap (uses registry analysis directly)
         creator = IntelligentLockfileCreator(bootstrap_lockfile=None)
 
-        # Run the intelligent creation process
-        lockfile = await creator.create_lockfile_interactively()
+        # Run the intelligent creation process with optional requirements
+        lockfile = await creator.create_lockfile_interactively(requirements_text=requirements_text)
 
         # Save the lockfile
         lockfile.save(path)

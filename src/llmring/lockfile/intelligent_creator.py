@@ -45,14 +45,14 @@ class IntelligentLockfileCreator:
         }
 
     async def create_lockfile_interactively(
-        self, profile_name: str = "default", max_cost_per_turn: float = 0.50
+        self, profile_name: str = "default", requirements_text: str = None
     ) -> Lockfile:
         """
         Guide user through intelligent lockfile creation.
 
         Args:
             profile_name: Profile to create
-            max_cost_per_turn: Maximum cost per advisor turn (safety guard)
+            requirements_text: Optional requirements text (from file or CLI)
 
         Returns:
             Optimized lockfile with rationale metadata
@@ -63,12 +63,11 @@ class IntelligentLockfileCreator:
         print("🤖 Analyzing current registry across all providers...")
         await self._analyze_registry()
 
-        # Phase 2: Understand user needs through conversation
-        print("📋 Understanding your requirements...")
-        await self._discover_user_needs()
+        # Phase 2: Understand user needs through conversation or text
+        await self._discover_user_needs(requirements_text)
 
         # Phase 3: Generate structured recommendations
-        print("🎯 Generating optimal recommendations...")
+        print("\n🎯 Generating optimal recommendations...")
         await self._generate_recommendations()
 
         # Phase 4: Create final lockfile with metadata
@@ -143,59 +142,164 @@ class IntelligentLockfileCreator:
 
         self.conversation_state["registry_analysis"] = analysis
 
-    async def _discover_user_needs(self):
-        """Simplified user needs discovery - can be enhanced with interactive prompts later."""
-        # For now, use sensible defaults based on common use cases
-        # In a full implementation, this would be interactive
+    async def _discover_user_needs(self, requirements_text: str = None):
+        """Discover user needs through interactive prompts or provided text."""
 
-        print("\n📝 Determining optimal configuration based on available models...")
+        print("\n📝 Understanding your requirements...")
 
-        # Analyze available capabilities from registry
-        has_vision = False
-        has_functions = False
+        # If requirements provided as text, parse them
+        if requirements_text:
+            print(f"   Using provided requirements: {requirements_text[:100]}...")
+            self._parse_requirements_text(requirements_text)
+            return
 
+        # Otherwise, ask the user interactively
+        print("\nI'll ask you a few questions to create the optimal configuration.")
+        print("Press Enter for default values.\n")
+
+        # Question 1: Use cases
+        use_cases_input = input("1. What will you primarily use LLMs for?\n   (e.g., 'coding, writing, analysis' or press Enter for general use): ").strip()
+        if not use_cases_input:
+            use_cases = ["general_qa", "data_analysis", "document_processing"]
+            print("   → Using default: general question answering, data analysis, document processing")
+        else:
+            use_cases = [uc.strip() for uc in use_cases_input.split(",")]
+            print(f"   → Selected use cases: {', '.join(use_cases)}")
+
+        # Question 2: Budget preference
+        print("\n2. What's your budget preference?")
+        print("   a) low_cost - Minimize costs, OK with reduced capability")
+        print("   b) balanced - Balance cost and performance (default)")
+        print("   c) performance - Maximize capability, cost is secondary")
+        budget_input = input("   Choice (a/b/c or Enter for balanced): ").strip().lower()
+
+        budget_map = {
+            'a': 'low_cost',
+            'b': 'balanced',
+            'c': 'performance',
+            '': 'balanced'
+        }
+        budget_preference = budget_map.get(budget_input, 'balanced')
+        print(f"   → Selected: {budget_preference}")
+
+        # Question 3: Required capabilities
+        print("\n3. Which capabilities do you need? (comma-separated)")
+
+        # Show available capabilities from registry
+        available_caps = set()
         for provider_data in self.conversation_state["registry_analysis"]["providers"].values():
             if isinstance(provider_data, dict) and "models" in provider_data:
                 for model in provider_data["models"]:
                     if model.get("supports_vision"):
-                        has_vision = True
+                        available_caps.add("vision")
                     if model.get("supports_functions"):
-                        has_functions = True
+                        available_caps.add("function_calling")
 
-        # Set defaults based on what's available
+        if available_caps:
+            print(f"   Available: {', '.join(sorted(available_caps))}")
+
+        caps_input = input("   Enter capabilities or press Enter for auto-detect: ").strip()
+        if not caps_input:
+            capabilities = list(available_caps)
+            print(f"   → Auto-detected: {', '.join(capabilities) if capabilities else 'basic text only'}")
+        else:
+            capabilities = [cap.strip() for cap in caps_input.split(",")]
+            print(f"   → Selected: {', '.join(capabilities)}")
+
+        # Question 4: Usage volume
+        print("\n4. Expected usage volume?")
+        print("   a) low - Less than 100 requests/month")
+        print("   b) moderate - 100-1000 requests/month (default)")
+        print("   c) high - More than 1000 requests/month")
+        volume_input = input("   Choice (a/b/c or Enter for moderate): ").strip().lower()
+
+        volume_map = {
+            'a': 'low',
+            'b': 'moderate',
+            'c': 'high',
+            '': 'moderate'
+        }
+        usage_volume = volume_map.get(volume_input, 'moderate')
+        print(f"   → Selected: {usage_volume}")
+
+        # Question 5: Specific aliases needed
+        print("\n5. Any specific aliases you need?")
+        print("   Common aliases: fast, deep, vision, coder, writer")
+        aliases_input = input("   Enter aliases or press Enter to auto-generate: ").strip()
+
+        if aliases_input:
+            requested_aliases = [a.strip() for a in aliases_input.split(",")]
+            print(f"   → Will include: {', '.join(requested_aliases)}")
+        else:
+            requested_aliases = []
+            print("   → Will auto-generate based on your needs")
+
+        # Store user needs
+        self.conversation_state["user_needs"] = {
+            "use_cases": use_cases,
+            "budget_preference": budget_preference,
+            "required_capabilities": capabilities,
+            "usage_volume": usage_volume,
+            "stability_preference": "established",
+            "requested_aliases": requested_aliases
+        }
+
+        print("\n✓ Requirements gathered successfully!")
+
+    def _parse_requirements_text(self, text: str):
+        """Parse requirements from provided text."""
+        # Simple parsing - can be enhanced with more sophisticated NLP
+        text_lower = text.lower()
+
+        # Detect use cases
+        use_cases = []
+        if "coding" in text_lower or "code" in text_lower:
+            use_cases.append("coding")
+        if "writing" in text_lower or "content" in text_lower:
+            use_cases.append("writing")
+        if "analysis" in text_lower or "data" in text_lower:
+            use_cases.append("data_analysis")
+        if not use_cases:
+            use_cases = ["general_qa"]
+
+        # Detect budget preference
+        if "cheap" in text_lower or "low cost" in text_lower or "budget" in text_lower:
+            budget = "low_cost"
+        elif "performance" in text_lower or "best" in text_lower or "powerful" in text_lower:
+            budget = "performance"
+        else:
+            budget = "balanced"
+
+        # Detect capabilities
         capabilities = []
-        if has_vision:
+        if "vision" in text_lower or "image" in text_lower:
             capabilities.append("vision")
-        if has_functions:
+        if "function" in text_lower or "tool" in text_lower:
             capabilities.append("function_calling")
 
+        # Store parsed needs
         self.conversation_state["user_needs"] = {
-            "use_cases": [
-                "general_qa",
-                "data_analysis",
-                "document_processing",
-            ],
-            "budget_preference": "balanced",
+            "use_cases": use_cases,
+            "budget_preference": budget,
             "required_capabilities": capabilities,
             "usage_volume": "moderate",
             "stability_preference": "established",
+            "requested_aliases": []
         }
 
-        print("   ✓ Identified capabilities:", ", ".join(capabilities) if capabilities else "basic text")
-        print("   ✓ Optimization goal: balanced cost and performance")
-
     async def _generate_recommendations(self):
-        """Generate structured alias recommendations based on registry analysis."""
-
-        print("\n🎯 Generating optimal alias configuration...")
+        """Generate structured alias recommendations based on registry analysis and user needs."""
 
         recommendations = {
             "aliases": [],
             "total_estimated_monthly_cost": 0,
-            "coverage_analysis": "Comprehensive coverage for general use cases"
+            "coverage_analysis": "Customized configuration based on your requirements"
         }
 
         analysis = self.conversation_state["registry_analysis"]
+        user_needs = self.conversation_state["user_needs"]
+        budget_pref = user_needs.get("budget_preference", "balanced")
+        requested_aliases = user_needs.get("requested_aliases", [])
 
         # Helper to add recommendation
         def add_recommendation(alias_name, model_ref, rationale, use_cases):
@@ -210,66 +314,122 @@ class IntelligentLockfileCreator:
                 "use_cases": use_cases
             })
 
-        # Generate recommendations based on analysis
+        # Get recommendations from analysis
         recs = analysis.get("recommendations", {})
 
-        # 1. Fast/low-cost alias
-        if recs.get("most_cost_effective"):
-            add_recommendation(
-                "fast",
-                recs["most_cost_effective"],
-                "Most cost-effective model for quick, simple tasks",
-                ["general_qa", "simple_analysis"]
-            )
-            add_recommendation(
-                "low_cost",
-                recs["most_cost_effective"],
-                "Optimized for high-volume, cost-sensitive operations",
-                ["batch_processing", "simple_tasks"]
-            )
+        # Build aliases based on user preferences
+        if budget_pref == "low_cost":
+            # Prioritize cost-effective models
+            if recs.get("most_cost_effective"):
+                add_recommendation(
+                    "primary",
+                    recs["most_cost_effective"],
+                    "Primary model optimized for low cost as requested",
+                    user_needs.get("use_cases", ["general_qa"])
+                )
+                add_recommendation(
+                    "fast",
+                    recs["most_cost_effective"],
+                    "Fast, cost-effective model for simple tasks",
+                    ["simple_tasks"]
+                )
+        elif budget_pref == "performance":
+            # Prioritize high-capability models
+            if recs.get("most_capable"):
+                add_recommendation(
+                    "primary",
+                    recs["most_capable"],
+                    "Primary model with maximum capability as requested",
+                    user_needs.get("use_cases", ["general_qa"])
+                )
+                add_recommendation(
+                    "deep",
+                    recs["most_capable"],
+                    "Deep reasoning model for complex tasks",
+                    ["complex_analysis"]
+                )
+        else:  # balanced
+            # Mix of capabilities
+            if recs.get("most_cost_effective"):
+                add_recommendation(
+                    "fast",
+                    recs["most_cost_effective"],
+                    "Cost-effective model for simple tasks",
+                    ["simple_tasks"]
+                )
+            if recs.get("most_capable"):
+                add_recommendation(
+                    "deep",
+                    recs["most_capable"],
+                    "High-capability model for complex tasks",
+                    ["complex_analysis"]
+                )
 
-        # 2. Deep/capable alias
-        if recs.get("most_capable"):
-            add_recommendation(
-                "deep",
-                recs["most_capable"],
-                "Most capable model for complex reasoning and analysis",
-                ["complex_analysis", "research", "reasoning"]
-            )
-            add_recommendation(
-                "long_context",
-                recs["most_capable"],
-                "Handles large documents and extensive context",
-                ["document_processing", "long_form_content"]
-            )
-
-        # 3. Vision alias
-        if recs.get("best_vision"):
-            add_recommendation(
-                "vision",
-                recs["best_vision"],
-                "Specialized for image and visual content analysis",
-                ["image_analysis", "document_ocr", "visual_understanding"]
-            )
-
-        # 4. Balanced/default alias - pick a middle ground
-        for provider_name, provider_data in analysis["providers"].items():
-            if isinstance(provider_data, dict) and "models" in provider_data:
-                models = provider_data["models"]
-                if len(models) > 1:
-                    # Pick second model as balanced option (first is often most expensive)
-                    balanced_model = models[1]
+        # Add requested aliases
+        for alias in requested_aliases:
+            if alias == "vision" and recs.get("best_vision"):
+                add_recommendation(
+                    "vision",
+                    recs["best_vision"],
+                    "Vision model as specifically requested",
+                    ["image_analysis", "visual_understanding"]
+                )
+            elif alias == "coder" and recs.get("most_capable"):
+                add_recommendation(
+                    "coder",
+                    recs["most_capable"],
+                    "Code generation and analysis model",
+                    ["coding", "code_review"]
+                )
+            elif alias == "writer":
+                # Use balanced model for writing
+                model = recs.get("most_capable") or recs.get("most_cost_effective")
+                if model:
                     add_recommendation(
-                        "balanced",
-                        f"{provider_name}:{balanced_model['name']}",
-                        "Balanced performance and cost for general use",
-                        ["general_qa", "data_analysis"]
+                        "writer",
+                        model,
+                        "Content creation and writing model",
+                        ["writing", "content_creation"]
+                    )
+            elif alias not in [a["alias"] for a in recommendations["aliases"]]:
+                # Generic alias - use best available
+                model = recs.get("most_capable") or recs.get("most_cost_effective")
+                if model:
+                    add_recommendation(
+                        alias,
+                        model,
+                        f"Custom alias '{alias}' as requested",
+                        ["custom"]
+                    )
+
+        # Add capability-based aliases
+        if "vision" in user_needs.get("required_capabilities", []):
+            if recs.get("best_vision") and "vision" not in [a["alias"] for a in recommendations["aliases"]]:
+                add_recommendation(
+                    "vision",
+                    recs["best_vision"],
+                    "Vision-capable model for image processing",
+                    ["image_analysis"]
+                )
+
+        # Ensure we have at least a default/balanced option
+        if not recommendations["aliases"]:
+            # Fallback to any available model
+            for provider_name, provider_data in analysis["providers"].items():
+                if isinstance(provider_data, dict) and "models" in provider_data and provider_data["models"]:
+                    model = provider_data["models"][0]
+                    add_recommendation(
+                        "default",
+                        f"{provider_name}:{model['name']}",
+                        "Default model based on available options",
+                        ["general_qa"]
                     )
                     break
 
         self.conversation_state["recommendations"] = recommendations
 
         print(f"   ✓ Generated {len(recommendations['aliases'])} alias configurations")
+        print(f"   ✓ Optimized for: {budget_pref} budget preference")
 
     async def _create_lockfile_with_rationale(self, profile_name: str) -> Lockfile:
         """Create final lockfile with rationale metadata."""
