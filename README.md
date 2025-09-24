@@ -187,8 +187,14 @@ request = LLMRequest(
 LLMRing features intelligent lockfile creation that analyzes the current registry and recommends optimal aliases:
 
 ```bash
-# Create intelligent lockfile with current best models
+# Interactive mode - answers prompts about your needs
 llmring lock init --interactive
+
+# With requirements from a file
+llmring lock init --interactive --requirements-file requirements.txt
+
+# With requirements directly in command
+llmring lock init --interactive --requirements "I need cost-effective models for coding"
 
 # Analyze your configuration
 llmring lock analyze
@@ -196,6 +202,13 @@ llmring lock analyze
 # Optimize existing lockfile
 llmring lock optimize
 ```
+
+**Interactive Mode** prompts you for:
+- **Use cases**: What you'll primarily use LLMs for (coding, writing, analysis, etc.)
+- **Budget preference**: Low cost, balanced, or maximum performance
+- **Capabilities**: Vision, function calling, or auto-detect from registry
+- **Usage volume**: Expected monthly request volume
+- **Custom aliases**: Specific aliases you want (fast, deep, coder, writer, vision, etc.)
 
 ```python
 # Use semantic aliases (always current, registry-based)

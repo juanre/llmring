@@ -1,0 +1,37 @@
+version = "1.0"
+created_at = "2025-09-24T15:14:59.840670+00:00"
+updated_at = "2025-09-24T15:14:59.840699+00:00"
+default_profile = "default"
+
+[metadata]
+created_by = "llmring-intelligent-creator-v1.0.0"
+created_at = "2025-09-24T15:14:59.842153+00:00"
+registry_analysis_date = "2025-09-24T15:11:58.434596+00:00"
+estimated_monthly_cost = 0
+coverage_analysis = "Customized configuration based on your requirements"
+
+[profiles.default]
+name = "default"
+[[profiles.default.bindings]]
+alias = "fast"
+provider = "openai"
+model = "gpt-5-nano"
+
+[[profiles.default.bindings]]
+alias = "deep"
+provider = "openai"
+model = "gpt-4.1"
+
+[metadata.user_needs]
+use_cases = [ "make summaries of very long pdfs",]
+budget_preference = "balanced"
+required_capabilities = [ "function_calling",]
+usage_volume = "low"
+stability_preference = "established"
+requested_aliases = []
+
+[metadata.recommendations_rationale]
+fast = "Cost-effective model for simple tasks"
+deep = "High-capability model for complex tasks"
+
+[profiles.default.registry_versions]
