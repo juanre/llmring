@@ -28,18 +28,16 @@ logger = logging.getLogger(__name__)
 class LockfileServer:
     """MCP server for conversational lockfile management."""
     
-    def __init__(self, lockfile_path: Optional[Path] = None, registry_path: Optional[Path] = None):
+    def __init__(self, lockfile_path: Optional[Path] = None):
         """
         Initialize the lockfile server.
-        
+
         Args:
             lockfile_path: Path to the lockfile (defaults to llmring.lock)
-            registry_path: Path to the registry (defaults to registry.json)
         """
         # Initialize lockfile tools
         self.tools = LockfileManagerTools(
-            lockfile_path=lockfile_path,
-            registry_path=registry_path
+            lockfile_path=lockfile_path
         )
         
         # Create MCP server
@@ -245,15 +243,10 @@ async def main():
     lockfile_path = os.getenv("LLMRING_LOCKFILE_PATH")
     if lockfile_path:
         lockfile_path = Path(lockfile_path)
-    
-    registry_path = os.getenv("LLMRING_REGISTRY_PATH")
-    if registry_path:
-        registry_path = Path(registry_path)
-    
+
     # Create and run server
     server = LockfileServer(
-        lockfile_path=lockfile_path,
-        registry_path=registry_path
+        lockfile_path=lockfile_path
     )
     
     await server.run()

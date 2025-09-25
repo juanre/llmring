@@ -85,11 +85,18 @@ llmring lock chat --server-url http://localhost:8080
 
 ### Choosing a Different Model
 
-Use a specific model for the conversation:
+By default, the conversational interface uses the `advisor` alias (Claude Opus 4.1) for optimal intelligent recommendations. You can specify a different model:
 
 ```bash
-llmring lock chat --model deep
+llmring lock chat --model deep   # Use deep reasoning model
+llmring lock chat --model balanced  # Use balanced model
 ```
+
+The `advisor` alias is specifically configured for:
+- Intelligent lockfile creation
+- Optimal model recommendations
+- Advanced reasoning about your use cases
+- Understanding complex requirements
 
 ## Integration with Existing Workflow
 

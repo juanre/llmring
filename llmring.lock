@@ -22,6 +22,11 @@ alias = "deep"
 provider = "openai"
 model = "gpt-4.1"
 
+[[profiles.default.bindings]]
+alias = "advisor"
+provider = "anthropic"
+model = "claude-opus-4-1-20250805"
+
 [metadata.user_needs]
 use_cases = [ "make summaries of very long pdfs",]
 budget_preference = "balanced"
@@ -33,5 +38,6 @@ requested_aliases = []
 [metadata.recommendations_rationale]
 fast = "Cost-effective model for simple tasks"
 deep = "High-capability model for complex tasks"
+advisor = "Claude Opus 4.1 - Advanced reasoning for intelligent lockfile creation and recommendations"
 
 [profiles.default.registry_versions]

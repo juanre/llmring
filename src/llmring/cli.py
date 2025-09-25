@@ -922,8 +922,8 @@ def main():
     )
     chat_parser.add_argument(
         "--model",
-        default="balanced",
-        help="LLM model to use for conversation"
+        default="advisor",
+        help="LLM model to use for conversation (default: advisor for intelligent recommendations)"
     )
 
     # Bind command

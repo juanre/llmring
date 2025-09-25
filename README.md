@@ -216,7 +216,7 @@ request = LLMRequest(
     model="deep",      # → most capable reasoning model
     model="fast",      # → cost-effective quick responses
     model="balanced",  # → optimal all-around model
-    model="advisor",   # → powers intelligent systems
+    model="advisor",   # → Claude Opus 4.1 - powers intelligent lockfile creation
     messages=[Message(role="user", content="Hello")]
 )
 ```
