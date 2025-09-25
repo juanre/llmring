@@ -485,6 +485,75 @@ async def cmd_lock_bump_registry(args):
     return 0
 
 
+async def cmd_lock_chat(args):
+    """Conversational lockfile management using MCP chat interface."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    # Import MCP chat app
+    from llmring.mcp.client.chat.app import MCPChatApp
+
+    print("🤖 LLMRing Conversational Lockfile Manager")
+    print("=" * 50)
+
+    # If no server URL provided, start embedded lockfile MCP server
+    if not args.server_url:
+        print("Starting embedded lockfile MCP server...")
+
+        # Create a temporary file for server communication
+        with tempfile.NamedTemporaryFile(suffix=".sock", delete=False) as tmp:
+            socket_path = tmp.name
+
+        # Start the lockfile MCP server as a subprocess
+        server_process = subprocess.Popen(
+            ["python", "-m", "llmring.mcp.server.lockfile_server"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "MCP_SOCKET_PATH": socket_path}
+        )
+
+        # Wait a moment for server to start
+        await asyncio.sleep(1)
+
+        # Use stdio transport URL format
+        server_url = f"stdio://{socket_path}"
+        print(f"✅ Started lockfile MCP server")
+    else:
+        server_url = args.server_url
+        server_process = None
+
+    try:
+        # Create and run MCP chat app
+        app = MCPChatApp(
+            mcp_server_url=server_url,
+            llm_model=args.model
+        )
+
+        # Custom initialization message for lockfile management
+        await app.initialize_async()
+        app.console.print("\n[bold green]Welcome to LLMRing Conversational Lockfile Manager![/bold green]")
+        app.console.print("\nYou can use natural language to manage your lockfile:")
+        app.console.print("  • 'Add an alias called fast for quick responses'")
+        app.console.print("  • 'What model should I use for coding?'")
+        app.console.print("  • 'Show me my current aliases'")
+        app.console.print("  • 'How much will my current setup cost?'")
+        app.console.print("  • 'Remove the writer alias'")
+        app.console.print("\nType [bold]/help[/bold] for commands or start chatting!\n")
+
+        # Run the chat interface
+        await app.run()
+
+    finally:
+        # Clean up server process if we started it
+        if server_process:
+            server_process.terminate()
+            server_process.wait()
+            print("\n✅ Stopped lockfile MCP server")
+
+    return 0
+
+
 async def cmd_list_models(args):
     """List available models."""
     async with LLMRing() as ring:
@@ -843,6 +912,20 @@ def main():
     # lock bump-registry
     lock_subparsers.add_parser("bump-registry", help="Update registry versions")
 
+    # lock chat - conversational lockfile management
+    chat_parser = lock_subparsers.add_parser(
+        "chat", help="Conversational lockfile management with natural language"
+    )
+    chat_parser.add_argument(
+        "--server-url",
+        help="URL of lockfile MCP server (default: starts embedded server)"
+    )
+    chat_parser.add_argument(
+        "--model",
+        default="balanced",
+        help="LLM model to use for conversation"
+    )
+
     # Bind command
     bind_parser = subparsers.add_parser("bind", help="Bind an alias to a model")
     bind_parser.add_argument("alias", help="Alias name")
@@ -927,6 +1010,7 @@ def main():
             "optimize": cmd_lock_optimize,
             "analyze": cmd_lock_analyze,
             "bump-registry": cmd_lock_bump_registry,
+            "chat": cmd_lock_chat,
         }
 
         if args.lock_command in lock_commands:
