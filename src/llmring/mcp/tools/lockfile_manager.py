@@ -282,62 +282,6 @@ class LockfileManagerTools:
             "recommendations": recommendations
         }
 
-    async def analyze_costs(self, profile: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Analyze potential costs for current alias configuration.
-
-        Args:
-            profile: Profile to analyze, defaults to current working profile
-
-        Returns:
-            Cost analysis for the profile
-        """
-        profile = profile or self.working_profile
-        profile_config = self.lockfile.get_profile(profile)
-
-        costs = []
-        total_min_cost = 0
-        total_max_cost = 0
-
-        for binding in profile_config.bindings:
-            try:
-                # Fetch model data
-                models = await self.registry.fetch_current_models(binding.provider)
-                model_data = None
-                for m in models:
-                    if m.model_name == binding.model:
-                        model_data = m
-                        break
-
-                if model_data and model_data.dollars_per_million_tokens_input:
-                    # Estimate costs (assuming 1k input, 0.5k output per request)
-                    input_cost = (1000 / 1_000_000) * model_data.dollars_per_million_tokens_input
-                    output_cost = (500 / 1_000_000) * (model_data.dollars_per_million_tokens_output or 0)
-                    per_request = input_cost + output_cost
-
-                    costs.append({
-                        "alias": binding.alias,
-                        "model": binding.model_ref,
-                        "cost_per_request": round(per_request, 6),
-                        "cost_per_1k_requests": round(per_request * 1000, 2)
-                    })
-
-                    total_min_cost += per_request
-                    total_max_cost += per_request * 10  # Assume up to 10x for heavy use
-
-            except Exception:
-                # Skip if can't fetch model data
-                pass
-
-        return {
-            "profile": profile,
-            "alias_costs": costs,
-            "estimated_monthly_cost": {
-                "light_use": round(total_min_cost * 100, 2),  # 100 requests
-                "moderate_use": round(total_min_cost * 1000, 2),  # 1k requests
-                "heavy_use": round(total_min_cost * 10000, 2)  # 10k requests
-            }
-        }
 
     async def save_lockfile(self) -> Dict[str, Any]:
         """Save the current lockfile state."""
@@ -462,128 +406,90 @@ class LockfileManagerTools:
         else:
             return await self._find_balanced_model() or "openai:gpt-4o"
 
+    async def analyze_costs(self, profile: str = None, monthly_volume: Dict[str, int] = None) -> Dict[str, Any]:
+        """
+        Analyze estimated costs for current configuration.
 
-def get_lockfile_tools() -> List[Dict[str, Any]]:
-    """Get tool definitions for MCP server registration."""
-    return [
-        {
-            "name": "add_alias",
-            "description": "Add or update an alias in the lockfile",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "alias": {
-                        "type": "string",
-                        "description": "Name of the alias to add"
-                    },
-                    "model": {
-                        "type": "string",
-                        "description": "Model reference (provider:model), or omit to auto-select"
-                    },
-                    "use_case": {
-                        "type": "string",
-                        "description": "Description of what the alias will be used for"
-                    },
-                    "profile": {
-                        "type": "string",
-                        "description": "Profile to add to (default: 'default')"
+        Args:
+            profile: Profile to analyze (default: current working profile)
+            monthly_volume: Expected monthly token usage with 'input_tokens' and 'output_tokens'
+
+        Returns:
+            Cost analysis with breakdown and recommendations
+        """
+        profile = profile or self.working_profile
+        prof = self.lockfile.get_profile(profile)
+
+        if not monthly_volume:
+            # Default estimate: 1M input, 500K output per month
+            monthly_volume = {
+                "input_tokens": 1_000_000,
+                "output_tokens": 500_000
+            }
+
+        cost_breakdown = {}
+        total_cost = 0.0
+
+        for binding in prof.bindings:
+            try:
+                models = await self.registry.fetch_current_models(binding.provider)
+                model = next((m for m in models if m.model_name == binding.model), None)
+
+                if model and model.dollars_per_million_tokens_input:
+                    input_cost = (monthly_volume["input_tokens"] / 1_000_000) * model.dollars_per_million_tokens_input
+                    output_cost = (monthly_volume["output_tokens"] / 1_000_000) * model.dollars_per_million_tokens_output
+                    alias_cost = input_cost + output_cost
+
+                    cost_breakdown[binding.alias] = {
+                        "model": binding.model_ref,
+                        "input_cost": round(input_cost, 2),
+                        "output_cost": round(output_cost, 2),
+                        "total_cost": round(alias_cost, 2)
                     }
-                },
-                "required": ["alias"]
-            }
-        },
-        {
-            "name": "remove_alias",
-            "description": "Remove an alias from the lockfile",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "alias": {
-                        "type": "string",
-                        "description": "Name of the alias to remove"
-                    },
-                    "profile": {
-                        "type": "string",
-                        "description": "Profile to remove from"
-                    }
-                },
-                "required": ["alias"]
-            }
-        },
-        {
-            "name": "list_aliases",
-            "description": "List all aliases in a profile",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "profile": {
-                        "type": "string",
-                        "description": "Profile to list"
-                    }
-                }
-            }
-        },
-        {
-            "name": "assess_model",
-            "description": "Assess a model's capabilities, costs, and recommended use cases",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "model_ref": {
-                        "type": "string",
-                        "description": "Model reference to assess (provider:model)"
-                    }
-                },
-                "required": ["model_ref"]
-            }
-        },
-        {
-            "name": "recommend_alias",
-            "description": "Get alias recommendations for a specific use case",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "use_case": {
-                        "type": "string",
-                        "description": "Description of what you want to do"
-                    }
-                },
-                "required": ["use_case"]
-            }
-        },
-        {
-            "name": "analyze_costs",
-            "description": "Analyze potential costs for current configuration",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "profile": {
-                        "type": "string",
-                        "description": "Profile to analyze"
-                    }
-                }
-            }
-        },
-        {
-            "name": "save_lockfile",
-            "description": "Save the current lockfile state",
-            "inputSchema": {
-                "type": "object",
-                "properties": {}
-            }
-        },
-        {
-            "name": "switch_profile",
-            "description": "Switch to a different profile",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "profile": {
-                        "type": "string",
-                        "description": "Profile name to switch to"
-                    }
-                },
-                "required": ["profile"]
-            }
+                    total_cost += alias_cost
+            except Exception as e:
+                logger.warning(f"Could not calculate cost for {binding.alias}: {e}")
+
+        recommendations = []
+        if total_cost > 100:
+            recommendations.append("Consider using more cost-effective models for high-volume aliases")
+        if total_cost < 10:
+            recommendations.append("You have room to use more capable models if needed")
+
+        return {
+            "profile": profile,
+            "monthly_volume": monthly_volume,
+            "cost_breakdown": cost_breakdown,
+            "total_monthly_cost": round(total_cost, 2),
+            "recommendations": recommendations
         }
-    ]
+
+    async def get_current_configuration(self) -> Dict[str, Any]:
+        """
+        Get the complete current lockfile configuration.
+
+        Returns:
+            Current lockfile configuration
+        """
+        profiles = {}
+        for profile_name in self.lockfile.profiles:
+            profile = self.lockfile.get_profile(profile_name)
+            profiles[profile_name] = {
+                "bindings": [
+                    {
+                        "alias": b.alias,
+                        "provider": b.provider,
+                        "model": b.model,
+                        "model_ref": b.model_ref
+                    }
+                    for b in profile.bindings
+                ]
+            }
+
+        return {
+            "version": self.lockfile.version,
+            "default_profile": self.lockfile.default_profile,
+            "profiles": profiles,
+            "metadata": self.lockfile.metadata or {},
+            "lockfile_path": str(self.lockfile_path)
+        }
