@@ -7,6 +7,7 @@ natural conversation, allowing users to interactively configure their
 LLM aliases and bindings.
 """
 
+import argparse
 import asyncio
 import logging
 import os
@@ -227,29 +228,44 @@ class LockfileServer:
             return loop.run_until_complete(async_func(**kwargs))
         return wrapper
         
-    async def run(self):
-        """Run the MCP server."""
-        # Create STDIO transport
-        transport = StdioTransport()
-        
+    async def run(self, transport=None):
+        """Run the MCP server.
+
+        Args:
+            transport: Optional transport to use (defaults to STDIO)
+        """
+        if transport is None:
+            transport = StdioTransport()
+
         # Run the server
-        logger.info("Starting LLMRing Lockfile MCP Server...")
+        logger.info(f"Starting LLMRing Lockfile MCP Server with {transport.__class__.__name__}...")
         await self.server.run(transport)
 
 
 async def main():
     """Main entry point for the lockfile MCP server."""
-    # Get paths from environment or use defaults
-    lockfile_path = os.getenv("LLMRING_LOCKFILE_PATH")
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="LLMRing Lockfile MCP Server")
+    parser.add_argument("--port", type=int, help="Port for HTTP server")
+    parser.add_argument("--host", default="localhost", help="Host for HTTP server")
+    parser.add_argument("--lockfile", help="Path to lockfile")
+    args = parser.parse_args()
+
+    # Get paths from environment or args
+    lockfile_path = args.lockfile or os.getenv("LLMRING_LOCKFILE_PATH")
     if lockfile_path:
         lockfile_path = Path(lockfile_path)
 
-    # Create and run server
+    # Create server
     server = LockfileServer(
         lockfile_path=lockfile_path
     )
-    
-    await server.run()
+
+    # Use STDIO transport for now
+    transport = StdioTransport()
+    logger.info("Starting STDIO server")
+
+    await server.run(transport)
 
 
 if __name__ == "__main__":

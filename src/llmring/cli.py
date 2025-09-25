@@ -497,28 +497,13 @@ async def cmd_lock_chat(args):
     print("🤖 LLMRing Conversational Lockfile Manager")
     print("=" * 50)
 
-    # If no server URL provided, start embedded lockfile MCP server
+    # If no server URL provided, we'll use embedded server
     if not args.server_url:
-        print("Starting embedded lockfile MCP server...")
-
-        # Create a temporary file for server communication
-        with tempfile.NamedTemporaryFile(suffix=".sock", delete=False) as tmp:
-            socket_path = tmp.name
-
-        # Start the lockfile MCP server as a subprocess
-        server_process = subprocess.Popen(
-            ["python", "-m", "llmring.mcp.server.lockfile_server"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env={**os.environ, "MCP_SOCKET_PATH": socket_path}
-        )
-
-        # Wait a moment for server to start
-        await asyncio.sleep(1)
-
-        # Use stdio transport URL format
-        server_url = f"stdio://{socket_path}"
-        print(f"✅ Started lockfile MCP server")
+        # The stdio transport will be handled by the chat app directly
+        # We pass the command to run, not a URL
+        server_url = "stdio://python -m llmring.mcp.server.lockfile_server"
+        server_process = None  # stdio client will manage the process
+        print("Will use embedded lockfile MCP server via stdio")
     else:
         server_url = args.server_url
         server_process = None

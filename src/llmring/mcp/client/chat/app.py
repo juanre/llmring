@@ -178,7 +178,24 @@ class MCPChatApp:
             True if successful, False otherwise
         """
         try:
-            self.mcp_client = MCPClient(base_url=server_url)
+            # Parse server URL to determine transport type
+            if server_url.startswith("http"):
+                self.mcp_client = MCPClient.http(server_url)
+            elif server_url.startswith("ws://") or server_url.startswith("wss://"):
+                self.mcp_client = MCPClient.websocket(server_url)
+            elif server_url.startswith("stdio://"):
+                # Extract command from URL
+                # Format: stdio://command args or stdio://path/to/command
+                command_str = server_url.replace("stdio://", "")
+                # Handle Python module invocation
+                if command_str.startswith("python -m"):
+                    command = command_str.split()
+                else:
+                    command = command_str.split()
+                self.mcp_client = MCPClient.stdio(command=command)
+            else:
+                # Default to HTTP
+                self.mcp_client = MCPClient.http(server_url)
 
             # Initialize and get server info
             self.mcp_client.initialize()
@@ -224,8 +241,10 @@ class MCPChatApp:
                     {
                         "provider": provider,
                         "model": model_name,
+                        "model_key": f"{provider}:{model_name}",
                         "display_name": f"{provider}:{model_name}",
                         "full_name": f"{provider}:{model_name}",
+                        "context_length": "N/A"  # We don't have this info readily available
                     }
                 )
 
@@ -312,25 +331,8 @@ class MCPChatApp:
             # In integrated mode, use provided db_manager; do not create a shared_pool here
             self.shared_pool = None  # Will be managed externally
 
-        # Create schema-isolated manager for llmring
-        if self.shared_pool:
-            # We created our own pool
-            if AsyncDatabaseManager:
-                llm_db_manager = AsyncDatabaseManager(pool=self.shared_pool, schema="llmring")
-            else:
-                llm_db_manager = None
-        elif self._external_db and self.db_manager is not None:
-            # We're using an external db_manager - need to share its pool
-            # This assumes the external db_manager was created with a pool
-            # The parent application should have created it properly
-            llm_db_manager = self.db_manager  # Use what was provided
-        else:
-            # Fallback - shouldn't happen
-            raise RuntimeError("Unable to create database manager for LLMRing")
-
-        self.llmring = LLMRing(
-            db_manager=llm_db_manager, origin="mcp-client-chat", enable_db_logging=True
-        )
+        # Create LLMRing instance without database features for now
+        self.llmring = LLMRing(origin="mcp-client-chat")
 
     async def cleanup(self) -> None:
         """Clean up resources."""
