@@ -222,10 +222,25 @@ class LockfileServer:
         
     def _wrap_async(self, async_func):
         """Wrap async function for synchronous call from MCP server."""
+        import concurrent.futures
+        import threading
+
         def wrapper(**kwargs):
-            # Run the async function in the event loop
-            loop = asyncio.get_event_loop()
-            return loop.run_until_complete(async_func(**kwargs))
+            # Check if we're in an async context
+            try:
+                # Try to get the running loop
+                loop = asyncio.get_running_loop()
+
+                # We're in an async context, but need to run synchronously
+                # Use a thread to avoid blocking
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(asyncio.run, async_func(**kwargs))
+                    return future.result(timeout=30)
+
+            except RuntimeError:
+                # No loop running, we can run normally
+                return asyncio.run(async_func(**kwargs))
+
         return wrapper
         
     async def run(self, transport=None):

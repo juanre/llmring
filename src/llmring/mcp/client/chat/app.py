@@ -6,7 +6,7 @@ import asyncio
 import json
 import os
 import uuid
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from prompt_toolkit import PromptSession
@@ -223,6 +223,26 @@ class MCPChatApp:
             self.console.print(f"[error]Failed to fetch tools:[/error] {e!s}")
             self.available_tools = {}
 
+    def _convert_tools_for_llm(self) -> list[dict[str, Any]]:
+        """Convert MCP tools to format expected by LLMs."""
+        if not self.available_tools:
+            return []
+
+        llm_tools = []
+        for tool in self.available_tools.values():
+            # Convert MCP tool format to OpenAI-style function format
+            llm_tool = {
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool.get("description", ""),
+                    "parameters": tool.get("input_schema", {"type": "object", "properties": {}})
+                }
+            }
+            llm_tools.append(llm_tool)
+
+        return llm_tools
+
     def get_available_models(self) -> list[dict[str, Any]]:
         """
         Get list of available models.
@@ -365,16 +385,21 @@ class MCPChatApp:
                     # Add user message to conversation
                     self.conversation.append(Message(role="user", content=user_input))
 
-                    # Format system message with available tools
+                    # Format system message
                     system_message = self.create_system_message()
 
-                    # Create LLM request
+                    # Convert tools for LLM
+                    tools = self._convert_tools_for_llm()
+
+                    # Create LLM request with native tool support
                     request = LLMRequest(
                         messages=[
                             Message(role="system", content=system_message),
                             *self.conversation,
                         ],
                         model=self.model,
+                        tools=tools if tools else None,
+                        tool_choice="auto" if tools else None,
                     )
 
                     # Get response from LLM
@@ -405,118 +430,171 @@ class MCPChatApp:
         if not self.available_tools:
             return "You are a helpful assistant. Respond directly to the user's questions."
 
-        # Prepare tool descriptions
-        tool_descriptions = []
-        for tool in self.available_tools.values():
-            tool_descriptions.append(
-                {
-                    "name": tool["name"],
-                    "description": tool.get("description", ""),
-                    "parameters": tool.get("input_schema", {}),
-                }
-            )
+        # Create simple system message - tools will be passed separately
+        return """You are a helpful assistant that can use tools to help answer questions about lockfile management.
 
-        # Format tool list as text
-        tools_text = "\n".join(
-            [f"- {tool['name']}: {tool['description']}" for tool in tool_descriptions]
-        )
+When the user asks about aliases, models, or configurations, use the appropriate tools to provide accurate information."""
 
-        # Create system message
-        return f"""You are a helpful assistant with access to the following tools:
+    def _parse_json_tool_calls(self, content: str) -> Optional[List[Dict[str, Any]]]:
+        """
+        Try to parse tool calls from JSON text response.
 
-{tools_text}
+        Args:
+            content: Response content that may contain JSON
 
-When you need to use a tool, respond in this format:
-```json
-{{
-  "tool_calls": [
-    {{
-      "tool": "tool_name",
-      "arguments": {{
-        "param1": "value1",
-        "param2": "value2"
-      }}
-    }}
-  ],
-  "content": "Optional message to the user"
-}}
-```
+        Returns:
+            List of tool calls if found, None otherwise
+        """
+        if not content:
+            return None
 
-Otherwise, respond directly to help the user.
-"""
+        try:
+            # Try to extract JSON from the content
+            json_content = content.strip()
 
-    async def process_response(self, response: LLMResponse) -> None:
+            # Handle markdown code blocks
+            if "```json" in content:
+                start = content.find("```json") + 7
+                end = content.find("```", start)
+                if end > start:
+                    json_content = content[start:end].strip()
+            elif "```" in content and "{" in content:
+                start = content.find("```") + 3
+                newline = content.find("\n", start)
+                if newline != -1:
+                    start = newline + 1
+                end = content.find("```", start)
+                if end > start:
+                    json_content = content[start:end].strip()
+
+            # Parse JSON
+            data = json.loads(json_content)
+
+            # Check if it has tool_calls
+            if isinstance(data, dict) and "tool_calls" in data:
+                tool_calls = data["tool_calls"]
+
+                # Convert to native format
+                native_calls = []
+                for call in tool_calls:
+                    native_call = {
+                        "id": call.get("id", f"call_{len(native_calls)}"),
+                        "type": "function",
+                        "function": {
+                            "name": call.get("tool", call.get("name", "")),
+                            "arguments": json.dumps(call.get("arguments", {}))
+                        }
+                    }
+                    native_calls.append(native_call)
+
+                return native_calls
+
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+
+        return None
+
+    async def process_response(self, response: LLMResponse, depth: int = 0) -> None:
         """
         Process and display LLM response, handling potential tool calls.
 
         Args:
             response: LLM response to process
+            depth: Recursion depth for tool calling loop
         """
-        content = response.content
-
-        # Check if response is JSON containing tool calls
-        try:
-            # Try to parse as JSON
-            response_json = json.loads(content)
-
-            # Check for tool calls
-            if "tool_calls" in response_json:
-                await self.process_tool_calls(response_json)
-                return
-
-            # If JSON but not tool calls, just display it formatted
-            self.console.print("[assistant]Assistant:[/assistant]")
-            self.console.print(JSON(response_json, indent=2))
-
-            # Add to conversation
-            self.conversation.append(Message(role="assistant", content=content))
+        # Check for native tool calls in the response
+        if response.tool_calls:
+            await self.process_tool_calls(response, depth)
             return
 
-        except json.JSONDecodeError:
-            # Not JSON, treat as normal markdown response
-            pass
+        # Try to parse JSON tool calls from content (fallback)
+        if response.content:
+            tool_calls = self._parse_json_tool_calls(response.content)
+            if tool_calls:
+                # Create a new response with parsed tool calls
+                response.tool_calls = tool_calls
+                # Try to extract content message if present
+                try:
+                    json_data = json.loads(response.content.strip())
+                    if isinstance(json_data, dict) and "content" in json_data:
+                        response.content = json_data["content"]
+                    else:
+                        response.content = ""
+                except (json.JSONDecodeError, KeyError):
+                    response.content = ""
+                await self.process_tool_calls(response, depth)
+                return
 
         # Display regular response
-        self.console.print("[assistant]Assistant:[/assistant]")
-        self.console.print(Markdown(content))
-
-        # Add to conversation
-        self.conversation.append(Message(role="assistant", content=content))
-
-    async def process_tool_calls(self, response_json: dict[str, Any]) -> None:
-        """
-        Process tool calls from LLM response.
-
-        Args:
-            response_json: JSON response containing tool calls
-        """
-        tool_calls = response_json.get("tool_calls", [])
-        content = response_json.get("content", "")
-
-        # Display content if any
+        content = response.content
         if content:
             self.console.print("[assistant]Assistant:[/assistant]")
             self.console.print(Markdown(content))
+
+            # Add to conversation
+            self.conversation.append(Message(role="assistant", content=content))
+
+    async def process_tool_calls(self, response: LLMResponse, depth: int = 0) -> None:
+        """
+        Process tool calls from LLM response with recursive loop support.
+
+        Args:
+            response: LLM response containing tool calls
+            depth: Current recursion depth (to prevent infinite loops)
+        """
+        # Prevent infinite recursion
+        if depth > 5:
+            self.console.print("[warning]Maximum tool calling depth reached[/warning]")
+            return
+        # Display content if any
+        if response.content:
+            self.console.print("[assistant]Assistant:[/assistant]")
+            self.console.print(Markdown(response.content))
 
         # No MCP client means no tool calls
         if not self.mcp_client:
             self.console.print("[error]Cannot execute tools: No MCP server connected[/error]")
             # Add to conversation
-            self.conversation.append(Message(role="assistant", content=json.dumps(response_json)))
+            self.conversation.append(Message(
+                role="assistant",
+                content=response.content,
+                tool_calls=response.tool_calls
+            ))
             return
 
-        # Add assistant message to conversation
-        self.conversation.append(Message(role="assistant", content=json.dumps(response_json)))
+        # Add assistant message with tool calls to conversation
+        self.conversation.append(Message(
+            role="assistant",
+            content=response.content or "",
+            tool_calls=response.tool_calls
+        ))
 
         # Process each tool call
         tool_results = []
-        for call in tool_calls:
-            tool_name = call["tool"]
-            arguments = call["arguments"]
+        for call in response.tool_calls:
+            # Extract tool name and arguments from the tool call
+            # Tool calls from LLMs typically have structure like:
+            # {"id": "...", "type": "function", "function": {"name": "...", "arguments": "..."}}
+            if "function" in call:
+                tool_name = call["function"]["name"]
+                # Arguments might be a JSON string that needs parsing
+                args_str = call["function"].get("arguments", "{}")
+                if isinstance(args_str, str):
+                    try:
+                        arguments = json.loads(args_str)
+                    except json.JSONDecodeError:
+                        arguments = {}
+                else:
+                    arguments = args_str
+            else:
+                # Fallback for simpler format
+                tool_name = call.get("name", call.get("tool", ""))
+                arguments = call.get("arguments", {})
 
             # Display tool call information
             self.console.print(f"[tool]Calling tool:[/tool] {tool_name}")
-            self.console.print(JSON(arguments, indent=2))
+            if arguments:
+                self.console.print(JSON(json.dumps(arguments), indent=2))
 
             try:
                 # Execute the tool
@@ -528,51 +606,69 @@ Otherwise, respond directly to help the user.
 
                 # Format result based on type
                 if isinstance(result, dict | list):
-                    self.console.print(JSON(result, indent=2))
+                    self.console.print(JSON(json.dumps(result), indent=2))
                 elif isinstance(result, str) and (result.startswith("{") or result.startswith("[")):
                     try:
-                        # Try to parse as JSON
-                        json_result = json.loads(result)
-                        self.console.print(JSON(json_result, indent=2))
-                    except json.JSONDecodeError:
+                        # Already JSON string, display as-is
+                        self.console.print(JSON(result, indent=2))
+                    except Exception:
                         # Not valid JSON, print as text
                         self.console.print(result)
                 else:
                     # Regular text
                     self.console.print(result)
 
-                # Add to results
-                tool_results.append({"tool": tool_name, "result": result, "success": True})
+                # Add to results with tool_call_id if present
+                tool_result = {
+                    "tool_call_id": call.get("id"),
+                    "tool": tool_name,
+                    "result": result,
+                    "success": True
+                }
+                tool_results.append(tool_result)
 
             except Exception as e:
                 # Handle error
                 self.console.print(f"[error]Tool error:[/error] {e!s}")
-                tool_results.append({"tool": tool_name, "error": str(e), "success": False})
+                tool_result = {
+                    "tool_call_id": call.get("id"),
+                    "tool": tool_name,
+                    "error": str(e),
+                    "success": False
+                }
+                tool_results.append(tool_result)
 
-        # Add tool results to conversation
-        self.conversation.append(
-            Message(role="user", content=json.dumps({"tool_results": tool_results}))
-        )
+        # Add tool results to conversation as tool messages
+        for result in tool_results:
+            # Create tool result message
+            content = json.dumps(result.get("result", result.get("error", "")))
+            self.conversation.append(
+                Message(
+                    role="tool",
+                    content=content,
+                    tool_call_id=result.get("tool_call_id")
+                )
+            )
 
-        # Get follow-up response from LLM
+        # Get follow-up response from LLM with tools still available
         system_message = self.create_system_message()
+        tools = self._convert_tools_for_llm()
+
         request = LLMRequest(
             messages=[
                 Message(role="system", content=system_message),
                 *self.conversation,
             ],
             model=self.model,
+            tools=tools if tools else None,
+            tool_choice="auto" if tools else None,
         )
 
-        with self.console.status("[info]Getting final response...[/info]"):
+        with self.console.status("[info]Getting follow-up response...[/info]"):
             follow_up_response = await self.llmring.chat(request)
 
-        # Display final response
-        self.console.print("[assistant]Assistant:[/assistant]")
-        self.console.print(Markdown(follow_up_response.content))
-
-        # Add final response to conversation
-        self.conversation.append(Message(role="assistant", content=follow_up_response.content))
+        # Process the follow-up response (which might contain more tool calls)
+        await self.process_response(follow_up_response, depth + 1)
 
     async def handle_command(self, command: str) -> None:
         """
