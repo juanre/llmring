@@ -221,11 +221,14 @@ class LockfileServer:
         logger.info(f"Registered {len(self.server.function_registry.functions)} lockfile management tools")
         
     def _wrap_async(self, async_func):
-        """Wrap async function for synchronous call from MCP server."""
+        """Wrap async function for synchronous call from MCP server with enhanced error handling."""
         import concurrent.futures
         import threading
 
         def wrapper(**kwargs):
+            # Extract timeout if provided in kwargs (with _ prefix to avoid conflicts)
+            timeout = kwargs.pop('_timeout', 30)
+
             # Check if we're in an async context
             try:
                 # Try to get the running loop
@@ -235,11 +238,23 @@ class LockfileServer:
                 # Use a thread to avoid blocking
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(asyncio.run, async_func(**kwargs))
-                    return future.result(timeout=30)
+                    try:
+                        return future.result(timeout=timeout)
+                    except concurrent.futures.TimeoutError:
+                        future.cancel()
+                        logger.error(f"Tool {async_func.__name__} timed out after {timeout}s")
+                        raise TimeoutError(f"Tool execution timed out after {timeout}s")
+                    except Exception as e:
+                        logger.error(f"Tool {async_func.__name__} execution error: {e}", exc_info=True)
+                        raise
 
             except RuntimeError:
                 # No loop running, we can run normally
-                return asyncio.run(async_func(**kwargs))
+                try:
+                    return asyncio.run(async_func(**kwargs))
+                except Exception as e:
+                    logger.error(f"Tool {async_func.__name__} execution error (new loop): {e}", exc_info=True)
+                    raise
 
         return wrapper
         

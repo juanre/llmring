@@ -21,24 +21,13 @@ from rich.table import Table
 
 from llmring.mcp.client import MCPClient
 from llmring.mcp.client.chat.styles import PROMPT_STYLE, RICH_THEME
+from llmring.mcp.client.llmring_integration import MCPLLMRingIntegration
 from llmring.mcp.client.pool_config import CHAT_APP_POOL
 from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
 
 # Load environment variables from .env file
 load_dotenv()
-
-# Database imports - optional, only if database support is needed
-try:
-    from pgdbm import AsyncDatabaseManager, DatabaseConfig, MonitoredAsyncDatabaseManager
-
-    HAS_DATABASE = True
-except ImportError:
-    # Database support is optional
-    AsyncDatabaseManager = None
-    DatabaseConfig = None
-    MonitoredAsyncDatabaseManager = None
-    HAS_DATABASE = False
 
 
 class CommandCompleter(Completer):
@@ -105,9 +94,8 @@ class MCPChatApp:
         self,
         mcp_server_url: str | None = None,
         llm_model: str = "balanced",
-        db_connection_string: str | None = None,
         session_id: str | None = None,
-        db_manager: Any | None = None,  # AsyncDatabaseManager if database is available
+        enable_telemetry: bool = None,
     ):
         """
         Initialize the chat application.
@@ -115,22 +103,33 @@ class MCPChatApp:
         Args:
             mcp_server_url: URL of the MCP server
             llm_model: LLM model to use
-            db_connection_string: Database connection string (for standalone mode)
             session_id: Optional session ID to load
-            db_manager: External database manager (for integrated mode)
+            enable_telemetry: Enable llmring-server telemetry (auto-detects if None)
         """
         # Rich console for output
         self.console = Console(theme=RICH_THEME)
 
-        # Store database configuration
-        self.db_connection_string = db_connection_string
-        self.db_manager = db_manager
-        self._external_db = db_manager is not None
-        self.shared_pool = None  # Will be set in initialize_async if standalone
-
         # LLMRing will be initialized in async context
         self.llmring = None
         self.model = llm_model
+
+        # Telemetry integration (optional)
+        self.integration = None
+        if enable_telemetry is None:
+            # Auto-detect based on environment
+            enable_telemetry = bool(os.getenv("LLMRING_SERVER_URL"))
+
+        if enable_telemetry:
+            try:
+                self.integration = MCPLLMRingIntegration(
+                    origin="mcp-chat",
+                    llmring_server_url=os.getenv("LLMRING_SERVER_URL"),
+                    api_key=os.getenv("LLMRING_API_KEY")
+                )
+                self.console.print(f"[info]Telemetry enabled: {os.getenv('LLMRING_SERVER_URL', 'default')}[/info]")
+            except Exception as e:
+                self.console.print(f"[warning]Telemetry disabled: {e}[/warning]")
+                self.integration = None
 
         # MCP client
         self.mcp_client = None
@@ -316,48 +315,14 @@ class MCPChatApp:
         self.console.print("\nType [command]/help[/command] for available commands")
 
     async def initialize_async(self) -> None:
-        """Initialize async resources like database pool and LLMRing."""
-        if not self._external_db:
-            # Create our own shared pool in standalone mode
-            connection_string = self.db_connection_string or os.getenv(
-                "DATABASE_URL", "postgresql://postgres:postgres@localhost/postgres"
-            )
-
-            if not HAS_DATABASE:
-                raise ImportError(
-                    "Database support not available. Install pgdbm to use database features."
-                )
-
-            config = DatabaseConfig(
-                connection_string=connection_string,
-                min_connections=CHAT_APP_POOL.min_connections,
-                max_connections=CHAT_APP_POOL.max_connections,
-            )
-
-            # Create a shared pool
-            if AsyncDatabaseManager:
-                self.shared_pool = await AsyncDatabaseManager.create_shared_pool(config)
-            else:
-                raise ImportError("Database support not available")
-
-            # Create schema-isolated manager for mcp_client and run migrations
-            if AsyncDatabaseManager:
-                self.db_manager = AsyncDatabaseManager(pool=self.shared_pool, schema="mcp_client")
-            else:
-                raise ImportError("Database support not available")
-            # MCPClientDB functionality removed - database operations now optional
-            # Database migrations would go here if MCPClientDB was available
-        else:
-            # In integrated mode, use provided db_manager; do not create a shared_pool here
-            self.shared_pool = None  # Will be managed externally
-
-        # Create LLMRing instance without database features for now
+        """Initialize async resources."""
+        # Create LLMRing instance
         self.llmring = LLMRing(origin="mcp-client-chat")
 
     async def cleanup(self) -> None:
         """Clean up resources."""
-        if not self._external_db and self.shared_pool:
-            await self.shared_pool.close()
+        # No database resources to clean up
+        pass
 
     async def run(self) -> None:
         """Run the chat application."""
@@ -534,6 +499,29 @@ When the user asks about aliases, models, or configurations, use the appropriate
             # Add to conversation
             self.conversation.append(Message(role="assistant", content=content))
 
+    async def reconnect(self) -> bool:
+        """Attempt to reconnect to MCP server."""
+        if not self.mcp_server_url:
+            return False
+
+        self.console.print("[info]Attempting to reconnect to MCP server...[/info]")
+
+        for attempt in range(3):
+            try:
+                success = self.connect_to_server(self.mcp_server_url)
+                if success:
+                    self.console.print("[success]Reconnected successfully[/success]")
+                    return True
+            except Exception as e:
+                if attempt < 2:
+                    wait_time = 2 ** attempt  # Exponential backoff: 1, 2, 4 seconds
+                    self.console.print(f"[warning]Reconnection attempt {attempt + 1} failed, waiting {wait_time}s...[/warning]")
+                    await asyncio.sleep(wait_time)
+                else:
+                    self.console.print(f"[error]Failed to reconnect after 3 attempts: {e}[/error]")
+
+        return False
+
     async def process_tool_calls(self, response: LLMResponse, depth: int = 0) -> None:
         """
         Process tool calls from LLM response with recursive loop support.
@@ -628,7 +616,37 @@ When the user asks about aliases, models, or configurations, use the appropriate
                 tool_results.append(tool_result)
 
             except Exception as e:
-                # Handle error
+                # Check if it's a connection error
+                error_str = str(e).lower()
+                if any(conn_err in error_str for conn_err in ["connection", "transport", "disconnected", "timeout"]):
+                    # Try to reconnect once
+                    self.console.print(f"[warning]Connection error detected, attempting reconnection...[/warning]")
+                    if await self.reconnect():
+                        # Retry the tool call
+                        try:
+                            with self.console.status(f"[info]Retrying {tool_name}...[/info]"):
+                                result = self.mcp_client.call_tool(tool_name, arguments)
+
+                            self.console.print("[success]Tool result (after reconnection):[/success]")
+
+                            # Display result
+                            if isinstance(result, dict | list):
+                                self.console.print(JSON(json.dumps(result), indent=2))
+                            else:
+                                self.console.print(result)
+
+                            tool_result = {
+                                "tool_call_id": call.get("id"),
+                                "tool": tool_name,
+                                "result": result,
+                                "success": True
+                            }
+                            tool_results.append(tool_result)
+                            continue  # Skip to next tool
+                        except Exception as retry_e:
+                            e = retry_e  # Use the retry error
+
+                # Handle error (connection or otherwise)
                 self.console.print(f"[error]Tool error:[/error] {e!s}")
                 tool_result = {
                     "tool_call_id": call.get("id"),
@@ -835,45 +853,6 @@ When the user asks about aliases, models, or configurations, use the appropriate
         raise KeyboardInterrupt()
 
 
-async def run_with_shared_pool(args):
-    """Run the chat app with shared database pool."""
-    from mcp_client.models.db import MCPClientDB
-    from mcp_client.shared_pool import shared_pool_context
-
-    async with shared_pool_context(
-        connection_string=args.db,
-        min_connections=CHAT_APP_POOL.min_connections,
-        max_connections=CHAT_APP_POOL.max_connections,
-        enable_monitoring=True,
-    ) as pool:
-        # Create schema-specific managers
-        if AsyncDatabaseManager:
-            mcp_db_manager = AsyncDatabaseManager(pool=pool, schema="mcp_client")
-            llm_db_manager = AsyncDatabaseManager(pool=pool, schema="llmring")
-        else:
-            mcp_db_manager = None
-            llm_db_manager = None
-
-        # Create MCP client database with schema-specific manager
-        mcp_db = MCPClientDB.from_manager(mcp_db_manager)
-        await mcp_db.initialize()
-
-        # Create LLM service with schema-specific manager
-        llmring = LLMRing(db_manager=llm_db_manager, origin="mcp-client", enable_db_logging=True)
-
-        # Create and configure chat app
-        app = MCPChatApp(
-            mcp_server_url=args.server,
-            llm_model=args.model,
-            db_connection_string=args.db,
-        )
-
-        # Replace the LLM service with our shared pool version
-        app.llmring = llmring
-
-        # Run the app
-        await app.run()
-
 
 def main():
     """Entry point for the chat application."""
@@ -886,52 +865,20 @@ def main():
         default="balanced",
         help="LLM model alias (fast, balanced, deep) or provider:model format",
     )
-    parser.add_argument("--db", help="Database connection string")
-    parser.add_argument(
-        "--reset-db",
-        action="store_true",
-        help="Reset the database and recreate with default models",
-    )
-    parser.add_argument(
-        "--use-shared-pool",
-        action="store_true",
-        help="Use shared database connection pool",
-    )
 
     args = parser.parse_args()
 
-    # Handle database reset if requested
-    if args.reset_db:
-        from mcp_client.models.db import MCPClientDB
+    # Create and run the chat app
+    app = MCPChatApp(
+        mcp_server_url=args.server,
+        llm_model=args.model,
+    )
 
-        print("Resetting database...")
-        db = MCPClientDB(connection_string=args.db)
-        asyncio.run(db.initialize())
-        asyncio.run(db.reset_database())
-        asyncio.run(db.close())
-        print("Database reset complete with default models.")
-        return
-
-    # Use shared pool if requested or by default
-    if args.use_shared_pool or os.getenv("MCP_USE_SHARED_POOL", "true").lower() == "true":
-        # Run with shared pool
-        try:
-            asyncio.run(run_with_shared_pool(args))
-        except KeyboardInterrupt:
-            print("\nExiting...")
-    else:
-        # Legacy mode - each service creates its own pool
-        app = MCPChatApp(
-            mcp_server_url=args.server,
-            llm_model=args.model,
-            db_connection_string=args.db,
-        )
-
-        # Run the chat app
-        try:
-            asyncio.run(app.run())
-        except KeyboardInterrupt:
-            print("\nExiting...")
+    # Run the chat app
+    try:
+        asyncio.run(app.run())
+    except KeyboardInterrupt:
+        print("\nExiting...")
 
 
 if __name__ == "__main__":
