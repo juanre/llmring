@@ -9,7 +9,12 @@ This allows running the server with:
 import asyncio
 import sys
 
+from dotenv import load_dotenv
+
 from llmring.mcp.server.lockfile_server.server import main
+
+# Load environment variables from .env file
+load_dotenv()
 
 if __name__ == "__main__":
     try:

@@ -103,10 +103,13 @@ async def test_server_initialization():
             "remove_alias",
             "list_aliases",
             "assess_model",
-            "recommend_alias",
             "analyze_costs",
             "save_lockfile",
-            "get_configuration"
+            "get_configuration",
+            "get_available_providers",
+            "list_models",
+            "filter_models_by_requirements",
+            "get_model_details"
         ]
 
         for tool_name in expected_tools:
@@ -124,10 +127,10 @@ async def test_server_tool_execution():
         # Get the wrapped function for add_alias
         add_alias_func = server.server.function_registry.functions["add_alias"]
 
-        # Execute directly
+        # Execute directly - need to provide a model now
         result = add_alias_func(
             alias="test_alias",
-            use_case="testing purposes"
+            model="openai:gpt-4o-mini"
         )
 
         assert result["success"] is True
@@ -354,51 +357,6 @@ async def test_server_cost_analysis_integration():
             for item in result["cost_breakdown"]:
                 assert "alias" in item or isinstance(item, str)
 
-
-@pytest.mark.asyncio
-async def test_server_recommendation_logic():
-    """Test server recommendation logic."""
-    # Use test lockfile for consistent testing
-    import os
-    test_lockfile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json")
-    server = LockfileServer(lockfile_path=Path(test_lockfile_path))
-
-    recommend_func = server.server.function_registry.functions["recommend_alias"]
-
-    # Test various recommendation scenarios
-    # Note: recommend_alias only takes 'use_case' parameter
-    scenarios = [
-        {
-            "use_case": "quick chatbot with low cost",
-            "expected_in_model": ["mini", "haiku", "nano"]
-        },
-        {
-            "use_case": "code generation for development",
-            "expected_in_alias": ["coder", "developer"]
-        },
-        {
-            "use_case": "vision and image analysis tasks",
-            "expected_in_reason": ["vision", "image", "visual"]
-        }
-    ]
-
-    for scenario in scenarios:
-        result = recommend_func(use_case=scenario["use_case"])
-
-        assert "recommendations" in result
-        assert len(result["recommendations"]) > 0
-
-        # Check expectations if provided
-        if "expected_in_model" in scenario:
-            found = False
-            for rec in result["recommendations"]:
-                for term in scenario["expected_in_model"]:
-                    if term in rec["model"].lower():
-                        found = True
-                        break
-            # Soft assertion - recommendations might vary
-            # Don't fail test as recommendations depend on registry data
-            pass  # Just ensure no errors
 
 
 @pytest.mark.asyncio

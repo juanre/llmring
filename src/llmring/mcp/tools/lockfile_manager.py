@@ -7,11 +7,17 @@ including adding/removing aliases, assessing models, and generating configuratio
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
+
 from llmring.lockfile_core import AliasBinding, Lockfile, ProfileConfig
 from llmring.registry import RegistryClient
+
+# Load environment variables from .env file
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +43,283 @@ class LockfileManagerTools:
         else:
             self.lockfile = Lockfile()
 
+    async def get_available_providers(self) -> Dict[str, Any]:
+        """
+        Check which providers have API keys configured.
+
+        Returns:
+            Dictionary with configured and unconfigured providers
+        """
+        provider_configs = {
+            "openai": {
+                "env_var": "OPENAI_API_KEY",
+                "has_key": bool(os.environ.get("OPENAI_API_KEY"))
+            },
+            "anthropic": {
+                "env_var": "ANTHROPIC_API_KEY",
+                "has_key": bool(os.environ.get("ANTHROPIC_API_KEY"))
+            },
+            "google": {
+                "env_vars": ["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+                "has_key": bool(os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"))
+            },
+            "ollama": {
+                "env_var": None,
+                "has_key": True  # Ollama doesn't require API key
+            }
+        }
+
+        configured = []
+        unconfigured = []
+
+        for provider, config in provider_configs.items():
+            if config["has_key"]:
+                configured.append(provider)
+            else:
+                unconfigured.append(provider)
+
+        return {
+            "configured": configured,
+            "unconfigured": unconfigured,
+            "details": provider_configs
+        }
+
+    async def list_models(
+        self,
+        providers: Optional[List[str]] = None,
+        include_inactive: bool = False
+    ) -> Dict[str, Any]:
+        """
+        List all available models with their specifications.
+
+        Args:
+            providers: Optional list of providers to filter by
+            include_inactive: Whether to include deprecated/inactive models
+
+        Returns:
+            Dict containing models list, count, and providers included
+        """
+        if providers is None:
+            # Get all configured providers
+            available = await self.get_available_providers()
+            providers = available["configured"]
+
+        all_models = []
+
+        for provider in providers:
+            try:
+                models = await self.registry.fetch_current_models(provider)
+
+                for model in models:
+                    # Skip inactive unless requested
+                    if not model.is_active and not include_inactive:
+                        continue
+
+                    model_info = {
+                        "model_ref": f"{provider}:{model.model_name}",
+                        "provider": provider,
+                        "model_name": model.model_name,
+                        "display_name": model.display_name,
+                        "description": model.description,
+                        "context_window": model.max_input_tokens,
+                        "max_output": model.max_output_tokens,
+                        "price_input": model.dollars_per_million_tokens_input,
+                        "price_output": model.dollars_per_million_tokens_output,
+                        "supports_vision": model.supports_vision,
+                        "supports_functions": model.supports_function_calling,
+                        "supports_json_mode": model.supports_json_mode,
+                        "supports_parallel_tools": model.supports_parallel_tool_calls,
+                        "is_active": model.is_active,
+                        "active": model.is_active,  # Alias for consistency
+                        "input_cost": model.dollars_per_million_tokens_input,  # Alias
+                        "output_cost": model.dollars_per_million_tokens_output,  # Alias
+                        "added_date": model.added_date.isoformat() if model.added_date else None,
+                        "deprecated_date": model.deprecated_date.isoformat() if model.deprecated_date else None,
+                        "capabilities": []  # Will be populated below
+                    }
+
+                    # Add capability indicators
+                    if model.supports_vision:
+                        model_info["capabilities"].append("vision")
+                    if model.supports_function_calling:
+                        model_info["capabilities"].append("function_calling")
+                    if model.supports_json_mode:
+                        model_info["capabilities"].append("json_output")
+                    all_models.append(model_info)
+
+            except Exception as e:
+                logger.warning(f"Failed to fetch models for {provider}: {e}")
+                continue
+
+        return {
+            "models": all_models,
+            "total_count": len(all_models),
+            "providers_included": providers
+        }
+
+    async def filter_models_by_requirements(
+        self,
+        min_context: Optional[int] = None,
+        max_price_input: Optional[float] = None,
+        max_price_output: Optional[float] = None,
+        requires_vision: Optional[bool] = None,
+        requires_functions: Optional[bool] = None,
+        requires_json_mode: Optional[bool] = None,
+        providers: Optional[List[str]] = None,
+        include_inactive: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Filter models based on specific requirements.
+
+        Args:
+            min_context: Minimum context window size
+            max_price_input: Maximum price per million input tokens
+            max_price_output: Maximum price per million output tokens
+            requires_vision: Must support vision
+            requires_functions: Must support function calling
+            requires_json_mode: Must support JSON mode
+            providers: Limit to specific providers
+            include_inactive: Include deprecated models
+
+        Returns:
+            Dict containing filtered models and applied filters
+        """
+        # Get all models
+        models_result = await self.list_models(providers, include_inactive)
+        all_models = models_result["models"]
+
+        # Apply filters
+        filtered = []
+        for model in all_models:
+            # Context window filter
+            if min_context and model["context_window"]:
+                if model["context_window"] < min_context:
+                    continue
+
+            # Price filters
+            if max_price_input and model["price_input"]:
+                if model["price_input"] > max_price_input:
+                    continue
+
+            if max_price_output and model["price_output"]:
+                if model["price_output"] > max_price_output:
+                    continue
+
+            # Capability filters
+            if requires_vision is not None and requires_vision:
+                if not model["supports_vision"]:
+                    continue
+
+            if requires_functions is not None and requires_functions:
+                if not model["supports_functions"]:
+                    continue
+
+            if requires_json_mode is not None and requires_json_mode:
+                if not model["supports_json_mode"]:
+                    continue
+
+            filtered.append(model)
+
+        applied_filters = []
+        if min_context:
+            applied_filters.append(f"min_context={min_context}")
+        if max_price_input:
+            applied_filters.append(f"max_input_cost=${max_price_input}")
+        if max_price_output:
+            applied_filters.append(f"max_output_cost=${max_price_output}")
+        if requires_vision:
+            applied_filters.append("vision_required")
+        if requires_functions:
+            applied_filters.append("functions_required")
+        if requires_json_mode:
+            applied_filters.append("json_mode_required")
+        if providers:
+            applied_filters.append(f"providers={','.join(providers)}")
+
+        return {
+            "models": filtered,
+            "count": len(filtered),
+            "applied_filters": applied_filters
+        }
+
+    async def get_model_details(
+        self,
+        models: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Get complete details for specific models.
+
+        Args:
+            models: List of model references (provider:model format)
+
+        Returns:
+            Dict containing detailed information for each model
+        """
+        detailed_models = []
+
+        for model_ref in models:
+            if ":" not in model_ref:
+                detailed_models.append({
+                    "error": f"Invalid model reference: {model_ref}",
+                    "model": model_ref
+                })
+                continue
+
+            provider, model_name = model_ref.split(":", 1)
+
+            try:
+                # Get all models for provider
+                provider_models = await self.registry.fetch_current_models(provider)
+
+                # Find the specific model
+                for model in provider_models:
+                    if model.model_name == model_name:
+                        detailed_models.append({
+                            "model_ref": model_ref,
+                            "provider": provider,
+                            "model_name": model.model_name,
+                            "display_name": model.display_name,
+                            "description": model.description,
+                            "full_details": {
+                                "display_name": model.display_name,
+                                "description": model.description,
+                                "context_window": model.max_input_tokens,
+                                "max_output": model.max_output_tokens,
+                                "dollars_per_million_tokens_input": model.dollars_per_million_tokens_input,
+                                "dollars_per_million_tokens_output": model.dollars_per_million_tokens_output,
+                                "supports_vision": model.supports_vision,
+                                "supports_function_calling": model.supports_function_calling,
+                                "supports_json_mode": model.supports_json_mode,
+                                "supports_parallel_tool_calls": model.supports_parallel_tool_calls,
+                                "active": model.is_active,
+                                "knowledge_cutoff": getattr(model, "knowledge_cutoff", None),
+                                "added_date": model.added_date.isoformat() if model.added_date else None,
+                                "deprecated_date": model.deprecated_date.isoformat() if model.deprecated_date else None
+                            }
+                        })
+                        break
+                else:
+                    detailed_models.append({
+                        "error": f"Model {model_ref} not found",
+                        "model": model_ref
+                    })
+
+            except Exception as e:
+                detailed_models.append({
+                    "error": f"Failed to fetch details: {str(e)}",
+                    "model": model_ref
+                })
+
+        return {
+            "models": detailed_models,
+            "requested": models,
+            "found": len([m for m in detailed_models if "error" not in m])
+        }
+
     async def add_alias(
         self,
         alias: str,
-        model: Optional[str] = None,
-        use_case: Optional[str] = None,
+        model: str,
         profile: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -49,18 +327,13 @@ class LockfileManagerTools:
 
         Args:
             alias: Name of the alias to add
-            model: Model reference (provider:model), or None to auto-select
-            use_case: Description of what the alias will be used for
+            model: Model reference (provider:model)
             profile: Profile to add to, defaults to current working profile
 
         Returns:
             Result with the alias configuration
         """
         profile = profile or self.working_profile
-
-        # If no model specified, recommend one based on use case
-        if not model:
-            model = await self._recommend_model_for_use_case(alias, use_case)
 
         # Add the binding
         self.lockfile.set_binding(alias, model, profile=profile)
@@ -135,15 +408,20 @@ class LockfileManagerTools:
         Assess a model's capabilities and costs.
 
         Args:
-            model_ref: Model reference (provider:model)
+            model_ref: Model reference (provider:model or alias)
 
         Returns:
             Model assessment with capabilities, pricing, and recommendations
         """
+        # Try to resolve as alias first
         if ":" not in model_ref:
-            return {
-                "error": f"Invalid model reference: {model_ref}. Use format provider:model"
-            }
+            resolved = self.lockfile.resolve_alias(model_ref)
+            if resolved:
+                model_ref = resolved
+            else:
+                return {
+                    "error": f"Invalid model reference: {model_ref}. Use format provider:model or a valid alias"
+                }
 
         provider, model_name = model_ref.split(":", 1)
 
@@ -163,21 +441,42 @@ class LockfileManagerTools:
                     "error": f"Model {model_ref} not found in registry"
                 }
 
-            # Prepare assessment
+            # Prepare comprehensive assessment
             assessment = {
                 "model": model_ref,
+                "provider": provider,
+                "model_name": model_name,
                 "display_name": model_data.display_name,
+                "description": model_data.description,
                 "active": model_data.is_active,
                 "capabilities": {
                     "max_input_tokens": model_data.max_input_tokens,
                     "max_output_tokens": model_data.max_output_tokens,
                     "supports_vision": model_data.supports_vision,
                     "supports_functions": model_data.supports_function_calling,
-                    "supports_json_mode": model_data.supports_json_mode
+                    "supports_json_mode": model_data.supports_json_mode,
+                    "supports_parallel_tools": model_data.supports_parallel_tool_calls
                 },
                 "pricing": {
+                    "input": model_data.dollars_per_million_tokens_input,
+                    "output": model_data.dollars_per_million_tokens_output,
                     "input_cost_per_million": model_data.dollars_per_million_tokens_input,
                     "output_cost_per_million": model_data.dollars_per_million_tokens_output
+                },
+                "specifications": {
+                    "context_window": model_data.max_input_tokens,
+                    "max_output": model_data.max_output_tokens,
+                    "knowledge_cutoff": getattr(model_data, "knowledge_cutoff", None)
+                },
+                "metadata": {
+                    "added_date": model_data.added_date.isoformat() if model_data.added_date else None,
+                    "deprecated_date": model_data.deprecated_date.isoformat() if model_data.deprecated_date else None,
+                    "is_deprecated": model_data.deprecated_date is not None if model_data.deprecated_date else False
+                },
+                "status": {
+                    "added_date": model_data.added_date.isoformat() if model_data.added_date else None,
+                    "deprecated_date": model_data.deprecated_date.isoformat() if model_data.deprecated_date else None,
+                    "is_deprecated": model_data.deprecated_date is not None if model_data.deprecated_date else False
                 },
                 "recommended_for": []
             }
@@ -205,83 +504,6 @@ class LockfileManagerTools:
             return {
                 "error": f"Failed to assess model: {str(e)}"
             }
-
-    async def recommend_alias(self, use_case: str) -> Dict[str, Any]:
-        """
-        Recommend an alias configuration for a specific use case.
-
-        Args:
-            use_case: Description of what the user wants to do
-
-        Returns:
-            Recommended alias configuration
-        """
-        use_case_lower = use_case.lower()
-
-        # Analyze use case keywords
-        recommendations = []
-
-        # Check for specific patterns
-        if any(word in use_case_lower for word in ["fast", "quick", "simple", "cheap"]):
-            model = await self._find_cheapest_model()
-            if model:
-                recommendations.append({
-                    "alias": "fast",
-                    "model": model,
-                    "reason": "Cost-effective model for quick tasks"
-                })
-
-        if any(word in use_case_lower for word in ["complex", "reasoning", "analysis", "deep"]):
-            model = await self._find_most_capable_model()
-            if model:
-                recommendations.append({
-                    "alias": "deep",
-                    "model": model,
-                    "reason": "High-capability model for complex reasoning"
-                })
-
-        if any(word in use_case_lower for word in ["vision", "image", "picture", "screenshot"]):
-            model = await self._find_vision_model()
-            if model:
-                recommendations.append({
-                    "alias": "vision",
-                    "model": model,
-                    "reason": "Vision-capable model for image analysis"
-                })
-
-        if any(word in use_case_lower for word in ["code", "coding", "programming"]):
-            model = await self._find_coding_model()
-            if model:
-                recommendations.append({
-                    "alias": "coder",
-                    "model": model,
-                    "reason": "Optimized for code generation and analysis"
-                })
-
-        if any(word in use_case_lower for word in ["write", "writing", "content", "article"]):
-            model = await self._find_writing_model()
-            if model:
-                recommendations.append({
-                    "alias": "writer",
-                    "model": model,
-                    "reason": "Optimized for content creation"
-                })
-
-        # Default balanced option if no specific match
-        if not recommendations:
-            model = await self._find_balanced_model()
-            if model:
-                recommendations.append({
-                    "alias": "balanced",
-                    "model": model,
-                    "reason": "Balanced performance and cost for general use"
-                })
-
-        return {
-            "use_case": use_case,
-            "recommendations": recommendations
-        }
-
 
     async def save_lockfile(self) -> Dict[str, Any]:
         """Save the current lockfile state."""
@@ -311,114 +533,24 @@ class LockfileManagerTools:
             "message": f"Switched to profile '{profile}'"
         }
 
-    # Helper methods for finding models
-    async def _find_cheapest_model(self) -> Optional[str]:
-        """Find the cheapest available model."""
-        cheapest = None
-        min_cost = float('inf')
-
-        for provider in ["openai", "anthropic", "google"]:
-            try:
-                models = await self.registry.fetch_current_models(provider)
-                for model in models:
-                    if model.is_active and model.dollars_per_million_tokens_input:
-                        if model.dollars_per_million_tokens_input < min_cost:
-                            min_cost = model.dollars_per_million_tokens_input
-                            cheapest = f"{provider}:{model.model_name}"
-            except Exception:
-                pass
-
-        return cheapest
-
-    async def _find_most_capable_model(self) -> Optional[str]:
-        """Find the most capable model based on context length."""
-        most_capable = None
-        max_tokens = 0
-
-        for provider in ["anthropic", "openai", "google"]:
-            try:
-                models = await self.registry.fetch_current_models(provider)
-                for model in models:
-                    if model.is_active and model.max_input_tokens:
-                        if model.max_input_tokens > max_tokens:
-                            max_tokens = model.max_input_tokens
-                            most_capable = f"{provider}:{model.model_name}"
-            except Exception:
-                pass
-
-        return most_capable
-
-    async def _find_vision_model(self) -> Optional[str]:
-        """Find a vision-capable model."""
-        for provider in ["openai", "google", "anthropic"]:
-            try:
-                models = await self.registry.fetch_current_models(provider)
-                for model in models:
-                    if model.is_active and model.supports_vision:
-                        return f"{provider}:{model.model_name}"
-            except Exception:
-                pass
-
-        return None
-
-    async def _find_coding_model(self) -> Optional[str]:
-        """Find a model optimized for coding."""
-        # Prefer models with function calling and high capability
-        return await self._find_most_capable_model()
-
-    async def _find_writing_model(self) -> Optional[str]:
-        """Find a model optimized for writing."""
-        # Balance between capability and cost
-        return await self._find_balanced_model()
-
-    async def _find_balanced_model(self) -> Optional[str]:
-        """Find a balanced model."""
-        # Look for mid-tier models
-        for provider in ["openai", "anthropic", "google"]:
-            try:
-                models = await self.registry.fetch_current_models(provider)
-                # Sort by cost and pick middle option
-                active_models = [m for m in models if m.is_active and m.dollars_per_million_tokens_input]
-                if len(active_models) > 1:
-                    active_models.sort(key=lambda m: m.dollars_per_million_tokens_input)
-                    mid_idx = len(active_models) // 2
-                    model = active_models[mid_idx]
-                    return f"{provider}:{model.model_name}"
-            except Exception:
-                pass
-
-        return None
-
-    async def _recommend_model_for_use_case(self, alias: str, use_case: Optional[str]) -> str:
-        """Recommend a model based on alias name and use case."""
-        if use_case:
-            result = await self.recommend_alias(use_case)
-            if result["recommendations"]:
-                return result["recommendations"][0]["model"]
-
-        # Fallback based on alias name
-        if "fast" in alias.lower():
-            return await self._find_cheapest_model() or "openai:gpt-4o-mini"
-        elif "deep" in alias.lower() or "complex" in alias.lower():
-            return await self._find_most_capable_model() or "anthropic:claude-3-opus"
-        elif "vision" in alias.lower():
-            return await self._find_vision_model() or "openai:gpt-4o"
-        else:
-            return await self._find_balanced_model() or "openai:gpt-4o"
-
-    async def analyze_costs(self, profile: str = None, monthly_volume: Dict[str, int] = None) -> Dict[str, Any]:
+    async def analyze_costs(
+        self,
+        profile: Optional[str] = None,
+        monthly_volume: Optional[Dict[str, int]] = None,
+        hypothetical_models: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
         """
-        Analyze estimated costs for current configuration.
+        Analyze estimated costs for current or hypothetical configuration.
 
         Args:
             profile: Profile to analyze (default: current working profile)
             monthly_volume: Expected monthly token usage with 'input_tokens' and 'output_tokens'
+            hypothetical_models: Optional dict of {alias: model_ref} to analyze what-if scenarios
 
         Returns:
             Cost analysis with breakdown and recommendations
         """
         profile = profile or self.working_profile
-        prof = self.lockfile.get_profile(profile)
 
         if not monthly_volume:
             # Default estimate: 1M input, 500K output per month
@@ -427,28 +559,66 @@ class LockfileManagerTools:
                 "output_tokens": 500_000
             }
 
+        # Determine which models to analyze
+        models_to_analyze = {}
+        if hypothetical_models:
+            # Use hypothetical models for what-if analysis
+            models_to_analyze = hypothetical_models
+        else:
+            # Use actual profile bindings
+            prof = self.lockfile.get_profile(profile)
+            for binding in prof.bindings:
+                models_to_analyze[binding.alias] = binding.model_ref
+
         cost_breakdown = {}
         total_cost = 0.0
+        analysis_type = "hypothetical" if hypothetical_models else "actual"
 
-        for binding in prof.bindings:
+        # Calculate costs for each model in models_to_analyze
+        for alias, model_ref in models_to_analyze.items():
             try:
-                models = await self.registry.fetch_current_models(binding.provider)
-                model = next((m for m in models if m.model_name == binding.model), None)
+                # Parse provider and model from model_ref
+                if ":" in model_ref:
+                    provider, model_name = model_ref.split(":", 1)
+                else:
+                    # Assume it's just a model name, try to find provider
+                    provider = None
+                    model_name = model_ref
+                    # Try to find which provider has this model
+                    for prov in ["openai", "anthropic", "google", "ollama", "groq", "cohere"]:
+                        try:
+                            models = await self.registry.fetch_current_models(prov)
+                            if any(m.model_name == model_name for m in models):
+                                provider = prov
+                                break
+                        except:
+                            continue
+
+                if not provider:
+                    logger.warning(f"Could not find provider for model {model_name}")
+                    continue
+
+                models = await self.registry.fetch_current_models(provider)
+                model = next((m for m in models if m.model_name == model_name), None)
 
                 if model and model.dollars_per_million_tokens_input:
                     input_cost = (monthly_volume["input_tokens"] / 1_000_000) * model.dollars_per_million_tokens_input
                     output_cost = (monthly_volume["output_tokens"] / 1_000_000) * model.dollars_per_million_tokens_output
                     alias_cost = input_cost + output_cost
 
-                    cost_breakdown[binding.alias] = {
-                        "model": binding.model_ref,
+                    cost_breakdown[alias] = {
+                        "model": model_ref,
                         "input_cost": round(input_cost, 2),
                         "output_cost": round(output_cost, 2),
-                        "total_cost": round(alias_cost, 2)
+                        "total_cost": round(alias_cost, 2),
+                        "pricing": {
+                            "prompt": model.dollars_per_million_tokens_input,
+                            "completion": model.dollars_per_million_tokens_output
+                        }
                     }
                     total_cost += alias_cost
             except Exception as e:
-                logger.warning(f"Could not calculate cost for {binding.alias}: {e}")
+                logger.warning(f"Could not calculate cost for {alias}: {e}")
 
         recommendations = []
         if total_cost > 100:
@@ -458,10 +628,12 @@ class LockfileManagerTools:
 
         return {
             "profile": profile,
+            "analysis_type": analysis_type,
             "monthly_volume": monthly_volume,
             "cost_breakdown": cost_breakdown,
             "total_monthly_cost": round(total_cost, 2),
-            "recommendations": recommendations
+            "recommendations": recommendations,
+            "models_analyzed": len(models_to_analyze)
         }
 
     async def get_current_configuration(self) -> Dict[str, Any]:

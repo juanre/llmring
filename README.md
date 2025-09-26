@@ -19,6 +19,7 @@ A comprehensive Python library for LLM integration with unified interface, advan
   - Ollama: Local models, streaming, custom options
 - **🔒 Type Safety**: Comprehensive typed exceptions and error handling
 - **🌐 MCP Integration**: Model Context Protocol support for tool ecosystems
+- **💬 MCP Chat Client**: Generic chat interface with persistent history for any MCP server
 
 ## 🚀 Quick Start
 
@@ -371,6 +372,8 @@ response = await llm.chat([
 - **[API Reference](docs/api-reference.md)** - Detailed API documentation
 - **[Structured Output](docs/structured-output.md)** - Unified JSON schema across all providers
 - **[MCP Integration](docs/mcp-integration.md)** - Model Context Protocol guide
+- **[MCP Chat Client](docs/mcp-chat-client.md)** - Generic MCP chat client with persistent history
+- **[Conversational Lockfile](examples/conversational_lockfile.md)** - Natural language lockfile management
 - **[Examples](examples/)** - Working code examples
 
 ## 🧪 Development

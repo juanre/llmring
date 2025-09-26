@@ -6,13 +6,15 @@ import asyncio
 import json
 import os
 import uuid
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import HTML
-from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.history import FileHistory
 from rich.console import Console
 from rich.json import JSON
 from rich.markdown import Markdown
@@ -44,6 +46,9 @@ class CommandCompleter(Completer):
         self.commands = {
             "/help": "Show help",
             "/clear": "Clear the conversation history",
+            "/history": "Show conversation history",
+            "/sessions": "List saved sessions",
+            "/load": "Load a previous session",
             "/model": "Change the LLM model",
             "/models": "List available models",
             "/connect": "Connect to MCP server",
@@ -143,8 +148,23 @@ class MCPChatApp:
         self.conversation: list[Message] = []
         self.available_tools: dict[str, Any] = {}
 
+        # Persistent storage paths
+        self.data_dir = Path.home() / ".llmring" / "mcp_chat"
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+
+        # Command history file (for prompt_toolkit)
+        self.history_file = self.data_dir / "command_history.txt"
+
+        # Conversation history file (for chat messages)
+        self.conversation_file = self.data_dir / f"conversation_{self.session_id}.json"
+        self.conversations_dir = self.data_dir / "conversations"
+        self.conversations_dir.mkdir(exist_ok=True)
+
+        # Load previous conversation if it exists
+        self._load_conversation()
+
         # Command history and session
-        self.history = InMemoryHistory()
+        self.history = FileHistory(str(self.history_file))
         self.completer = CommandCompleter(self)
         self.session = PromptSession(
             history=self.history,
@@ -156,6 +176,9 @@ class MCPChatApp:
         self.command_handlers = {
             "/help": self.cmd_help,
             "/clear": self.cmd_clear,
+            "/history": self.cmd_history,
+            "/sessions": self.cmd_sessions,
+            "/load": self.cmd_load,
             "/model": self.cmd_model,
             "/models": self.cmd_models,
             "/connect": self.cmd_connect,
@@ -349,6 +372,8 @@ class MCPChatApp:
 
                     # Add user message to conversation
                     self.conversation.append(Message(role="user", content=user_input))
+                    # Save after each user message
+                    self._save_conversation()
 
                     # Format system message
                     system_message = self.create_system_message()
@@ -376,6 +401,8 @@ class MCPChatApp:
 
                 except KeyboardInterrupt:
                     self.console.print("\n[warning]Exiting...[/warning]")
+                    # Save conversation on exit
+                    self._save_conversation()
                     break
                 except asyncio.CancelledError:
                     break
@@ -498,6 +525,8 @@ When the user asks about aliases, models, or configurations, use the appropriate
 
             # Add to conversation
             self.conversation.append(Message(role="assistant", content=content))
+            # Save after assistant response
+            self._save_conversation()
 
     async def reconnect(self) -> bool:
         """Attempt to reconnect to MCP server."""
@@ -548,6 +577,8 @@ When the user asks about aliases, models, or configurations, use the appropriate
                 content=response.content,
                 tool_calls=response.tool_calls
             ))
+            # Save after response
+            self._save_conversation()
             return
 
         # Add assistant message with tool calls to conversation
@@ -556,6 +587,8 @@ When the user asks about aliases, models, or configurations, use the appropriate
             content=response.content or "",
             tool_calls=response.tool_calls
         ))
+        # Save after adding message
+        self._save_conversation()
 
         # Process each tool call
         tool_results = []
@@ -667,6 +700,8 @@ When the user asks about aliases, models, or configurations, use the appropriate
                     tool_call_id=result.get("tool_call_id")
                 )
             )
+            # Save after tool result
+            self._save_conversation()
 
         # Get follow-up response from LLM with tools still available
         system_message = self.create_system_message()
@@ -719,6 +754,9 @@ When the user asks about aliases, models, or configurations, use the appropriate
 
 [command]/help[/command]               Show this help message
 [command]/clear[/command]              Clear the conversation history
+[command]/history[/command]            Show conversation history
+[command]/sessions[/command]           List saved conversation sessions
+[command]/load[/command] <session_id>  Load a previous session
 [command]/model[/command] <model_name> Change the LLM model
 [command]/models[/command]             List available models
 [command]/connect[/command] <url>      Connect to MCP server
@@ -726,6 +764,164 @@ When the user asks about aliases, models, or configurations, use the appropriate
 [command]/exit[/command]               Exit the chat
 """
         self.console.print(Panel(help_text, title="Help"))
+
+    def _save_conversation(self) -> None:
+        """Save the current conversation to disk."""
+        try:
+            # Create conversation data
+            conversation_data = {
+                "session_id": self.session_id,
+                "model": self.model,
+                "created_at": datetime.now().isoformat(),
+                "messages": [
+                    {
+                        "role": msg.role,
+                        "content": msg.content,
+                        "timestamp": getattr(msg, "timestamp", datetime.now().isoformat())
+                    }
+                    for msg in self.conversation
+                ]
+            }
+
+            # Save to the session-specific file
+            conversation_file = self.conversations_dir / f"session_{self.session_id}.json"
+            with open(conversation_file, "w") as f:
+                json.dump(conversation_data, f, indent=2)
+
+        except Exception as e:
+            # Don't crash on save errors, just log
+            self.console.print(f"[warning]Could not save conversation: {e}[/warning]")
+
+    def _load_conversation(self) -> None:
+        """Load a previous conversation from disk."""
+        try:
+            conversation_file = self.conversations_dir / f"session_{self.session_id}.json"
+            if conversation_file.exists():
+                with open(conversation_file, "r") as f:
+                    data = json.load(f)
+
+                # Restore conversation messages
+                self.conversation = []
+                for msg_data in data.get("messages", []):
+                    msg = Message(
+                        role=msg_data["role"],
+                        content=msg_data["content"]
+                    )
+                    self.conversation.append(msg)
+
+                if self.conversation:
+                    self.console.print(f"[info]Loaded {len(self.conversation)} messages from previous session[/info]")
+                    self.console.print("[dim]Use /history to view conversation history[/dim]")
+
+        except Exception as e:
+            # Don't crash on load errors
+            self.console.print(f"[warning]Could not load previous conversation: {e}[/warning]")
+
+    def _list_sessions(self) -> List[Dict[str, Any]]:
+        """List all saved conversation sessions."""
+        sessions = []
+        try:
+            for session_file in self.conversations_dir.glob("session_*.json"):
+                try:
+                    with open(session_file, "r") as f:
+                        data = json.load(f)
+                        sessions.append({
+                            "session_id": data.get("session_id", "unknown"),
+                            "created_at": data.get("created_at", "unknown"),
+                            "message_count": len(data.get("messages", [])),
+                            "model": data.get("model", "unknown")
+                        })
+                except:
+                    continue
+
+            # Sort by creation date
+            sessions.sort(key=lambda x: x["created_at"], reverse=True)
+
+        except Exception:
+            pass
+
+        return sessions
+
+    async def cmd_history(self, args: str) -> None:
+        """
+        Show conversation history.
+
+        Args:
+            args: Command arguments (unused)
+        """
+        if not self.conversation:
+            self.console.print("[dim]No conversation history[/dim]")
+            return
+
+        self.console.print(Panel("[bold]Conversation History[/bold]"))
+        for msg in self.conversation:
+            if msg.role == "user":
+                self.console.print(f"[user]You:[/user] {msg.content}")
+            else:
+                self.console.print(f"[assistant]Assistant:[/assistant] {msg.content[:500]}...")
+
+    async def cmd_sessions(self, args: str) -> None:
+        """
+        List saved conversation sessions.
+
+        Args:
+            args: Command arguments (unused)
+        """
+        sessions = self._list_sessions()
+        if not sessions:
+            self.console.print("[dim]No saved sessions found[/dim]")
+            return
+
+        table = Table(title="Saved Sessions")
+        table.add_column("Session ID", style="cyan", width=20)
+        table.add_column("Created", style="yellow")
+        table.add_column("Messages", style="green", justify="right")
+        table.add_column("Model", style="blue")
+
+        for session in sessions[:10]:  # Show latest 10
+            session_id = session["session_id"][:8] + "..."
+            created = session["created_at"][:19] if isinstance(session["created_at"], str) else str(session["created_at"])
+            table.add_row(
+                session_id,
+                created,
+                str(session["message_count"]),
+                session["model"]
+            )
+
+        self.console.print(table)
+        self.console.print("\n[dim]Use /load <session_id> to load a session[/dim]")
+
+    async def cmd_load(self, args: str) -> None:
+        """
+        Load a previous conversation session.
+
+        Args:
+            args: Session ID or part of it
+        """
+        if not args.strip():
+            self.console.print("[error]Please specify a session ID[/error]")
+            self.console.print("[dim]Use /sessions to list available sessions[/dim]")
+            return
+
+        # Find matching session
+        sessions = self._list_sessions()
+        matching = [s for s in sessions if s["session_id"].startswith(args.strip())]
+
+        if not matching:
+            self.console.print(f"[error]No session found matching: {args}[/error]")
+            return
+
+        if len(matching) > 1:
+            self.console.print(f"[warning]Multiple sessions match. Please be more specific:[/warning]")
+            for s in matching[:5]:
+                self.console.print(f"  - {s['session_id'][:12]}... ({s['message_count']} messages)")
+            return
+
+        # Load the session
+        session = matching[0]
+        self.session_id = session["session_id"]
+        self._load_conversation()
+        self.console.print(f"[success]Loaded session with {len(self.conversation)} messages[/success]")
 
     async def cmd_clear(self, args: str) -> None:
         """
@@ -735,6 +931,8 @@ When the user asks about aliases, models, or configurations, use the appropriate
             args: Command arguments (unused)
         """
         self.conversation = []
+        # Save the empty conversation
+        self._save_conversation()
         self.console.print("[success]Conversation cleared[/success]")
 
     async def cmd_model(self, args: str) -> None:
@@ -850,6 +1048,9 @@ When the user asks about aliases, models, or configurations, use the appropriate
         Args:
             args: Command arguments (unused)
         """
+        # Save conversation before exiting
+        self._save_conversation()
+        self.console.print("[info]Conversation saved[/info]")
         raise KeyboardInterrupt()
 
 

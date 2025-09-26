@@ -86,12 +86,17 @@ async def test_real_mcp_tool_execution():
         lockfile_path = Path(tmpdir) / "test.lock"
 
         # Direct tool testing first
+        # Load test lockfile to get real models
+        test_lockfile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json")
+        test_lockfile = Lockfile.load(Path(test_lockfile_path))
+
         tools = LockfileManagerTools(lockfile_path=lockfile_path)
 
-        # Test add_alias directly
+        # Test add_alias directly - resolve model from test lockfile
+        resolved_model = test_lockfile.resolve_alias("fast")
         result = await tools.add_alias(
             alias="test_fast",
-            use_case="quick responses"
+            model=resolved_model
         )
 
         assert result["success"] is True
@@ -165,34 +170,37 @@ async def test_real_chat_app_initialization():
 
 
 @pytest.mark.asyncio
-async def test_real_recommendation_flow():
-    """Test real recommendation flow without mocks."""
+async def test_real_model_filtering():
+    """Test real model filtering based on requirements."""
     with tempfile.TemporaryDirectory() as tmpdir:
         lockfile_path = Path(tmpdir) / "test.lock"
 
         tools = LockfileManagerTools(lockfile_path=lockfile_path)
 
-        # Test recommendation for coding
-        result = await tools.recommend_alias(
-            use_case="coding and debugging"
+        # Test filtering for coding (needs function calling)
+        result = await tools.filter_models_by_requirements(
+            requires_functions=True,
+            min_context=50000
         )
 
-        assert "recommendations" in result
-        assert len(result["recommendations"]) > 0
+        assert "models" in result
+        assert len(result["models"]) > 0
 
-        # Each recommendation should have structure
-        for rec in result["recommendations"]:
-            assert "alias" in rec
-            assert "model" in rec
-            assert "reason" in rec
+        # Each model should meet requirements
+        for model in result["models"]:
+            assert model["supports_functions"] is True
+            if model["context_window"]:
+                assert model["context_window"] >= 50000
 
-        # Test recommendation with capabilities
-        result2 = await tools.recommend_alias(
-            use_case="image analysis with vision capabilities"
+        # Test filtering for vision capabilities
+        result2 = await tools.filter_models_by_requirements(
+            requires_vision=True
         )
 
-        assert "recommendations" in result2
-        # Should recommend vision-capable models
+        assert "models" in result2
+        # All should have vision support
+        for model in result2["models"]:
+            assert model["supports_vision"] is True
 
 
 @pytest.mark.asyncio
@@ -333,11 +341,17 @@ async def test_real_configuration_export():
     with tempfile.TemporaryDirectory() as tmpdir:
         lockfile_path = Path(tmpdir) / "export.lock"
 
+        # Load test lockfile to get real models
+        test_lockfile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json")
+        test_lockfile = Lockfile.load(Path(test_lockfile_path))
+
         tools = LockfileManagerTools(lockfile_path=lockfile_path)
 
-        # Build configuration
-        await tools.add_alias("fast", "openai:gpt-4o-mini")
-        await tools.add_alias("deep", use_case="complex analysis")
+        # Build configuration using existing aliases from test lockfile
+        fast_model = test_lockfile.resolve_alias("fast")
+        deep_model = test_lockfile.resolve_alias("deep")
+        await tools.add_alias("config_fast", fast_model)
+        await tools.add_alias("config_deep", deep_model)
 
         # Get full configuration
         config = await tools.get_current_configuration()
@@ -353,37 +367,38 @@ async def test_real_configuration_export():
 
 
 @pytest.mark.asyncio
-async def test_real_intelligent_recommendations():
-    """Test real intelligent model recommendations."""
+async def test_real_data_driven_selection():
+    """Test data-driven model selection using new tools."""
     tools = LockfileManagerTools()
 
-    # Test various use cases
-    use_cases = [
-        ("quick chatbot responses", "low"),
-        ("code generation and debugging", "balanced"),
-        ("legal document analysis", "high"),
-        ("image description", "balanced"),
+    # Test various filtering scenarios
+    test_cases = [
+        # Quick chatbot - low cost
+        {"max_price_input": 0.5, "min_context": 30000},
+        # Code generation - function calling
+        {"requires_functions": True, "min_context": 100000},
+        # Document analysis - large context
+        {"min_context": 200000},
+        # Image description - vision
+        {"requires_vision": True},
     ]
 
-    for use_case, budget in use_cases:
-        # Combine use case and budget in the description
-        combined_use_case = f"{use_case} with {budget} budget"
-        result = await tools.recommend_alias(
-            use_case=combined_use_case
-        )
+    for filters in test_cases:
+        result = await tools.filter_models_by_requirements(**filters)
 
-        assert "recommendations" in result
-        assert len(result["recommendations"]) > 0
+        assert "models" in result
+        assert "applied_filters" in result
 
-        # Verify recommendations make sense
-        for rec in result["recommendations"]:
-            assert rec["alias"] is not None
-            assert rec["model"] is not None
-            assert rec["reason"] is not None
-
-            # Budget alignment is a recommendation, not a hard requirement
-            # Models may vary based on registry data
-            pass  # Remove hard assertion as recommendations can vary
+        # Verify filters were properly applied
+        for model in result["models"]:
+            if "min_context" in filters and model["context_window"]:
+                assert model["context_window"] >= filters["min_context"]
+            if "max_price_input" in filters and model["price_input"]:
+                assert model["price_input"] <= filters["max_price_input"]
+            if filters.get("requires_vision"):
+                assert model["supports_vision"] is True
+            if filters.get("requires_functions"):
+                assert model["supports_functions"] is True
 
 
 if __name__ == "__main__":

@@ -21,16 +21,26 @@ This will:
 
 ```
 You: I need a fast model for quick responses
-Assistant: I'll help you add a fast model. Based on the current registry, I recommend using 'openai:gpt-4o-mini' which is highly cost-effective and quick. Let me add this alias for you.
+Assistant: I'll help you find a fast model. Let me check which models have the best speed and cost balance.
+[Calls filter_models_by_requirements with max_price and min_speed criteria]
+Based on the available models, 'openai:gpt-4o-mini' offers excellent speed at $0.15 per million tokens.
+Would you like me to add this as your 'fast' alias?
+
+You: Yes, please add it
 [Adds 'fast' → 'openai:gpt-4o-mini']
 ```
 
-### Getting Recommendations
+### Finding Models for Specific Tasks
 
 ```
-You: What model should I use for coding tasks?
-Assistant: For coding tasks, I recommend using models with strong code understanding and generation capabilities. Let me analyze the available models...
-[Provides recommendations based on registry]
+You: What models are available for coding tasks?
+Assistant: I'll search for models that support function calling and have good code capabilities.
+[Calls filter_models_by_requirements with requires_functions=true]
+
+Here are the top models for coding:
+1. anthropic:claude-3-5-sonnet - 200K context, excellent code understanding
+2. openai:gpt-4o - 128K context, strong function calling
+3. openai:gpt-4o-mini - 128K context, cost-effective with function support
 ```
 
 ### Managing Configuration
@@ -68,19 +78,47 @@ Behind the scenes, the chat interface uses these MCP tools:
 - `remove_alias` - Remove aliases
 - `list_aliases` - Show current configuration
 - `assess_model` - Evaluate model capabilities
-- `recommend_alias` - Get recommendations for use cases
+- `filter_models_by_requirements` - Find models matching specific criteria
+- `list_models` - View all available models
+- `get_model_details` - Get detailed information about specific models
 - `analyze_costs` - Estimate monthly costs
 - `save_lockfile` - Save configuration to disk
 - `get_configuration` - View full lockfile
+- `get_available_providers` - Check which providers have API keys configured
+
+## Persistent History
+
+The chat interface now maintains persistent history across sessions:
+
+### Session Management
+- All conversations are automatically saved
+- Each session has a unique ID and timestamp
+- Resume previous conversations with `/load <session_id>`
+- View all sessions with `/sessions`
+
+### History Storage
+```
+~/.llmring/mcp_chat/
+├── command_history.txt        # Command line history
+├── conversation_<id>.json     # Individual conversations
+└── sessions.json              # Session metadata
+```
 
 ## Advanced Usage
 
 ### Using an External MCP Server
 
-If you have an MCP server running elsewhere:
+The chat client is completely generic and can connect to any MCP server:
 
 ```bash
-llmring lock chat --server-url http://localhost:8080
+# Connect via stdio (most common)
+llmring mcp chat --server "stdio://python -m your.mcp.server"
+
+# Connect via HTTP
+llmring mcp chat --server "http://localhost:8080"
+
+# Connect via WebSocket
+llmring mcp chat --server "ws://localhost:8080"
 ```
 
 ### Choosing a Different Model
@@ -115,6 +153,14 @@ This allows you to experiment with different configurations before committing ch
 4. **Interactive Exploration**: Try different configurations before saving
 5. **Registry-Driven**: Always uses the latest model information
 
+## Data-Focused Design Philosophy
+
+The lockfile manager follows a "data-focused" approach:
+- Tools provide data and perform actions, not make decisions
+- The LLM is in the driver's seat for all intelligent decisions
+- Models are selected based on objective criteria you specify
+- No hidden "smart" recommendations - full transparency
+
 ## Technical Details
 
 The conversational interface uses:
@@ -122,5 +168,12 @@ The conversational interface uses:
 - **LLMRing Service**: For LLM interactions
 - **Registry Client**: For up-to-date model information
 - **Lockfile Management**: For configuration persistence
+- **Persistent History**: For session continuity
+- **Generic MCP Client**: Works with any MCP-compliant server
 
 This creates a seamless experience for managing your LLM configuration through natural conversation.
+
+## See Also
+
+- [MCP Chat Client Documentation](../docs/mcp-chat-client.md) - Complete guide to the generic MCP chat client
+- [MCP Integration Guide](../docs/mcp-integration.md) - Overview of MCP capabilities in LLMRing

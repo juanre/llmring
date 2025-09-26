@@ -14,9 +14,14 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+from dotenv import load_dotenv
+
 from llmring.mcp.server import MCPServer
 from llmring.mcp.server.transport.stdio import StdioTransport
 from llmring.mcp.tools.lockfile_manager import LockfileManagerTools
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -66,20 +71,16 @@ class LockfileServer:
                     },
                     "model": {
                         "type": "string",
-                        "description": "Optional model reference (e.g., 'openai:gpt-4o-mini')"
-                    },
-                    "use_case": {
-                        "type": "string",
-                        "description": "Optional use case description for automatic recommendation"
+                        "description": "Model reference (e.g., 'openai:gpt-4o-mini')"
                     },
                     "profile": {
                         "type": "string",
                         "description": "Profile to add the alias to (default: 'default')"
                     }
                 },
-                "required": ["alias"]
+                "required": ["alias", "model"]
             },
-            description="Add or update an alias in the lockfile. Can auto-recommend models based on use case."
+            description="Add or update an alias in the lockfile."
         )
         
         # Remove alias tool
@@ -140,33 +141,6 @@ class LockfileServer:
             description="Assess a model's capabilities, costs, and suitability."
         )
         
-        # Recommend alias tool
-        self.server.function_registry.register(
-            name="recommend_alias",
-            func=self._wrap_async(self.tools.recommend_alias),
-            schema={
-                "type": "object",
-                "properties": {
-                    "use_case": {
-                        "type": "string",
-                        "description": "Description of what you need the model for"
-                    },
-                    "budget": {
-                        "type": "string",
-                        "enum": ["low", "balanced", "high"],
-                        "description": "Budget preference"
-                    },
-                    "capabilities": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Required capabilities (e.g., 'vision', 'function_calling')"
-                    }
-                },
-                "required": ["use_case"]
-            },
-            description="Get model recommendations for a specific use case."
-        )
-        
         # Analyze costs tool
         self.server.function_registry.register(
             name="analyze_costs",
@@ -185,10 +159,15 @@ class LockfileServer:
                             "output_tokens": {"type": "integer"}
                         },
                         "description": "Expected monthly token usage"
+                    },
+                    "hypothetical_models": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                        "description": "Optional hypothetical alias:model mappings for what-if analysis"
                     }
                 }
             },
-            description="Analyze estimated costs for current configuration."
+            description="Analyze estimated costs for current or hypothetical configuration."
         )
         
         # Save lockfile tool
@@ -217,7 +196,91 @@ class LockfileServer:
             },
             description="Get the complete current lockfile configuration."
         )
-        
+
+        # Get available providers
+        self.server.function_registry.register(
+            name="get_available_providers",
+            func=self._wrap_async(self.tools.get_available_providers),
+            schema={
+                "type": "object",
+                "properties": {}
+            },
+            description="Check which providers have API keys configured in environment variables."
+        )
+
+        # List models
+        self.server.function_registry.register(
+            name="list_models",
+            func=self._wrap_async(self.tools.list_models),
+            schema={
+                "type": "object",
+                "properties": {
+                    "providers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Filter by specific providers"
+                    },
+                    "include_inactive": {
+                        "type": "boolean",
+                        "description": "Include inactive/deprecated models"
+                    }
+                }
+            },
+            description="List all available models with their specifications from the registry."
+        )
+
+        # Filter models by requirements
+        self.server.function_registry.register(
+            name="filter_models_by_requirements",
+            func=self._wrap_async(self.tools.filter_models_by_requirements),
+            schema={
+                "type": "object",
+                "properties": {
+                    "min_context": {
+                        "type": "integer",
+                        "description": "Minimum context window size required"
+                    },
+                    "max_input_cost": {
+                        "type": "number",
+                        "description": "Maximum cost per million input tokens"
+                    },
+                    "max_output_cost": {
+                        "type": "number",
+                        "description": "Maximum cost per million output tokens"
+                    },
+                    "required_capabilities": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Required capabilities (e.g., vision, function_calling)"
+                    },
+                    "providers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Filter by specific providers"
+                    }
+                }
+            },
+            description="Filter models based on specific requirements like context size, cost, and capabilities."
+        )
+
+        # Get model details
+        self.server.function_registry.register(
+            name="get_model_details",
+            func=self._wrap_async(self.tools.get_model_details),
+            schema={
+                "type": "object",
+                "properties": {
+                    "models": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of model references to get details for"
+                    }
+                },
+                "required": ["models"]
+            },
+            description="Get complete details for specific models including pricing, capabilities, and specifications."
+        )
+
         logger.info(f"Registered {len(self.server.function_registry.functions)} lockfile management tools")
         
     def _wrap_async(self, async_func):
