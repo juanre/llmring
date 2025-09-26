@@ -1,6 +1,6 @@
 version = "1.0"
 created_at = "2025-09-26T10:42:26.234008+00:00"
-updated_at = "2025-09-26T10:42:26.234018+00:00"
+updated_at = "2025-09-26T17:13:19.297729+00:00"
 default_profile = "default"
 
 [metadata]
@@ -11,5 +11,10 @@ name = "default"
 alias = "advisor"
 provider = "anthropic"
 model = "claude-opus-4-1-20250805"
+
+[[profiles.default.bindings]]
+alias = "pdf-to-markdown"
+provider = "openai"
+model = "gpt-5-nano"
 
 [profiles.default.registry_versions]

@@ -62,25 +62,30 @@ class LockfileServer:
         self.server.function_registry.register(
             name="add_alias",
             func=self._wrap_async(self.tools.add_alias),
+            description="Add or update an alias in the lockfile. REQUIRES both 'alias' and 'model' parameters.",
             schema={
                 "type": "object",
                 "properties": {
                     "alias": {
                         "type": "string",
-                        "description": "The alias name (e.g., 'fast', 'deep', 'coder')"
+                        "description": "REQUIRED: The alias name to create (e.g., 'fast', 'deep', 'coder', 'pdf_converter')"
                     },
                     "model": {
                         "type": "string",
-                        "description": "Model reference (e.g., 'openai:gpt-4o-mini')"
+                        "description": "REQUIRED: Model reference in format provider:model (e.g., 'openai:gpt-4o-mini', 'anthropic:claude-3-haiku')"
                     },
                     "profile": {
                         "type": "string",
-                        "description": "Profile to add the alias to (default: 'default')"
+                        "description": "OPTIONAL: Profile to add the alias to (defaults to 'default' if not specified)"
                     }
                 },
-                "required": ["alias", "model"]
-            },
-            description="Add or update an alias in the lockfile."
+                "required": ["alias", "model"],
+                "examples": [
+                    {"alias": "fast", "model": "openai:gpt-5-nano"},
+                    {"alias": "pdf_converter", "model": "openai:gpt-4o-mini"},
+                    {"alias": "deep", "model": "anthropic:claude-3-opus", "profile": "production"}
+                ]
+            }
         )
         
         # Remove alias tool
