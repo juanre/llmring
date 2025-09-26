@@ -13,6 +13,10 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 import pytest
+from dotenv import load_dotenv
+
+# Load environment variables for API keys
+load_dotenv()
 
 from llmring.mcp.client.chat.app import MCPChatApp
 from llmring.mcp.server.lockfile_server.server import LockfileServer

@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Dict, Any
 
 import pytest
+from dotenv import load_dotenv
+
+# Load environment variables for API keys
+load_dotenv()
 
 from llmring.mcp.server.lockfile_server.server import LockfileServer
 from llmring.mcp.server import MCPServer
@@ -308,15 +312,24 @@ async def test_server_save_and_reload():
 @pytest.mark.asyncio
 async def test_server_cost_analysis_integration():
     """Test server cost analysis with real data."""
+    # Load test lockfile to get real model references
+    import os
+    from llmring.lockfile_core import Lockfile
+    test_lockfile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json")
+    test_lockfile = Lockfile.load(Path(test_lockfile_path))
+
     with tempfile.TemporaryDirectory() as tmpdir:
         lockfile_path = Path(tmpdir) / "test.lock"
-
         server = LockfileServer(lockfile_path=lockfile_path)
 
-        # Add aliases with different costs
+        # Add aliases using real models from test lockfile
         add_func = server.server.function_registry.functions["add_alias"]
-        add_func(alias="cheap", model="openai:gpt-4o-mini")
-        add_func(alias="expensive", model="openai:gpt-4o")
+        fast_model = test_lockfile.resolve_alias("fast")
+        smart_model = test_lockfile.resolve_alias("smart")
+        if fast_model:
+            add_func(alias="cheap", model=fast_model)
+        if smart_model:
+            add_func(alias="expensive", model=smart_model)
 
         # Analyze costs
         analyze_func = server.server.function_registry.functions["analyze_costs"]
@@ -343,35 +356,34 @@ async def test_server_cost_analysis_integration():
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="Recommendations vary based on registry data")
 async def test_server_recommendation_logic():
     """Test server recommendation logic."""
-    server = LockfileServer()
+    # Use test lockfile for consistent testing
+    import os
+    test_lockfile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json")
+    server = LockfileServer(lockfile_path=Path(test_lockfile_path))
 
     recommend_func = server.server.function_registry.functions["recommend_alias"]
 
     # Test various recommendation scenarios
+    # Note: recommend_alias only takes 'use_case' parameter
     scenarios = [
         {
-            "use_case": "quick chatbot",
-            "budget": "low",
+            "use_case": "quick chatbot with low cost",
             "expected_in_model": ["mini", "haiku", "nano"]
         },
         {
-            "use_case": "code generation",
-            "budget": "balanced",
+            "use_case": "code generation for development",
             "expected_in_alias": ["coder", "developer"]
         },
         {
-            "use_case": "vision tasks",
-            "capabilities": ["vision"],
+            "use_case": "vision and image analysis tasks",
             "expected_in_reason": ["vision", "image", "visual"]
         }
     ]
 
     for scenario in scenarios:
-        params = {k: v for k, v in scenario.items() if not k.startswith("expected_")}
-        result = recommend_func(**params)
+        result = recommend_func(use_case=scenario["use_case"])
 
         assert "recommendations" in result
         assert len(result["recommendations"]) > 0
@@ -390,19 +402,24 @@ async def test_server_recommendation_logic():
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="Model assessment depends on registry availability")
 async def test_server_model_assessment():
-    """Test server model assessment."""
-    server = LockfileServer()
+    """Test server model assessment using test lockfile aliases."""
+    # Use the test lockfile that has valid models
+    import os
+    from llmring.lockfile_core import Lockfile
+    test_lockfile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json")
+    test_lockfile = Lockfile.load(Path(test_lockfile_path))
 
+    server = LockfileServer()
     assess_func = server.server.function_registry.functions["assess_model"]
 
-    # Test known models
-    models_to_test = [
-        "openai:gpt-4o",
-        "anthropic:claude-3-5-sonnet",
-        "google:gemini-1.5-pro"
-    ]
+    # Test using aliases from test lockfile
+    aliases_to_test = ["fast", "smart", "deep"]
+    models_to_test = []
+    for alias in aliases_to_test:
+        resolved = test_lockfile.resolve_alias(alias)
+        if resolved:
+            models_to_test.append(resolved)
 
     for model_ref in models_to_test:
         result = assess_func(model_ref=model_ref)
@@ -413,10 +430,12 @@ async def test_server_model_assessment():
 
         # Model assessment should return model info
         if "error" not in result:
-            # Only check if not an error
+            # Check for expected fields from registry
             assert "model" in result or "display_name" in result
-            # Active field might not always be present
-            pass  # Just ensure we got a response
+            # Provider is extracted from the model reference
+            if ":" in model_ref:
+                provider = model_ref.split(":")[0]
+                assert result.get("provider") == provider or "model" in result
 
 
 if __name__ == "__main__":

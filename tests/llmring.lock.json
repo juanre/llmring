@@ -137,6 +137,12 @@
           "provider": "anthropic",
           "model": "claude-opus-4-1-20250805",
           "constraints": null
+        },
+        {
+          "alias": "smart",
+          "provider": "anthropic",
+          "model": "claude-opus-4-1-20250805",
+          "constraints": null
         }
       ],
       "registry_versions": {}

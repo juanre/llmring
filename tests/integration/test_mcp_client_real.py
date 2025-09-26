@@ -9,6 +9,10 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from dotenv import load_dotenv
+
+# Load environment variables for API keys
+load_dotenv()
 
 from llmring.lockfile_core import Lockfile
 from llmring.mcp.client.stateless_engine import ChatRequest, StatelessChatEngine
@@ -20,27 +24,16 @@ class TestMCPClientReal:
     """Test the MCP client with real implementations."""
 
     @pytest.fixture
-    def temp_lockfile(self):
-        """Create a temporary lockfile for testing."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.lock', delete=False) as f:
-            lockfile = Lockfile()
-            lockfile.set_binding("fast", "openai:gpt-4o-mini", profile="default")
-            lockfile.set_binding("advisor", "anthropic:claude-opus-4-1-20250805", profile="default")
-            lockfile.save(Path(f.name))
-
-            yield Path(f.name)
-
-            # Cleanup
-            try:
-                os.unlink(f.name)
-            except:
-                pass
+    def test_lockfile_path(self):
+        """Use the test lockfile with all aliases configured."""
+        # Use the existing test lockfile that has all the aliases
+        return os.path.join(os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json")
 
     @pytest.fixture
-    def chat_engine(self, temp_lockfile):
-        """Create chat engine with real lockfile."""
+    def chat_engine(self, test_lockfile_path):
+        """Create chat engine with test lockfile."""
         # Create LLMRing service with test lockfile
-        llm_service = LLMRing(origin="test", lockfile_path=str(temp_lockfile))
+        llm_service = LLMRing(origin="test", lockfile_path=str(test_lockfile_path))
         return StatelessChatEngine(llmring=llm_service)
 
     @pytest.mark.asyncio
@@ -170,8 +163,7 @@ class TestMCPClientReal:
             chat_engine.llmring.chat = original_chat
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(reason="Conversation persistence requires actual LLM response")
-    async def test_conversation_persistence(self, chat_engine, temp_lockfile):
+    async def test_conversation_persistence(self, chat_engine, test_lockfile_path):
         """Test conversation management without mocks."""
         # Create a simple in-memory conversation store
         class InMemoryConversationManager:
@@ -187,8 +179,12 @@ class TestMCPClientReal:
                 self.messages[conv_id] = []
                 return conv_id
 
-            async def add_message(self, conv_id, message_type, content, *args, **kwargs):
-                if conv_id in self.messages:
+            async def add_message(self, conversation_id=None, role=None, content=None, *args, **kwargs):
+                # Handle both old and new signatures
+                conv_id = conversation_id or kwargs.get('conv_id')
+                message_type = role or kwargs.get('message_type', 'user')
+
+                if conv_id and conv_id in self.messages:
                     self.messages[conv_id].append({
                         "type": message_type,
                         "content": content,
@@ -248,12 +244,12 @@ class TestMCPClientReal:
             chat_engine.llmring.chat = original_chat
 
     @pytest.mark.asyncio
-    async def test_model_resolution(self, chat_engine, temp_lockfile):
+    async def test_model_resolution(self, chat_engine, test_lockfile_path):
         """Test that model aliases are properly resolved."""
-        # Test with alias
+        # Test with aliases from the test lockfile
         request_alias = ChatRequest(
             message="Test with alias",
-            model="fast",
+            model="smart",  # Use the smart alias we added
             save_to_db=False,
         )
 
@@ -279,7 +275,8 @@ class TestMCPClientReal:
 
             # The model should be resolved from alias
             assert len(captured_requests) == 1
-            assert captured_requests[0].model in ["fast", "openai:gpt-4o-mini"]
+            # Should resolve to smart's model
+            assert captured_requests[0].model in ["smart", "anthropic:claude-opus-4-1-20250805"]
 
             # Clear for next test
             captured_requests.clear()
