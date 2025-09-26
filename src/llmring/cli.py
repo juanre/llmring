@@ -19,36 +19,14 @@ load_dotenv()
 
 
 async def cmd_lock_init(args):
-    """Initialize a new lockfile with intelligent recommendations."""
+    """Initialize a new lockfile with basic defaults from registry."""
     path = Path(args.file) if args.file else Path("llmring.lock")
 
     if path.exists() and not args.force:
         print(f"Error: {path} already exists. Use --force to overwrite.")
         return 1
 
-    # Check if intelligent creation is requested
-    if hasattr(args, "interactive") and args.interactive:
-        requirements_text = None
-
-        # Check for requirements from file
-        if hasattr(args, "requirements_file") and args.requirements_file:
-            req_path = Path(args.requirements_file)
-            if req_path.exists():
-                requirements_text = req_path.read_text()
-                print(f"📄 Using requirements from: {req_path}")
-            else:
-                print(f"❌ Requirements file not found: {req_path}")
-                return 1
-
-        # Check for requirements from command line
-        elif hasattr(args, "requirements") and args.requirements:
-            requirements_text = args.requirements
-            print(f"📝 Using requirements from command line")
-
-        return await cmd_lock_init_intelligent(path, requirements_text)
-
-    # Basic creation with recommendation to use intelligent system
-    print("💡 Creating lockfile with registry-based recommendations...")
+    print("Creating lockfile with registry-based defaults...")
     print()
 
     # Try to create with registry data
@@ -57,265 +35,31 @@ async def cmd_lock_init(args):
 
         registry_client = RegistryClient()
         lockfile = await Lockfile.create_default_async(registry_client)
-        print("✅ Using registry data for intelligent defaults")
+        print("✅ Created lockfile with registry data")
     except Exception as e:
         # Fallback to basic if registry unavailable
         print(f"⚠️  Could not fetch registry data: {e}")
-        print("   Using basic defaults instead")
+        print("   Creating minimal lockfile")
         lockfile = Lockfile.create_default()
 
     lockfile.save(path)
 
-    print(f"✅ Created basic lockfile: {path}")
+    print(f"✅ Created lockfile: {path}")
 
     # Show default bindings
     default_profile = lockfile.get_profile("default")
     if default_profile.bindings:
-        print("\nBasic bindings:")
+        print("\nDefault aliases:")
         for binding in default_profile.bindings:
             print(f"  {binding.alias} → {binding.model_ref}")
+    else:
+        print("\nNo default aliases configured.")
 
-        print("\n💡 Run 'llmring lock init --interactive --force' for intelligent recommendations")
+    print("\n💡 Use 'llmring lock chat' for conversational lockfile management")
 
     return 0
 
 
-async def cmd_lock_init_intelligent(path: Path, requirements_text: str = None):
-    """Create lockfile using intelligent system (simplified without requiring advisor)."""
-    print("🤖 LLMRing Intelligent Lockfile Creator")
-    if requirements_text:
-        print("   Using provided requirements to create optimal configuration")
-    else:
-        print("   Interactive mode - I'll ask you some questions")
-    print()
-
-    try:
-        # Use the simplified intelligent creator that doesn't require an advisor
-        from llmring.lockfile.intelligent_creator import IntelligentLockfileCreator
-
-        # Create without bootstrap (uses registry analysis directly)
-        creator = IntelligentLockfileCreator(bootstrap_lockfile=None)
-
-        # Run the intelligent creation process with optional requirements
-        lockfile = await creator.create_lockfile_interactively(requirements_text=requirements_text)
-
-        # Save the lockfile
-        lockfile.save(path)
-
-        print(f"\n✅ Created intelligent lockfile: {path}")
-        print("\n📊 Configuration Summary:")
-
-        # Display the created aliases
-        default_profile = lockfile.get_profile("default")
-        if default_profile.bindings:
-            for binding in default_profile.bindings:
-                print(f"  {binding.alias:<12} → {binding.model_ref}")
-
-                # Show rationale if available in metadata
-                if lockfile.metadata and "recommendations_rationale" in lockfile.metadata:
-                    rationale = lockfile.metadata["recommendations_rationale"].get(binding.alias)
-                    if rationale:
-                        print(f"               {rationale}")
-
-        print("\n🎉 Your lockfile is optimized based on:")
-        print("   • Current registry data")
-        print("   • Available API keys")
-        print("   • Balanced cost and performance")
-
-        return 0
-
-    except Exception as e:
-        print(f"❌ Error creating intelligent lockfile: {e}")
-        return 1
-
-
-async def _create_bootstrap_advisor() -> str:
-    """Create bootstrap advisor automatically."""
-    import os
-
-    from llmring.registry import RegistryClient
-
-    registry = RegistryClient()
-
-    # Find best available advisor model
-    advisor_model = None
-
-    # Try providers in order of preference for advisor role
-    advisor_candidates = []
-
-    if os.getenv("ANTHROPIC_API_KEY"):
-        try:
-            models = await registry.fetch_current_models("anthropic")
-            # Score models for advisor role (reasoning + tool support)
-            for model in models:
-                if model.is_active:
-                    score = 0
-                    if "opus" in model.model_name:
-                        score += 20  # Highest reasoning capability
-                    if "sonnet" in model.model_name:
-                        score += 15  # Good reasoning
-                    if model.supports_function_calling:
-                        score += 10
-                    if score > 10:  # Only consider capable models
-                        advisor_candidates.append(("anthropic", model.model_name, score))
-        except Exception as e:
-            print(f"   ⚠️  Could not access Anthropic registry: {e}")
-
-    if os.getenv("OPENAI_API_KEY"):
-        try:
-            models = await registry.fetch_current_models("openai")
-            for model in models:
-                if model.is_active and model.supports_function_calling:
-                    score = 10  # OpenAI models generally capable
-                    # Prefer models with higher max_input_tokens for advisor role
-                    if model.max_input_tokens and model.max_input_tokens > 100000:
-                        score += 5  # Prefer high-context models for advisor
-                    advisor_candidates.append(("openai", model.model_name, score))
-        except Exception as e:
-            print(f"   ⚠️  Could not access OpenAI registry: {e}")
-
-    if os.getenv("GOOGLE_GEMINI_API_KEY"):
-        try:
-            models = await registry.fetch_current_models("google")
-            for model in models:
-                if model.is_active and model.supports_function_calling:
-                    score = 8  # Google models capable but prefer others for advisor role
-                    if "pro" in model.model_name:
-                        score += 3
-                    advisor_candidates.append(("google", model.model_name, score))
-        except Exception as e:
-            print(f"   ⚠️  Could not access Google registry: {e}")
-
-    # Select best advisor or prompt user
-    if advisor_candidates:
-        # Sort by score and select best
-        best_advisor = max(advisor_candidates, key=lambda x: x[2])
-        advisor_model = f"{best_advisor[0]}:{best_advisor[1]}"
-        print(f"   ✅ Selected advisor: {advisor_model} (score: {best_advisor[2]})")
-    else:
-        # No API keys or registry completely unavailable
-        print("   ❌ No advisor models available:")
-        print("      - No API keys found, or")
-        print("      - Registry completely inaccessible, or")
-        print("      - No capable models in registry")
-        print("   Please check your API keys and internet connection.")
-        return None
-
-    # Create minimal lockfile with advisor
-    from llmring.lockfile_core import AliasBinding, Lockfile, ProfileConfig
-
-    lockfile = Lockfile()
-    profile = ProfileConfig(name="default")
-
-    provider, model = advisor_model.split(":", 1)
-    binding = AliasBinding(alias="advisor", provider=provider, model=model)
-    profile.bindings.append(binding)
-
-    lockfile.profiles["default"] = profile
-    lockfile.save(Path("llmring.lock"))
-
-    return advisor_model
-
-
-async def _generate_registry_based_bindings(advisor_model: str) -> list[dict[str, str]]:
-    """Generate lockfile bindings based on current registry data (no hardcoded models)."""
-    import os
-
-    from llmring.registry import RegistryClient
-
-    registry = RegistryClient()
-    bindings = []
-
-    # Add the advisor that was intelligently selected
-    advisor_provider, advisor_model_name = advisor_model.split(":", 1)
-    bindings.append(
-        {
-            "alias": "advisor",
-            "provider": advisor_provider,
-            "model": advisor_model_name,
-            "rationale": "Powers intelligent lockfile creation system",
-        }
-    )
-
-    # Generate other aliases based on available providers and registry
-    try:
-        # "deep" - Most capable reasoning model available
-        if os.getenv("ANTHROPIC_API_KEY"):
-            models = await registry.fetch_current_models("anthropic")
-            opus_models = [m for m in models if "opus" in m.model_name and m.is_active]
-            if opus_models:
-                best = max(opus_models, key=lambda x: x.max_input_tokens or 0)
-                bindings.append(
-                    {
-                        "alias": "deep",
-                        "provider": "anthropic",
-                        "model": best.model_name,
-                        "rationale": "Most capable reasoning model for complex analysis",
-                    }
-                )
-
-        # "fast" - Most cost-effective model available
-        if os.getenv("OPENAI_API_KEY"):
-            models = await registry.fetch_current_models("openai")
-            cost_effective = [
-                m for m in models if m.is_active and (m.dollars_per_million_tokens_input or 0) < 1.0
-            ]
-            if cost_effective:
-                best = min(
-                    cost_effective,
-                    key=lambda x: x.dollars_per_million_tokens_input or 0,
-                )
-                bindings.append(
-                    {
-                        "alias": "fast",
-                        "provider": "openai",
-                        "model": best.model_name,
-                        "rationale": "Most cost-effective model for quick responses",
-                    }
-                )
-
-        # "balanced" - Good middle-ground model
-        if os.getenv("ANTHROPIC_API_KEY"):
-            models = await registry.fetch_current_models("anthropic")
-            haiku_models = [m for m in models if "haiku" in m.model_name and m.is_active]
-            if haiku_models:
-                latest = max(haiku_models, key=lambda x: x.added_date or "")
-                bindings.append(
-                    {
-                        "alias": "balanced",
-                        "provider": "anthropic",
-                        "model": latest.model_name,
-                        "rationale": "Balanced cost and capability for general use",
-                    }
-                )
-
-        # "local" - Best available Ollama model (if any)
-        try:
-            # Check if Ollama models are available (registry may not have Ollama)
-            ollama_models = await registry.fetch_current_models("ollama")
-            if ollama_models:
-                # Select most capable Ollama model
-                best_ollama = max(ollama_models, key=lambda x: x.max_input_tokens or 0)
-                bindings.append(
-                    {
-                        "alias": "local",
-                        "provider": "ollama",
-                        "model": best_ollama.model_name,
-                        "rationale": "Local execution for privacy and offline use",
-                    }
-                )
-        except Exception:
-            # Ollama registry not available - this is expected
-            # Don't add local alias if no Ollama models in registry
-            print("   ⚠️  Ollama models not in registry (expected for local models)")
-            pass
-
-    except Exception as e:
-        print(f"   ⚠️  Registry error during binding generation: {e}")
-        # Minimal fallback - just the advisor
-        pass
-
-    return bindings
 
 
 async def cmd_bind(args):
@@ -864,27 +608,17 @@ def main():
 
     # lock init
     init_parser = lock_subparsers.add_parser(
-        "init", help="Initialize lockfile with intelligent recommendations"
+        "init", help="Initialize lockfile with basic defaults"
     )
     init_parser.add_argument("--file", help="Lockfile path (default: llmring.lock)")
     init_parser.add_argument("--force", action="store_true", help="Overwrite existing file")
-    init_parser.add_argument(
-        "--interactive",
-        action="store_true",
-        help="Use intelligent advisor for optimal recommendations (recommended)",
-    )
 
     # lock validate
     lock_subparsers.add_parser("validate", help="Validate lockfile against registry")
 
     # lock optimize
-    optimize_parser = lock_subparsers.add_parser(
+    lock_subparsers.add_parser(
         "optimize", help="Optimize existing lockfile with current registry data"
-    )
-    optimize_parser.add_argument(
-        "--interactive",
-        action="store_true",
-        help="Interactive optimization with advisor",
     )
 
     # lock analyze

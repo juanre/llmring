@@ -94,18 +94,18 @@ class Lockfile(BaseModel):
 
     default_profile: str = Field(default="default", description="Default profile name")
 
-    # Metadata field for intelligent creation rationale and other info
+    # Metadata field for additional information
     metadata: Optional[Dict[str, Any]] = Field(
         default_factory=dict,
-        description="Metadata including rationale from intelligent creation"
+        description="Metadata for additional lockfile information"
     )
 
     @classmethod
     def create_default(cls) -> "Lockfile":
         """Create a default lockfile with sensible defaults based on available API keys.
 
-        Note: This creates a basic lockfile. For intelligent recommendations based on
-        the registry, use create_default_async() instead.
+        Note: This creates a basic lockfile. For registry-based defaults,
+        use create_default_async() instead.
         """
         lockfile = cls()
 
@@ -128,14 +128,14 @@ class Lockfile(BaseModel):
 
     @classmethod
     async def create_default_async(cls, registry_client=None) -> "Lockfile":
-        """Create a default lockfile with intelligent defaults from registry.
+        """Create a default lockfile with defaults from registry.
 
         Args:
             registry_client: Optional RegistryClient instance. If not provided,
                            creates a new one.
 
         Returns:
-            Lockfile with intelligent alias bindings based on registry data.
+            Lockfile with alias bindings based on registry data.
         """
         from llmring.registry import RegistryClient
 
@@ -166,12 +166,12 @@ class Lockfile(BaseModel):
         """Suggest basic default bindings without hardcoded models.
 
         Returns minimal defaults that don't rely on specific model IDs.
-        For intelligent suggestions, use _suggest_defaults_from_registry().
+        For registry-based suggestions, use _suggest_defaults_from_registry().
         """
         defaults = {}
 
         # Return empty defaults - let user explicitly configure
-        # or use intelligent creation with registry data
+        # or use registry-based creation
         # No hardcoded models per source-of-truth principles
 
         return defaults

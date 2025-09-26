@@ -124,9 +124,9 @@ class RegistryClient:
                 self._cache[cache_key] = models
                 return models
 
-        # Fetch from registry
+        # Fetch from registry with retry logic
         try:
-            # Handle file:// URLs
+            # Handle file:// URLs (no retry needed for local files)
             if url.startswith("file://"):
                 file_path = Path(url[7:])  # Remove file:// prefix
                 if not file_path.exists():
