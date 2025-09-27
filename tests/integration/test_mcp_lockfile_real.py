@@ -100,8 +100,10 @@ async def test_real_mcp_tool_execution():
         tools = LockfileManagerTools(lockfile_path=lockfile_path)
 
         # Test add_alias directly - resolve model from test lockfile
-        resolved_model = test_lockfile.resolve_alias("fast")
-        result = await tools.add_alias(alias="test_fast", model=resolved_model)
+        resolved_models = test_lockfile.resolve_alias("fast")
+        # Convert list to comma-separated string for the models parameter
+        models_str = ",".join(resolved_models) if resolved_models else "openai:gpt-4o-mini"
+        result = await tools.add_alias(alias="test_fast", models=models_str)
 
         assert result["success"] is True
         assert result["alias"] == "test_fast"
@@ -255,10 +257,12 @@ async def test_real_profile_management():
         tools = LockfileManagerTools(lockfile_path=lockfile_path)
 
         # Add to default profile
-        await tools.add_alias(alias="fast", model="openai:gpt-4o-mini", profile="default")
+        await tools.add_alias(alias="fast", models="openai:gpt-4o-mini", profile="default")
 
         # Add to dev profile
-        await tools.add_alias(alias="fast", model="anthropic:claude-3-haiku", profile="development")
+        await tools.add_alias(
+            alias="fast", models="anthropic:claude-3-haiku", profile="development"
+        )
 
         # List each profile
         default_result = await tools.list_aliases(profile="default")

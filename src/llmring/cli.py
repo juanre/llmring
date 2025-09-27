@@ -30,21 +30,21 @@ load_dotenv()
 
 async def cmd_lock_init(args):
     """Initialize a new lockfile with basic defaults from registry."""
-    # Find project root if not explicitly specified
+    # Find package directory if not explicitly specified
     if args.file:
         path = Path(args.file)
-        project_root = path.parent
+        package_dir = path.parent
     else:
-        # Try to find project root
-        project_root = Lockfile.find_project_root()
-        if project_root:
-            path = project_root / LOCKFILE_NAME
-            print(f"Found project root: {project_root}")
+        # Try to find package directory where lockfile should be placed
+        package_dir = Lockfile.find_package_directory()
+        if package_dir:
+            path = package_dir / LOCKFILE_NAME
+            print(f"Found package directory: {package_dir}")
         else:
             # Fall back to current directory
             path = Path(LOCKFILE_NAME)
-            project_root = Path.cwd()
-            print(f"No project root found (no {', '.join(PROJECT_ROOT_INDICATORS)})")
+            package_dir = Path.cwd()
+            print(f"No package directory found")
             print(f"Creating lockfile in current directory: {path.resolve()}")
 
     if path.exists() and not args.force:
@@ -103,8 +103,13 @@ async def cmd_lock_init(args):
 def cmd_bind(args):
     """Bind an alias to one or more models (with fallback support)."""
     # Load or create lockfile
-    # For bind command, use current directory lockfile
-    lockfile_path = Path(LOCKFILE_NAME)
+    # Find the package directory where lockfile should be
+    package_dir = Lockfile.find_package_directory()
+    if package_dir:
+        lockfile_path = package_dir / LOCKFILE_NAME
+    else:
+        # Fall back to current directory if no package found
+        lockfile_path = Path(LOCKFILE_NAME)
 
     if lockfile_path.exists():
         lockfile = Lockfile.load(lockfile_path)
@@ -112,7 +117,6 @@ def cmd_bind(args):
         print(f"No lockfile found at {lockfile_path}")
         print("Creating a new lockfile...")
         lockfile = Lockfile.create_default()
-        lockfile_path = Path(LOCKFILE_NAME)
 
     # Parse model(s) - can be comma-separated for fallbacks
     models = args.model  # Already a string, can be comma-separated
@@ -152,10 +156,16 @@ def cmd_aliases(args):
 
 async def cmd_lock_validate(args):
     """Validate lockfile against registry."""
-    # Use lockfile from current directory
-    lockfile_path = Path(LOCKFILE_NAME)
+    # Find the package directory where lockfile should be
+    package_dir = Lockfile.find_package_directory()
+    if package_dir:
+        lockfile_path = package_dir / LOCKFILE_NAME
+    else:
+        # Fall back to current directory if no package found
+        lockfile_path = Path(LOCKFILE_NAME)
+
     if not lockfile_path.exists():
-        print(f"Error: No llmring.lock found in current directory")
+        print(f"Error: No llmring.lock found at {lockfile_path}")
         print("Run 'llmring lock init' to create one.")
         return 1
 
@@ -189,10 +199,16 @@ async def cmd_lock_validate(args):
 
 async def cmd_lock_bump_registry(args):
     """Update pinned registry versions to latest."""
-    # Use lockfile from current directory
-    lockfile_path = Path(LOCKFILE_NAME)
+    # Find the package directory where lockfile should be
+    package_dir = Lockfile.find_package_directory()
+    if package_dir:
+        lockfile_path = package_dir / LOCKFILE_NAME
+    else:
+        # Fall back to current directory if no package found
+        lockfile_path = Path(LOCKFILE_NAME)
+
     if not lockfile_path.exists():
-        print(f"Error: No llmring.lock found in current directory")
+        print(f"Error: No llmring.lock found at {lockfile_path}")
         print("Run 'llmring lock init' to create one.")
         return 1
 
@@ -238,20 +254,34 @@ async def cmd_lock_chat(args):
     print("🤖 LLMRing Conversational Lockfile Manager")
     print("=" * 50)
 
-    # For lock chat, we need to use llmring's bundled lockfile
-    # to ensure the 'advisor' alias works
-    os.environ["LLMRING_LOCKFILE_PATH"] = str(Lockfile.get_package_lockfile_path())
+    # Find the user's package lockfile path (inside their package for distribution)
+    package_dir = Lockfile.find_package_directory()
+    if package_dir:
+        user_lockfile_path = package_dir / LOCKFILE_NAME
+        print(f"📦 Package directory: {package_dir}")
+    else:
+        # Fall back to current directory if no package found
+        user_lockfile_path = Path.cwd() / LOCKFILE_NAME
+        print(f"📁 No package found, using current directory")
+    print(f"📄 Managing lockfile: {user_lockfile_path}")
 
     # If no server URL provided, we'll use embedded server
     if not args.server_url:
         # The stdio transport will be handled by the chat app directly
-        # We pass the command to run, not a URL
-        server_url = "stdio://python -m llmring.mcp.server.lockfile_server"
+        # Pass the lockfile path as an argument to the server
+        # This will override any LLMRING_LOCKFILE_PATH environment variable
+        server_url = (
+            f"stdio://python -m llmring.mcp.server.lockfile_server --lockfile {user_lockfile_path}"
+        )
         server_process = None  # stdio client will manage the process
         print("Will use embedded lockfile MCP server via stdio")
     else:
         server_url = args.server_url
         server_process = None
+
+    # Set the bundled lockfile path AFTER configuring the server URL
+    # This ensures the 'advisor' alias works but doesn't affect the server
+    os.environ["LLMRING_LOCKFILE_PATH"] = str(Lockfile.get_package_lockfile_path())
 
     # System prompt that explains fallback models clearly
     system_prompt = """You are the LLMRing Lockfile Manager assistant. You help users manage their LLM aliases and model configurations.
@@ -341,8 +371,14 @@ async def cmd_chat(args):
     """Send a chat message to an LLM."""
     # Check if we should use an alias
     if ":" not in args.model:
-        # Try to resolve as alias from current directory lockfile
-        lockfile_path = Path(LOCKFILE_NAME)
+        # Try to resolve as alias from package lockfile
+        package_dir = Lockfile.find_package_directory()
+        if package_dir:
+            lockfile_path = package_dir / LOCKFILE_NAME
+        else:
+            # Fall back to current directory if no package found
+            lockfile_path = Path(LOCKFILE_NAME)
+
         if lockfile_path.exists():
             lockfile = Lockfile.load(lockfile_path)
 

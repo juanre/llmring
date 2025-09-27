@@ -535,6 +535,92 @@ class Lockfile(BaseModel):
 
         return None
 
+    @classmethod
+    def find_package_directory(cls, start_path: Optional[Path] = None) -> Optional[Path]:
+        """Find the package directory where llmring.lock should be placed.
+
+        This reads pyproject.toml to determine the package structure and finds
+        the appropriate package directory so the lockfile gets distributed with the package.
+
+        Args:
+            start_path: Starting path for search (defaults to current directory)
+
+        Returns:
+            Path to package directory where llmring.lock should be placed, or None if not found
+        """
+        # First find the project root
+        project_root = cls.find_project_root(start_path)
+        if not project_root:
+            return None
+
+        pyproject_path = project_root / "pyproject.toml"
+        if not pyproject_path.exists():
+            # Fall back to looking for __init__.py in common locations
+            # Try src layout first
+            src_dir = project_root / "src"
+            if src_dir.exists():
+                for item in src_dir.iterdir():
+                    if item.is_dir() and (item / "__init__.py").exists():
+                        return item
+            # Try flat layout
+            for item in project_root.iterdir():
+                if (
+                    item.is_dir()
+                    and (item / "__init__.py").exists()
+                    and not item.name.startswith(".")
+                ):
+                    return item
+            return None
+
+        # Parse pyproject.toml to find the package
+        try:
+            import tomllib
+        except ImportError:
+            try:
+                import tomli as tomllib
+            except ImportError:
+                # Can't parse TOML, fall back to heuristics
+                src_dir = project_root / "src"
+                if src_dir.exists():
+                    for item in src_dir.iterdir():
+                        if item.is_dir() and (item / "__init__.py").exists():
+                            return item
+                return None
+
+        try:
+            with open(pyproject_path, "rb") as f:
+                data = tomllib.load(f)
+
+            # Check for package name in project metadata
+            package_name = None
+            if "project" in data and "name" in data["project"]:
+                package_name = data["project"]["name"].replace("-", "_")
+            elif "tool" in data and "poetry" in data["tool"] and "name" in data["tool"]["poetry"]:
+                package_name = data["tool"]["poetry"]["name"].replace("-", "_")
+
+            if package_name:
+                # Check src layout
+                src_package = project_root / "src" / package_name
+                if src_package.exists() and (src_package / "__init__.py").exists():
+                    return src_package
+
+                # Check flat layout
+                flat_package = project_root / package_name
+                if flat_package.exists() and (flat_package / "__init__.py").exists():
+                    return flat_package
+
+            # If we can't find by name, try to find any package in src/
+            src_dir = project_root / "src"
+            if src_dir.exists():
+                for item in src_dir.iterdir():
+                    if item.is_dir() and (item / "__init__.py").exists():
+                        return item
+
+        except Exception as e:
+            logger.debug(f"Could not parse pyproject.toml: {e}")
+
+        return None
+
     def calculate_digest(self) -> str:
         """
         Calculate SHA256 digest of the lockfile for receipts.

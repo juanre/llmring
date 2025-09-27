@@ -35,16 +35,22 @@ class LockfileManagerTools:
         """
         if lockfile_path:
             self.lockfile_path = lockfile_path
-            self.project_root = lockfile_path.parent
+            self.package_dir = lockfile_path.parent
+            self.project_root = Lockfile.find_project_root() or lockfile_path.parent
         else:
-            # Try to find project root
+            # Try to find package directory where lockfile should be
+            self.package_dir = Lockfile.find_package_directory()
             self.project_root = Lockfile.find_project_root()
-            if self.project_root:
-                self.lockfile_path = self.project_root / LOCKFILE_NAME
+
+            if self.package_dir:
+                self.lockfile_path = self.package_dir / LOCKFILE_NAME
             else:
                 # Fall back to current directory
                 self.lockfile_path = Path(LOCKFILE_NAME)
-                self.project_root = Path.cwd()
+                self.package_dir = Path.cwd()
+
+            if not self.project_root:
+                self.project_root = self.package_dir
 
         self.lockfile = None
         self.registry = RegistryClient()
@@ -410,12 +416,20 @@ class LockfileManagerTools:
 
         aliases = []
         for binding in profile_config.bindings:
+            # Get the first model as the primary one
+            primary_model = binding.models[0] if binding.models else ""
+            provider = ""
+            model_name = primary_model
+            if ":" in primary_model:
+                provider, model_name = primary_model.split(":", 1)
+
             aliases.append(
                 {
                     "alias": binding.alias,
-                    "provider": binding.provider,
-                    "model": binding.model,
-                    "model_ref": binding.model_ref,
+                    "provider": provider,
+                    "model": model_name,
+                    "model_ref": primary_model,
+                    "models": binding.models,  # Include full fallback chain
                 }
             )
 
@@ -618,7 +632,9 @@ class LockfileManagerTools:
             # Use actual profile bindings
             prof = self.lockfile.get_profile(profile)
             for binding in prof.bindings:
-                models_to_analyze[binding.alias] = binding.model_ref
+                # Use the first model as the primary for cost analysis
+                primary_model = binding.models[0] if binding.models else ""
+                models_to_analyze[binding.alias] = primary_model
 
         cost_breakdown = {}
         total_cost = 0.0

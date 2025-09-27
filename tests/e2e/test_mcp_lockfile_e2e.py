@@ -71,16 +71,16 @@ async def test_e2e_complete_workflow():
             print("\n✅ Step 1: Adding test aliases...")
 
             test_aliases = [
-                {"alias": "fast", "model": "openai:gpt-4o-mini"},
-                {"alias": "deep", "model": "anthropic:claude-3-5-sonnet"},
+                {"alias": "fast", "models": "openai:gpt-4o-mini"},
+                {"alias": "deep", "models": "anthropic:claude-3-5-sonnet"},
             ]
 
             for alias_config in test_aliases:
                 add_result = await tools.add_alias(
-                    alias=alias_config["alias"], model=alias_config["model"]
+                    alias=alias_config["alias"], models=alias_config["models"]
                 )
                 assert add_result["success"]
-                print(f"   Added {alias_config['alias']} -> {alias_config['model']}")
+                print(f"   Added {alias_config['alias']} -> {alias_config['models']}")
 
             # Step 2: List current configuration
             print("\n📋 Step 2: Listing current aliases...")
@@ -149,7 +149,7 @@ async def test_e2e_conversational_flow():
         # Conversation 1: User wants fast responses
         print("\n👤 User: I need a really fast model for quick responses")
 
-        result = await tools.add_alias(alias="fast", model="openai:gpt-4o-mini")
+        result = await tools.add_alias(alias="fast", models="openai:gpt-4o-mini")
 
         print(f"🤖 Assistant: I've added the 'fast' alias with {result['model']}")
         print(f"   Recommendation: {result.get('recommendation', 'Optimized for speed')}")
@@ -173,7 +173,7 @@ async def test_e2e_conversational_flow():
         print(f"   This model has excellent code generation capabilities")
 
         # Add the alias
-        await tools.add_alias(alias="coder", model="openai:gpt-4o")
+        await tools.add_alias(alias="coder", models="openai:gpt-4o")
 
         # Conversation 4: User wants to see everything
         print("\n👤 User: Show me all my aliases")
@@ -213,7 +213,7 @@ async def test_e2e_error_recovery():
         # Error 1: Invalid model format
         print("\n❌ Attempting invalid model format...")
 
-        result = await tools.add_alias(alias="broken", model="this:is:not:valid:format")
+        result = await tools.add_alias(alias="broken", models="this:is:not:valid:format")
 
         if not result["success"]:
             print(f"   Handled gracefully: {result.get('message', 'Invalid format detected')}")
@@ -247,7 +247,7 @@ async def test_e2e_error_recovery():
         # Recovery: Continue working after errors
         print("\n✅ Continuing normal operations after errors...")
 
-        final_result = await tools.add_alias(alias="working", model="openai:gpt-4o-mini")
+        final_result = await tools.add_alias(alias="working", models="openai:gpt-4o-mini")
 
         assert final_result["success"]
         print(f"   Successfully added 'working' alias: {final_result['model']}")
@@ -277,7 +277,7 @@ async def test_e2e_multi_profile():
             print(f"\n📁 Setting up profile: {profile_name}")
 
             for alias, model in aliases.items():
-                result = await tools.add_alias(alias=alias, model=model, profile=profile_name)
+                result = await tools.add_alias(alias=alias, models=model, profile=profile_name)
                 assert result["success"]
                 print(f"   Added {alias} -> {model}")
 

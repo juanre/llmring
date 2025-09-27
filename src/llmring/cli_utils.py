@@ -65,7 +65,16 @@ def load_lockfile_or_exit(
     Note:
         This function may call sys.exit(1) if require_exists=True and no lockfile found
     """
-    lockfile_path = path or Path(LOCKFILE_NAME)
+    if path:
+        lockfile_path = path
+    else:
+        # Find the package directory where lockfile should be
+        package_dir = Lockfile.find_package_directory()
+        if package_dir:
+            lockfile_path = package_dir / LOCKFILE_NAME
+        else:
+            # Fall back to current directory if no package found
+            lockfile_path = Path(LOCKFILE_NAME)
 
     if require_exists and not lockfile_path.exists():
         print(format_error(ERROR_NO_LOCKFILE))
