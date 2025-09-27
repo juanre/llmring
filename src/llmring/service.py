@@ -181,22 +181,9 @@ class LLMRing:
                 if hasattr(provider, "models"):
                     models[provider_name] = list(provider.models.keys())
                 else:
-                    # Default models for providers without explicit model list
-                    if provider_name == "openai":
-                        models[provider_name] = ["gpt-4o", "gpt-4o-mini", "gpt-5-nano", "gpt-4.1"]
-                    elif provider_name == "anthropic":
-                        models[provider_name] = [
-                            "claude-3-5-sonnet",
-                            "claude-3-5-haiku",
-                            "claude-opus-4-1-20250805",
-                        ]
-                    elif provider_name == "google":
-                        models[provider_name] = ["gemini-2.0-flash-exp", "gemini-2.0-flash-lite"]
-                    elif provider_name == "ollama":
-                        # For Ollama, we can't easily get models synchronously
-                        models[provider_name] = ["llama3:latest", "mistral:latest"]
-                    else:
-                        models[provider_name] = []
+                    # No hardcoded defaults - providers should fetch from registry
+                    # or have their own model discovery mechanism
+                    models[provider_name] = []
             except Exception:
                 models[provider_name] = []
         return models

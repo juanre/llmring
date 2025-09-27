@@ -115,24 +115,18 @@ class Lockfile(BaseModel):
 
     @classmethod
     def create_default(cls) -> "Lockfile":
-        """Create a default lockfile with sensible defaults based on available API keys.
+        """Create a default lockfile with empty profiles.
 
-        Note: This creates a basic lockfile. For registry-based defaults,
+        Note: This creates an empty lockfile. For registry-based defaults,
         use create_default_async() instead.
         """
         lockfile = cls()
 
-        # Create default profile
+        # Create empty default profile
         default_profile = ProfileConfig(name="default")
-
-        # Create basic defaults without hardcoded models
-        defaults = cls._suggest_defaults_basic()
-        for alias, model_ref in defaults.items():
-            default_profile.set_binding(alias, model_ref)
-
         lockfile.profiles["default"] = default_profile
 
-        # Create additional profiles
+        # Create additional empty profiles
         lockfile.profiles["prod"] = ProfileConfig(name="prod")
         lockfile.profiles["staging"] = ProfileConfig(name="staging")
         lockfile.profiles["dev"] = ProfileConfig(name="dev")
@@ -173,21 +167,6 @@ class Lockfile(BaseModel):
         lockfile.profiles["dev"] = ProfileConfig(name="dev")
 
         return lockfile
-
-    @staticmethod
-    def _suggest_defaults_basic() -> Dict[str, str]:
-        """Suggest basic default bindings without hardcoded models.
-
-        Returns minimal defaults that don't rely on specific model IDs.
-        For registry-based suggestions, use _suggest_defaults_from_registry().
-        """
-        defaults = {}
-
-        # Return empty defaults - let user explicitly configure
-        # or use registry-based creation
-        # No hardcoded models per source-of-truth principles
-
-        return defaults
 
     @staticmethod
     async def _suggest_defaults_from_registry(registry_client) -> Dict[str, str]:

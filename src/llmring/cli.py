@@ -140,48 +140,6 @@ def cmd_aliases(args):
     return 0
 
 
-async def cmd_lock_optimize(args):
-    """Optimize existing lockfile with current registry data."""
-    lockfile_path = Path(LOCKFILE_NAME)
-    if not lockfile_path.exists():
-        print("Error: No llmring.lock found.")
-        return 1
-
-    print("🔄 Optimizing lockfile with current registry data...")
-    print("   (This would analyze current bindings vs registry and suggest improvements)")
-    print("   🚧 Full implementation coming in v1.1.0")
-    return 0
-
-
-async def cmd_lock_analyze(args):
-    """Analyze current lockfile cost and coverage."""
-    lockfile_path = Path(LOCKFILE_NAME)
-    if not lockfile_path.exists():
-        print("Error: No llmring.lock found.")
-        return 1
-
-    lockfile = Lockfile.load(lockfile_path)
-    profile = lockfile.get_profile("default")
-
-    print("📊 Lockfile Analysis:")
-    print(f"   Profile: {profile.name}")
-    print(f"   Aliases: {len(profile.bindings)}")
-    print()
-
-    for binding in profile.bindings:
-        print(f"  {binding.alias:<12} → {binding.model_ref}")
-
-    if args.cost:
-        print("\n💰 Cost Analysis:")
-        print("   (Detailed cost projections coming in v1.1.0)")
-
-    if args.coverage:
-        print("\n🎯 Capability Coverage:")
-        print("   (Capability analysis coming in v1.1.0)")
-
-    return 0
-
-
 async def cmd_lock_validate(args):
     """Validate lockfile against registry."""
     # Use lockfile from current directory
@@ -646,18 +604,6 @@ def main():
     # lock validate
     lock_subparsers.add_parser("validate", help="Validate lockfile against registry")
 
-    # lock optimize
-    lock_subparsers.add_parser(
-        "optimize", help="Optimize existing lockfile with current registry data"
-    )
-
-    # lock analyze
-    analyze_parser = lock_subparsers.add_parser(
-        "analyze", help="Analyze current lockfile cost and coverage"
-    )
-    analyze_parser.add_argument("--cost", action="store_true", help="Show cost analysis")
-    analyze_parser.add_argument("--coverage", action="store_true", help="Show capability coverage")
-
     # lock bump-registry
     lock_subparsers.add_parser("bump-registry", help="Update registry versions")
 
@@ -755,8 +701,6 @@ def main():
         lock_commands = {
             "init": cmd_lock_init,
             "validate": cmd_lock_validate,
-            "optimize": cmd_lock_optimize,
-            "analyze": cmd_lock_analyze,
             "bump-registry": cmd_lock_bump_registry,
             "chat": cmd_lock_chat,
         }
