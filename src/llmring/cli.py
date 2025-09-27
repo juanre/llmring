@@ -9,6 +9,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from llmring import LLMRequest, LLMRing, Message
+from llmring.cli_utils import (
+    format_error,
+    format_info,
+    format_success,
+    format_warning,
+    load_lockfile_or_exit,
+    print_aliases,
+    print_packaging_guidance,
+)
+from llmring.constants import LOCKFILE_NAME, PROJECT_ROOT_INDICATORS
 from llmring.lockfile_core import Lockfile
 from llmring.registry import RegistryClient
 
@@ -28,17 +38,17 @@ async def cmd_lock_init(args):
         # Try to find project root
         project_root = Lockfile.find_project_root()
         if project_root:
-            path = project_root / "llmring.lock"
+            path = project_root / LOCKFILE_NAME
             print(f"Found project root: {project_root}")
         else:
             # Fall back to current directory
-            path = Path("llmring.lock")
+            path = Path(LOCKFILE_NAME)
             project_root = Path.cwd()
-            print("No project root found (no pyproject.toml, setup.py, or .git)")
+            print(f"No project root found (no {', '.join(PROJECT_ROOT_INDICATORS)})")
             print(f"Creating lockfile in current directory: {path.resolve()}")
 
     if path.exists() and not args.force:
-        print(f"Error: {path} already exists. Use --force to overwrite.")
+        print(format_error(f"{path} already exists. Use --force to overwrite"))
         return 1
 
     print("Creating lockfile with registry-based defaults...")
@@ -90,11 +100,11 @@ async def cmd_lock_init(args):
     return 0
 
 
-async def cmd_bind(args):
+def cmd_bind(args):
     """Bind an alias to a model."""
     # Load or create lockfile
     # For bind command, use current directory lockfile
-    lockfile_path = Path("llmring.lock")
+    lockfile_path = Path(LOCKFILE_NAME)
 
     if lockfile_path.exists():
         lockfile = Lockfile.load(lockfile_path)
@@ -102,7 +112,7 @@ async def cmd_bind(args):
         print(f"No lockfile found at {lockfile_path}")
         print("Creating a new lockfile...")
         lockfile = Lockfile.create_default()
-        lockfile_path = Path("llmring.lock")
+        lockfile_path = Path(LOCKFILE_NAME)
 
     # Set binding
     lockfile.set_binding(args.alias, args.model, profile=args.profile)
@@ -116,36 +126,23 @@ async def cmd_bind(args):
     return 0
 
 
-async def cmd_aliases(args):
+def cmd_aliases(args):
     """List aliases from lockfile."""
-    # Use lockfile from current directory
-    lockfile_path = Path("llmring.lock")
+    from .cli_utils import load_lockfile_or_exit, print_aliases
 
-    if not lockfile_path.exists():
-        print(f"Error: No llmring.lock found in current directory.")
-        print("Run 'llmring lock init' to create one.")
+    # Load lockfile with consistent error handling
+    lockfile_path, lockfile = load_lockfile_or_exit(require_exists=True)
+    if not lockfile:
         return 1
 
-    lockfile = Lockfile.load(lockfile_path)
-    profile = lockfile.get_profile(args.profile)
-
-    print(f"Aliases in profile '{profile.name}':")
-    print("-" * 40)
-
-    if not profile.bindings:
-        print("(no aliases defined)")
-    else:
-        for binding in profile.bindings:
-            print(f"{binding.alias:<20} → {binding.model_ref}")
-            if binding.constraints:
-                print(f"  Constraints: {binding.constraints}")
-
+    # Use the utility function to print aliases
+    print_aliases(lockfile, args.profile)
     return 0
 
 
 async def cmd_lock_optimize(args):
     """Optimize existing lockfile with current registry data."""
-    lockfile_path = Path("llmring.lock")
+    lockfile_path = Path(LOCKFILE_NAME)
     if not lockfile_path.exists():
         print("Error: No llmring.lock found.")
         return 1
@@ -158,7 +155,7 @@ async def cmd_lock_optimize(args):
 
 async def cmd_lock_analyze(args):
     """Analyze current lockfile cost and coverage."""
-    lockfile_path = Path("llmring.lock")
+    lockfile_path = Path(LOCKFILE_NAME)
     if not lockfile_path.exists():
         print("Error: No llmring.lock found.")
         return 1
@@ -188,7 +185,7 @@ async def cmd_lock_analyze(args):
 async def cmd_lock_validate(args):
     """Validate lockfile against registry."""
     # Use lockfile from current directory
-    lockfile_path = Path("llmring.lock")
+    lockfile_path = Path(LOCKFILE_NAME)
     if not lockfile_path.exists():
         print(f"Error: No llmring.lock found in current directory")
         print("Run 'llmring lock init' to create one.")
@@ -225,7 +222,7 @@ async def cmd_lock_validate(args):
 async def cmd_lock_bump_registry(args):
     """Update pinned registry versions to latest."""
     # Use lockfile from current directory
-    lockfile_path = Path("llmring.lock")
+    lockfile_path = Path(LOCKFILE_NAME)
     if not lockfile_path.exists():
         print(f"Error: No llmring.lock found in current directory")
         print("Run 'llmring lock init' to create one.")
@@ -335,7 +332,7 @@ async def cmd_chat(args):
     # Check if we should use an alias
     if ":" not in args.model:
         # Try to resolve as alias from current directory lockfile
-        lockfile_path = Path("llmring.lock")
+        lockfile_path = Path(LOCKFILE_NAME)
         if lockfile_path.exists():
             lockfile = Lockfile.load(lockfile_path)
 
@@ -572,7 +569,7 @@ async def cmd_register(args):
     return 0
 
 
-async def cmd_providers(args):
+def cmd_providers(args):
     """List configured providers."""
     ring = LLMRing()
 
@@ -768,21 +765,25 @@ def main():
             return asyncio.run(lock_commands[args.lock_command](args))
 
     # Run the appropriate command
-    command_map = {
-        "bind": cmd_bind,
-        "aliases": cmd_aliases,
+    async_commands = {
         "list": cmd_list_models,
         "chat": cmd_chat,
         "info": cmd_info,
-        "providers": cmd_providers,
-        # Push/pull removed per source-of-truth v3.8
         "stats": cmd_stats,
         "export": cmd_export,
         "register": cmd_register,
     }
 
-    if args.command in command_map:
-        return asyncio.run(command_map[args.command](args))
+    sync_commands = {
+        "bind": cmd_bind,
+        "aliases": cmd_aliases,
+        "providers": cmd_providers,
+    }
+
+    if args.command in async_commands:
+        return asyncio.run(async_commands[args.command](args))
+    elif args.command in sync_commands:
+        return sync_commands[args.command](args)
     else:
         parser.print_help()
         return 1

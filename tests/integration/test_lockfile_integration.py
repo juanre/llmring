@@ -188,23 +188,29 @@ class TestLockfileIntegration:
         """Test binding aliases through service."""
         lockfile_path = tmp_path / "llmring.lock"
 
+        # Create lockfile explicitly
+        lockfile = Lockfile.create_default()
+        lockfile.save(lockfile_path)
+        assert lockfile_path.exists()
+
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}):
             service = LLMRing(lockfile_path=str(lockfile_path))
 
-            # Initially should have a default lockfile (created when path provided but file doesn't exist)
+            # Should have loaded the lockfile
             assert service.lockfile is not None
-            assert not lockfile_path.exists()  # File not saved yet
 
-            # Bind alias (should update lockfile)
+            # Bind alias (should update lockfile in memory)
             service.bind_alias("test", "openai:gpt-4")
-
-            assert service.lockfile is not None
-            # Note: bind_alias doesn't automatically save to disk
 
             # Check alias was bound in memory
             aliases = service.list_aliases()
             assert "test" in aliases
             assert aliases["test"] == "openai:gpt-4"
+
+            # Note: bind_alias saves to disk automatically
+            # Verify it was saved
+            loaded = Lockfile.load(lockfile_path)
+            assert loaded.resolve_alias("test") == "openai:gpt-4"
 
     def test_list_aliases_from_service(self, tmp_path):
         """Test listing aliases through service."""

@@ -17,6 +17,13 @@ from typing import Any, Dict, List, Optional
 import toml
 from pydantic import BaseModel, Field
 
+from llmring.constants import (
+    DEFAULT_PROFILE,
+    LOCKFILE_JSON_NAME,
+    LOCKFILE_NAME,
+    PROJECT_ROOT_INDICATORS,
+)
+
 try:
     # Python 3.9+
     from importlib.resources import files
@@ -372,7 +379,7 @@ class Lockfile(BaseModel):
 
     def save(self, path: Optional[Path] = None):
         """Save the lockfile to disk."""
-        path = path or Path("llmring.lock")
+        path = path or Path(LOCKFILE_NAME)
 
         # Convert to dict for serialization
         data = self.model_dump(mode="json")
@@ -397,7 +404,7 @@ class Lockfile(BaseModel):
     @classmethod
     def load(cls, path: Optional[Path] = None) -> "Lockfile":
         """Load a lockfile from disk."""
-        path = path or Path("llmring.lock")
+        path = path or Path(LOCKFILE_NAME)
 
         if not path.exists():
             # Return default if file doesn't exist
@@ -437,28 +444,6 @@ class Lockfile(BaseModel):
         return cls(**data)
 
     @classmethod
-    def find_lockfile(cls, start_path: Optional[Path] = None) -> Optional[Path]:
-        """Find a lockfile by searching up the directory tree.
-
-        DEPRECATED: This method will be removed. Use explicit paths instead.
-        """
-        current = Path(start_path or os.getcwd()).resolve()
-
-        while current != current.parent:
-            lockfile_path = current / "llmring.lock"
-            if lockfile_path.exists():
-                return lockfile_path
-
-            # Also check for JSON variant
-            lockfile_json = current / "llmring.lock.json"
-            if lockfile_json.exists():
-                return lockfile_json
-
-            current = current.parent
-
-        return None
-
-    @classmethod
     def get_package_lockfile_path(cls) -> Path:
         """Get the path to llmring's bundled lockfile.
 
@@ -468,14 +453,14 @@ class Lockfile(BaseModel):
         try:
             # Use importlib.resources to get the bundled lockfile
             package_files = files("llmring")
-            lockfile_resource = package_files / "llmring.lock"
+            lockfile_resource = package_files / LOCKFILE_NAME
 
             # For Python 3.9+, we can use as_file context manager
             # For now, return the path directly
             return Path(str(lockfile_resource))
         except Exception as e:
             # Fallback: try to find it relative to this file
-            fallback_path = Path(__file__).parent / "llmring.lock"
+            fallback_path = Path(__file__).parent / LOCKFILE_NAME
             if fallback_path.exists():
                 return fallback_path
             raise RuntimeError(f"Could not find bundled llmring.lock: {e}")
@@ -502,13 +487,8 @@ class Lockfile(BaseModel):
         """
         current = Path(start_path or os.getcwd()).resolve()
 
-        # Indicators of a project root
-        root_indicators = [
-            "pyproject.toml",
-            "setup.py",
-            "setup.cfg",
-            ".git",  # Git repository root
-        ]
+        # Use indicators from constants
+        root_indicators = PROJECT_ROOT_INDICATORS
 
         while current != current.parent:
             for indicator in root_indicators:

@@ -137,9 +137,9 @@ async def test_real_chat_app_initialization():
         lockfile_path = Path(tmpdir) / "test.lock"
 
         # Create a minimal lockfile with advisor alias
-        lockfile = Lockfile(path=lockfile_path)
+        lockfile = Lockfile()
         lockfile.set_binding("advisor", "anthropic:claude-opus-4-1-20250805", profile="default")
-        lockfile.save()
+        lockfile.save(lockfile_path)
 
         # Set environment to use our lockfile
         os.environ["LLMRING_LOCKFILE_PATH"] = str(lockfile_path)

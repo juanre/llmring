@@ -23,15 +23,17 @@ def test_help_commands():
     """Test help output for all commands."""
     print("=== Testing help commands ===")
 
+    # Use Python module path for our mcp-client
+    python_exe = sys.executable
     commands = [
-        "mcp-client --help",
-        "mcp-client query --help",
-        "mcp-client conversations --help",
-        "mcp-client conversations list --help",
-        "mcp-client conversations show --help",
-        "mcp-client conversations delete --help",
-        "mcp-client conversations export --help",
-        "mcp-client chat --help",
+        f"{python_exe} -m llmring.mcp.client.cli --help",
+        f"{python_exe} -m llmring.mcp.client.cli query --help",
+        f"{python_exe} -m llmring.mcp.client.cli conversations --help",
+        f"{python_exe} -m llmring.mcp.client.cli conversations list --help",
+        f"{python_exe} -m llmring.mcp.client.cli conversations show --help",
+        f"{python_exe} -m llmring.mcp.client.cli conversations delete --help",
+        f"{python_exe} -m llmring.mcp.client.cli conversations export --help",
+        f"{python_exe} -m llmring.mcp.client.cli chat --help",
     ]
 
     for cmd in commands:
@@ -45,8 +47,13 @@ def test_query_command():
     print("\n=== Testing query command ===")
 
     # Create a temporary lockfile for testing
+    # Use TOML format with the standard name that service expects
     with tempfile.TemporaryDirectory() as tmpdir:
-        lockfile_path = os.path.join(tmpdir, "llmring.lock.json")
+        lockfile_path = os.path.join(tmpdir, "llmring.lock")
+
+        # Create a TOML lockfile (which is what the service expects in current directory)
+        import toml
+
         lockfile_data = {
             "version": "1.0",
             "created_at": "2025-01-01T00:00:00Z",
@@ -69,13 +76,15 @@ def test_query_command():
         }
 
         with open(lockfile_path, "w") as f:
-            json.dump(lockfile_data, f)
+            toml.dump(lockfile_data, f)
 
         # Run command from the temp directory so it finds the lockfile
         original_cwd = os.getcwd()
         try:
             os.chdir(tmpdir)
-            cmd = 'mcp-client --model test query "What is 2+2?" --no-save --show-id'
+            # Run our mcp-client module directly
+            python_exe = sys.executable
+            cmd = f'{python_exe} -m llmring.mcp.client.cli --model test query "What is 2+2?" --no-save --show-id'
             code, stdout, stderr = run_command(cmd)
         finally:
             os.chdir(original_cwd)
@@ -90,20 +99,21 @@ def test_conversations_commands():
     """Test conversations commands."""
     print("\n=== Testing conversations commands ===")
 
+    python_exe = sys.executable
     # Test list command
-    cmd = "mcp-client conversations list --limit 5"
+    cmd = f"{python_exe} -m llmring.mcp.client.cli conversations list --limit 5"
     code, stdout, stderr = run_command(cmd)
 
     # Test show command (with fake ID)
-    cmd = "mcp-client conversations show test-id-123"
+    cmd = f"{python_exe} -m llmring.mcp.client.cli conversations show test-id-123"
     code, stdout, stderr = run_command(cmd)
 
     # Test export command
-    cmd = "mcp-client conversations export test-id-123 --format json"
+    cmd = f"{python_exe} -m llmring.mcp.client.cli conversations export test-id-123 --format json"
     code, stdout, stderr = run_command(cmd)
 
     # Test delete command (with --yes to skip confirmation)
-    cmd = "mcp-client conversations delete test-id-123 --yes"
+    cmd = f"{python_exe} -m llmring.mcp.client.cli conversations delete test-id-123 --yes"
     code, stdout, stderr = run_command(cmd)
 
 
@@ -111,8 +121,9 @@ def test_chat_resume():
     """Test chat --resume functionality."""
     print("\n=== Testing chat --resume ===")
 
+    python_exe = sys.executable
     # Test --resume without --cid (should error)
-    cmd = "mcp-client chat --resume"
+    cmd = f"{python_exe} -m llmring.mcp.client.cli chat --resume"
     code, stdout, stderr = run_command(cmd)
     assert code != 0, "Expected error for --resume without --cid"
     assert "--cid" in stdout or "--cid" in stderr, "Should mention --cid requirement"

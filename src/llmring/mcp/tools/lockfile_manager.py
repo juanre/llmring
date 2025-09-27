@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
+from llmring.constants import LOCKFILE_NAME, SUCCESS_PREFIX, WARNING_PREFIX
 from llmring.lockfile_core import AliasBinding, Lockfile, ProfileConfig
 from llmring.registry import RegistryClient
 
@@ -39,10 +40,10 @@ class LockfileManagerTools:
             # Try to find project root
             self.project_root = Lockfile.find_project_root()
             if self.project_root:
-                self.lockfile_path = self.project_root / "llmring.lock"
+                self.lockfile_path = self.project_root / LOCKFILE_NAME
             else:
                 # Fall back to current directory
-                self.lockfile_path = Path("llmring.lock")
+                self.lockfile_path = Path(LOCKFILE_NAME)
                 self.project_root = Path.cwd()
 
         self.lockfile = None

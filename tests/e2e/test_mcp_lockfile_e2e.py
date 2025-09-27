@@ -53,9 +53,9 @@ async def test_e2e_complete_workflow():
         lockfile_path = Path(tmpdir) / "e2e.lock"
 
         # Create initial lockfile with advisor
-        lockfile = Lockfile(path=lockfile_path)
+        lockfile = Lockfile()
         lockfile.set_binding("advisor", "anthropic:claude-opus-4-1-20250805", profile="default")
-        lockfile.save()
+        lockfile.save(lockfile_path)
 
         # Set environment
         os.environ["LLMRING_LOCKFILE_PATH"] = str(lockfile_path)

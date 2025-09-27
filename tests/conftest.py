@@ -289,6 +289,36 @@ def sample_llm_response():
     )
 
 
+# Lockfile fixtures
+@pytest.fixture
+def create_test_lockfile(tmp_path):
+    """Factory fixture to create test lockfiles."""
+    from llmring.lockfile_core import Lockfile
+
+    def _create_lockfile(filename="llmring.lock", bindings=None):
+        """
+        Create a test lockfile with optional bindings.
+
+        Args:
+            filename: Name of the lockfile
+            bindings: Dict of alias -> model_ref bindings to add
+
+        Returns:
+            Path to the created lockfile
+        """
+        lockfile_path = tmp_path / filename
+        lockfile = Lockfile.create_default()
+
+        if bindings:
+            for alias, model_ref in bindings.items():
+                lockfile.set_binding(alias, model_ref)
+
+        lockfile.save(lockfile_path)
+        return lockfile_path
+
+    return _create_lockfile
+
+
 # Service fixtures
 @pytest.fixture
 async def llmring():

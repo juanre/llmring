@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, Union
 
 from llmring.base import BaseLLMProvider
+from llmring.constants import LOCKFILE_NAME
 from llmring.exceptions import ProviderNotFoundError
 from llmring.lockfile_core import Lockfile
 from llmring.providers.anthropic_api import AnthropicProvider
@@ -69,20 +70,20 @@ class LLMRing:
         # 4. Package's bundled lockfile (fallback)
 
         if lockfile_path:
-            # Explicit path provided
+            # Explicit path provided - must exist
             self.lockfile_path = Path(lockfile_path)
             if not self.lockfile_path.exists():
                 raise FileNotFoundError(f"Specified lockfile not found: {self.lockfile_path}")
             self.lockfile = Lockfile.load(self.lockfile_path)
         elif env_path := os.getenv("LLMRING_LOCKFILE_PATH"):
-            # Environment variable
+            # Environment variable - must exist
             self.lockfile_path = Path(env_path)
             if not self.lockfile_path.exists():
                 raise FileNotFoundError(f"Lockfile from env var not found: {self.lockfile_path}")
             self.lockfile = Lockfile.load(self.lockfile_path)
-        elif Path("./llmring.lock").exists():
+        elif Path(LOCKFILE_NAME).exists():
             # Current directory
-            self.lockfile_path = Path("./llmring.lock").resolve()
+            self.lockfile_path = Path(LOCKFILE_NAME).resolve()
             self.lockfile = Lockfile.load(self.lockfile_path)
         else:
             # Fallback to package's bundled lockfile
@@ -676,7 +677,7 @@ class LLMRing:
         """
         from pathlib import Path
 
-        lockfile_path = Path("llmring.lock")
+        lockfile_path = Path(LOCKFILE_NAME)
 
         if lockfile_path.exists() and not force:
             raise FileExistsError("Lockfile already exists. Use force=True to overwrite.")

@@ -30,9 +30,7 @@ class TestLockfile:
 
             # Should have no bindings without API keys (no hardcoded models)
             default_profile = lockfile.get_profile("default")
-            assert (
-                len(default_profile.bindings) == 0
-            )  # No hardcoded models per source-of-truth
+            assert len(default_profile.bindings) == 0  # No hardcoded models per source-of-truth
 
     def test_create_default_with_openai_key(self):
         """Test creating default lockfile with OpenAI API key."""
@@ -200,30 +198,28 @@ class TestLockfile:
         assert profile.name == "custom"
         assert "custom" in lockfile.profiles
 
-    def test_find_lockfile(self, tmp_path):
-        """Test finding lockfile in parent directories."""
+    def test_find_project_root(self, tmp_path):
+        """Test finding project root based on indicators."""
         # Create directory structure
         root = tmp_path / "project"
         subdir = root / "src" / "component"
         subdir.mkdir(parents=True)
 
-        # Create lockfile in root
-        lockfile_path = root / "llmring.lock"
-        lockfile = Lockfile.create_default()
-        lockfile.save(lockfile_path)
+        # Create pyproject.toml in root
+        pyproject = root / "pyproject.toml"
+        pyproject.write_text("[project]\nname = 'test'\n")
 
-        # Should find lockfile from subdirectory
+        # Should find project root from subdirectory
         with patch("os.getcwd", return_value=str(subdir)):
-            found_path = Lockfile.find_lockfile()
-            assert found_path is not None
-            assert found_path.name == "llmring.lock"
-            assert found_path.parent == root
+            found_root = Lockfile.find_project_root()
+            assert found_root is not None
+            assert found_root == root
 
-    def test_find_lockfile_not_found(self, tmp_path):
-        """Test when lockfile is not found."""
+    def test_find_project_root_not_found(self, tmp_path):
+        """Test when project root is not found."""
         with patch("os.getcwd", return_value=str(tmp_path)):
-            found_path = Lockfile.find_lockfile()
-            assert found_path is None
+            found_root = Lockfile.find_project_root()
+            assert found_root is None
 
     def test_constraints_in_binding(self):
         """Test bindings with constraints."""
