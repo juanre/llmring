@@ -1,0 +1,24 @@
+# Default lockfile for llmring package
+# This file is bundled with the llmring distribution and provides
+# the minimal aliases needed for llmring's own operations
+
+version = "1.0"
+created_at = "2025-09-27T10:00:00.000000+00:00"
+updated_at = "2025-09-27T10:00:00.000000+00:00"
+default_profile = "default"
+
+[metadata]
+description = "Default lockfile bundled with llmring package"
+source = "llmring"
+
+[profiles.default]
+name = "default"
+
+# The advisor alias is used by "llmring lock chat" for intelligent lockfile management
+[[profiles.default.bindings]]
+alias = "advisor"
+provider = "anthropic"
+model = "claude-opus-4-1-20250805"
+
+[profiles.default.registry_versions]
+# Empty by default - will be populated when users run registry commands

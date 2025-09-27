@@ -94,6 +94,7 @@ packages = ["src/llmring"]
 [tool.hatch.build]
 include = [
     "src/llmring/**/*.py",
+    "src/llmring/**/*.lock",  # Include lockfiles in package distribution
 ]
 
 [tool.pytest.ini_options]

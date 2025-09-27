@@ -20,7 +20,22 @@ load_dotenv()
 
 async def cmd_lock_init(args):
     """Initialize a new lockfile with basic defaults from registry."""
-    path = Path(args.file) if args.file else Path("llmring.lock")
+    # Find project root if not explicitly specified
+    if args.file:
+        path = Path(args.file)
+        project_root = path.parent
+    else:
+        # Try to find project root
+        project_root = Lockfile.find_project_root()
+        if project_root:
+            path = project_root / "llmring.lock"
+            print(f"Found project root: {project_root}")
+        else:
+            # Fall back to current directory
+            path = Path("llmring.lock")
+            project_root = Path.cwd()
+            print("No project root found (no pyproject.toml, setup.py, or .git)")
+            print(f"Creating lockfile in current directory: {path.resolve()}")
 
     if path.exists() and not args.force:
         print(f"Error: {path} already exists. Use --force to overwrite.")
@@ -55,21 +70,37 @@ async def cmd_lock_init(args):
     else:
         print("\nNo default aliases configured.")
 
+    # Check if we're in a Python project and provide packaging guidance
+    pyproject_path = project_root / "pyproject.toml"
+    if pyproject_path.exists():
+        print("\n⚠️  To include this lockfile in your package distribution:")
+        print("\nAdd to your pyproject.toml:")
+        print("")
+        print("  [tool.hatch.build]  # or similar for your build system")
+        print("  include = [")
+        print('      "src/yourpackage/**/*.py",  # your existing patterns')
+        print('      "src/yourpackage/**/*.lock",  # add this line')
+        print("  ]")
+        print("")
+        print("Or if using setuptools with setup.py, add to MANIFEST.in:")
+        print("  include src/yourpackage/*.lock")
+
     print("\n💡 Use 'llmring lock chat' for conversational lockfile management")
 
     return 0
 
 
-
-
 async def cmd_bind(args):
     """Bind an alias to a model."""
     # Load or create lockfile
-    lockfile_path = Lockfile.find_lockfile() or Path("llmring.lock")
+    # For bind command, use current directory lockfile
+    lockfile_path = Path("llmring.lock")
 
-    if lockfile_path and lockfile_path.exists():
+    if lockfile_path.exists():
         lockfile = Lockfile.load(lockfile_path)
     else:
+        print(f"No lockfile found at {lockfile_path}")
+        print("Creating a new lockfile...")
         lockfile = Lockfile.create_default()
         lockfile_path = Path("llmring.lock")
 
@@ -87,11 +118,12 @@ async def cmd_bind(args):
 
 async def cmd_aliases(args):
     """List aliases from lockfile."""
-    # Find lockfile
-    lockfile_path = Lockfile.find_lockfile()
+    # Use lockfile from current directory
+    lockfile_path = Path("llmring.lock")
 
-    if not lockfile_path:
-        print("Error: No llmring.lock found in current or parent directories.")
+    if not lockfile_path.exists():
+        print(f"Error: No llmring.lock found in current directory.")
+        print("Run 'llmring lock init' to create one.")
         return 1
 
     lockfile = Lockfile.load(lockfile_path)
@@ -113,8 +145,8 @@ async def cmd_aliases(args):
 
 async def cmd_lock_optimize(args):
     """Optimize existing lockfile with current registry data."""
-    lockfile_path = Lockfile.find_lockfile()
-    if not lockfile_path:
+    lockfile_path = Path("llmring.lock")
+    if not lockfile_path.exists():
         print("Error: No llmring.lock found.")
         return 1
 
@@ -126,8 +158,8 @@ async def cmd_lock_optimize(args):
 
 async def cmd_lock_analyze(args):
     """Analyze current lockfile cost and coverage."""
-    lockfile_path = Lockfile.find_lockfile()
-    if not lockfile_path:
+    lockfile_path = Path("llmring.lock")
+    if not lockfile_path.exists():
         print("Error: No llmring.lock found.")
         return 1
 
@@ -155,11 +187,11 @@ async def cmd_lock_analyze(args):
 
 async def cmd_lock_validate(args):
     """Validate lockfile against registry."""
-    # Find lockfile
-    lockfile_path = Lockfile.find_lockfile()
-
-    if not lockfile_path:
-        print("Error: No llmring.lock found.")
+    # Use lockfile from current directory
+    lockfile_path = Path("llmring.lock")
+    if not lockfile_path.exists():
+        print(f"Error: No llmring.lock found in current directory")
+        print("Run 'llmring lock init' to create one.")
         return 1
 
     lockfile = Lockfile.load(lockfile_path)
@@ -192,11 +224,11 @@ async def cmd_lock_validate(args):
 
 async def cmd_lock_bump_registry(args):
     """Update pinned registry versions to latest."""
-    # Find lockfile
-    lockfile_path = Lockfile.find_lockfile()
-
-    if not lockfile_path:
-        print("Error: No llmring.lock found.")
+    # Use lockfile from current directory
+    lockfile_path = Path("llmring.lock")
+    if not lockfile_path.exists():
+        print(f"Error: No llmring.lock found in current directory")
+        print("Run 'llmring lock init' to create one.")
         return 1
 
     lockfile = Lockfile.load(lockfile_path)
@@ -241,6 +273,10 @@ async def cmd_lock_chat(args):
     print("🤖 LLMRing Conversational Lockfile Manager")
     print("=" * 50)
 
+    # For lock chat, we need to use llmring's bundled lockfile
+    # to ensure the 'advisor' alias works
+    os.environ["LLMRING_LOCKFILE_PATH"] = str(Lockfile.get_package_lockfile_path())
+
     # If no server URL provided, we'll use embedded server
     if not args.server_url:
         # The stdio transport will be handled by the chat app directly
@@ -254,14 +290,13 @@ async def cmd_lock_chat(args):
 
     try:
         # Create and run MCP chat app
-        app = MCPChatApp(
-            mcp_server_url=server_url,
-            llm_model=args.model
-        )
+        app = MCPChatApp(mcp_server_url=server_url, llm_model=args.model)
 
         # Custom initialization message for lockfile management
         await app.initialize_async()
-        app.console.print("\n[bold green]Welcome to LLMRing Conversational Lockfile Manager![/bold green]")
+        app.console.print(
+            "\n[bold green]Welcome to LLMRing Conversational Lockfile Manager![/bold green]"
+        )
         app.console.print("\nYou can use natural language to manage your lockfile:")
         app.console.print("  • 'Add an alias called fast for quick responses'")
         app.console.print("  • 'What model should I use for coding?'")
@@ -299,9 +334,9 @@ async def cmd_chat(args):
     """Send a chat message to an LLM."""
     # Check if we should use an alias
     if ":" not in args.model:
-        # Try to resolve as alias
-        lockfile_path = Lockfile.find_lockfile()
-        if lockfile_path:
+        # Try to resolve as alias from current directory lockfile
+        lockfile_path = Path("llmring.lock")
+        if lockfile_path.exists():
             lockfile = Lockfile.load(lockfile_path)
 
             # Get profile from environment or use default
@@ -607,9 +642,7 @@ def main():
     lock_subparsers = lock_parser.add_subparsers(dest="lock_command", help="Lock commands")
 
     # lock init
-    init_parser = lock_subparsers.add_parser(
-        "init", help="Initialize lockfile with basic defaults"
-    )
+    init_parser = lock_subparsers.add_parser("init", help="Initialize lockfile with basic defaults")
     init_parser.add_argument("--file", help="Lockfile path (default: llmring.lock)")
     init_parser.add_argument("--force", action="store_true", help="Overwrite existing file")
 
@@ -636,13 +669,12 @@ def main():
         "chat", help="Conversational lockfile management with natural language"
     )
     chat_parser.add_argument(
-        "--server-url",
-        help="URL of lockfile MCP server (default: starts embedded server)"
+        "--server-url", help="URL of lockfile MCP server (default: starts embedded server)"
     )
     chat_parser.add_argument(
         "--model",
         default="advisor",
-        help="LLM model to use for conversation (default: advisor for intelligent recommendations)"
+        help="LLM model to use for conversation (default: advisor for intelligent recommendations)",
     )
 
     # Bind command

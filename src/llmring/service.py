@@ -58,19 +58,41 @@ class LLMRing:
         self.receipt_generator: Optional[ReceiptGenerator] = None
         self.receipts: List[Receipt] = []  # Store receipts locally for now
 
-        # Load lockfile if available
+        # Load lockfile with explicit resolution strategy
         self.lockfile: Optional[Lockfile] = None
         self.lockfile_path: Optional[Path] = None  # Remember where lockfile was loaded from
 
+        # Resolution order:
+        # 1. Explicit path parameter
+        # 2. Environment variable
+        # 3. Current working directory
+        # 4. Package's bundled lockfile (fallback)
+
         if lockfile_path:
+            # Explicit path provided
             self.lockfile_path = Path(lockfile_path)
+            if not self.lockfile_path.exists():
+                raise FileNotFoundError(f"Specified lockfile not found: {self.lockfile_path}")
+            self.lockfile = Lockfile.load(self.lockfile_path)
+        elif env_path := os.getenv("LLMRING_LOCKFILE_PATH"):
+            # Environment variable
+            self.lockfile_path = Path(env_path)
+            if not self.lockfile_path.exists():
+                raise FileNotFoundError(f"Lockfile from env var not found: {self.lockfile_path}")
+            self.lockfile = Lockfile.load(self.lockfile_path)
+        elif Path("./llmring.lock").exists():
+            # Current directory
+            self.lockfile_path = Path("./llmring.lock").resolve()
             self.lockfile = Lockfile.load(self.lockfile_path)
         else:
-            # Try to find lockfile in current directory or parents
-            found_path = Lockfile.find_lockfile()
-            if found_path:
-                self.lockfile_path = found_path
-                self.lockfile = Lockfile.load(found_path)
+            # Fallback to package's bundled lockfile
+            try:
+                self.lockfile = Lockfile.load_package_lockfile()
+                self.lockfile_path = Lockfile.get_package_lockfile_path()
+                logger.info(f"Using bundled lockfile from package: {self.lockfile_path}")
+            except Exception as e:
+                logger.warning(f"Could not load any lockfile: {e}")
+                # Continue without lockfile - some operations may fail
 
         self._initialize_providers()
 
@@ -155,14 +177,18 @@ class LLMRing:
         for provider_name, provider in self.providers.items():
             try:
                 # Get models from provider's configuration
-                if hasattr(provider, 'models'):
+                if hasattr(provider, "models"):
                     models[provider_name] = list(provider.models.keys())
                 else:
                     # Default models for providers without explicit model list
                     if provider_name == "openai":
                         models[provider_name] = ["gpt-4o", "gpt-4o-mini", "gpt-5-nano", "gpt-4.1"]
                     elif provider_name == "anthropic":
-                        models[provider_name] = ["claude-3-5-sonnet", "claude-3-5-haiku", "claude-opus-4-1-20250805"]
+                        models[provider_name] = [
+                            "claude-3-5-sonnet",
+                            "claude-3-5-haiku",
+                            "claude-opus-4-1-20250805",
+                        ]
                     elif provider_name == "google":
                         models[provider_name] = ["gemini-2.0-flash-exp", "gemini-2.0-flash-lite"]
                     elif provider_name == "ollama":

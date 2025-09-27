@@ -17,6 +17,13 @@ from typing import Any, Dict, List, Optional
 import toml
 from pydantic import BaseModel, Field
 
+try:
+    # Python 3.9+
+    from importlib.resources import files
+except ImportError:
+    # Fallback for older Python
+    from importlib_resources import files
+
 
 class AliasBinding(BaseModel):
     """Represents an alias to model binding."""
@@ -96,8 +103,7 @@ class Lockfile(BaseModel):
 
     # Metadata field for additional information
     metadata: Optional[Dict[str, Any]] = Field(
-        default_factory=dict,
-        description="Metadata for additional lockfile information"
+        default_factory=dict, description="Metadata for additional lockfile information"
     )
 
     @classmethod
@@ -432,7 +438,10 @@ class Lockfile(BaseModel):
 
     @classmethod
     def find_lockfile(cls, start_path: Optional[Path] = None) -> Optional[Path]:
-        """Find a lockfile by searching up the directory tree."""
+        """Find a lockfile by searching up the directory tree.
+
+        DEPRECATED: This method will be removed. Use explicit paths instead.
+        """
         current = Path(start_path or os.getcwd()).resolve()
 
         while current != current.parent:
@@ -445,6 +454,66 @@ class Lockfile(BaseModel):
             if lockfile_json.exists():
                 return lockfile_json
 
+            current = current.parent
+
+        return None
+
+    @classmethod
+    def get_package_lockfile_path(cls) -> Path:
+        """Get the path to llmring's bundled lockfile.
+
+        Returns:
+            Path to the bundled llmring.lock file within the package.
+        """
+        try:
+            # Use importlib.resources to get the bundled lockfile
+            package_files = files("llmring")
+            lockfile_resource = package_files / "llmring.lock"
+
+            # For Python 3.9+, we can use as_file context manager
+            # For now, return the path directly
+            return Path(str(lockfile_resource))
+        except Exception as e:
+            # Fallback: try to find it relative to this file
+            fallback_path = Path(__file__).parent / "llmring.lock"
+            if fallback_path.exists():
+                return fallback_path
+            raise RuntimeError(f"Could not find bundled llmring.lock: {e}")
+
+    @classmethod
+    def load_package_lockfile(cls) -> "Lockfile":
+        """Load llmring's bundled lockfile.
+
+        Returns:
+            The loaded Lockfile instance.
+        """
+        lockfile_path = cls.get_package_lockfile_path()
+        return cls.load(lockfile_path)
+
+    @classmethod
+    def find_project_root(cls, start_path: Optional[Path] = None) -> Optional[Path]:
+        """Find the project root by looking for pyproject.toml, setup.py, etc.
+
+        Args:
+            start_path: Starting path for search (defaults to current directory)
+
+        Returns:
+            Path to project root, or None if not found
+        """
+        current = Path(start_path or os.getcwd()).resolve()
+
+        # Indicators of a project root
+        root_indicators = [
+            "pyproject.toml",
+            "setup.py",
+            "setup.cfg",
+            ".git",  # Git repository root
+        ]
+
+        while current != current.parent:
+            for indicator in root_indicators:
+                if (current / indicator).exists():
+                    return current
             current = current.parent
 
         return None
