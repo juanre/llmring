@@ -323,7 +323,7 @@ class LockfileManagerTools:
         }
 
     async def add_alias(
-        self, alias: str, model: str, profile: Optional[str] = None
+        self, alias: str, models: str, profile: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Add or update an alias in the lockfile with automatic provider fallback support.
@@ -332,13 +332,13 @@ class LockfileManagerTools:
         in order. If the first model's provider is not available (e.g., missing API key),
         it automatically falls back to the next model in the list.
 
-        Example: alias="fast" model="anthropic:claude-3-haiku,openai:gpt-4o-mini"
+        Example: alias="fast" models="anthropic:claude-3-haiku,openai:gpt-4o-mini"
         If the user lacks an ANTHROPIC_API_KEY, the system will use openai:gpt-4o-mini.
 
         Args:
             alias: Name of the alias to add (e.g., "fast", "smart", "coder")
-            model: Either a single model (e.g., "openai:gpt-4o") or comma-separated
-                   models for fallback (e.g., "anthropic:claude-3-haiku,openai:gpt-4o-mini")
+            models: Either a single model (e.g., "openai:gpt-4o") or comma-separated
+                    models for fallback (e.g., "anthropic:claude-3-haiku,openai:gpt-4o-mini")
             profile: Profile to add to, defaults to current working profile
 
         Returns:
@@ -346,10 +346,7 @@ class LockfileManagerTools:
         """
         profile = profile or self.working_profile
 
-        # Parse model(s) - handle comma-separated fallbacks
-        models = model  # Can be single or comma-separated
-
-        # Add the binding
+        # Add the binding (models can be single or comma-separated)
         self.lockfile.set_binding(alias, models, profile=profile)
 
         # Save

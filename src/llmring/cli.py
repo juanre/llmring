@@ -259,23 +259,28 @@ async def cmd_lock_chat(args):
 IMPORTANT: Understanding Fallback Models in LLMRing
 ====================================================
 LLMRing aliases support MULTIPLE models with automatic fallback based on provider availability.
-When you use add_alias with comma-separated models, you're creating a FALLBACK CHAIN, not choosing a single "fallback" model.
+When you use add_alias with the 'models' parameter containing comma-separated values, you're creating a FALLBACK CHAIN.
 
 How it works:
-1. User provides multiple models: "anthropic:claude-3-haiku,openai:gpt-4o-mini"
+1. User provides multiple models in the 'models' parameter: "anthropic:claude-3-haiku,openai:gpt-4o-mini"
 2. LLMRing tries each model IN ORDER
 3. It uses the FIRST model whose provider has an API key configured
 4. This ensures code keeps working even when some API keys are missing
 
+TOOL USAGE - add_alias parameters:
+- alias: The name of the alias (e.g., "advisor", "fast", "coder")
+- models: Single model OR comma-separated models (e.g., "anthropic:claude-3-haiku,openai:gpt-4o-mini")
+- profile: Optional, defaults to "default"
+
 Example scenarios:
-- User has only OpenAI key: "anthropic:claude-3-haiku,openai:gpt-4o-mini" → Uses openai:gpt-4o-mini
+- User has only OpenAI key: models="anthropic:claude-3-haiku,openai:gpt-4o-mini" → Uses openai:gpt-4o-mini
 - User has both keys: Same config → Uses anthropic:claude-3-haiku (first in list)
-- User has only Anthropic key: "openai:gpt-4o,anthropic:claude-3-5-sonnet" → Uses anthropic:claude-3-5-sonnet
+- User has only Anthropic key: models="openai:gpt-4o,anthropic:claude-3-5-sonnet" → Uses anthropic:claude-3-5-sonnet
 
 When helping users:
+- DO use the 'models' parameter (not 'model')
 - DO suggest adding multiple models to existing aliases for redundancy
 - DO explain this is about provider availability, not model quality
-- DO use add_alias with comma-separated models when appropriate
 - DON'T talk about choosing "a fallback model" - it's a fallback CHAIN
 - DON'T suggest single models when the user asks about fallbacks
 

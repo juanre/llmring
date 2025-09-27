@@ -56,7 +56,7 @@ class LockfileServer:
         self.server.function_registry.register(
             name="add_alias",
             func=self._wrap_async(self.tools.add_alias),
-            description="Add or update an alias. You can provide MULTIPLE models separated by commas. This creates a fallback chain - if the user lacks the API key for the first model's provider, the system automatically uses the next model in the list. This is NOT about choosing a 'fallback' model - it's about ensuring the alias works even when certain providers are unavailable.",
+            description="Add or update an alias with automatic provider fallback. The 'models' parameter accepts EITHER a single model OR multiple comma-separated models. When multiple models are provided, they form a fallback chain - the system tries each model in order until it finds one with an available provider (API key configured). This ensures your aliases work even when some providers are unavailable.",
             schema={
                 "type": "object",
                 "properties": {
@@ -64,32 +64,32 @@ class LockfileServer:
                         "type": "string",
                         "description": "REQUIRED: The alias name to create or update (e.g., 'fast', 'deep', 'coder', 'advisor')",
                     },
-                    "model": {
+                    "models": {
                         "type": "string",
-                        "description": "REQUIRED: Model(s) to use. Can be: (1) Single model: 'openai:gpt-4o' (2) Multiple models with fallback: 'anthropic:claude-3-haiku,openai:gpt-4o-mini' - the FIRST model with an available API key will be used",
+                        "description": "REQUIRED: Model(s) to use. EITHER: (1) Single model: 'openai:gpt-4o' OR (2) Multiple comma-separated models for fallback: 'anthropic:claude-3-haiku,openai:gpt-4o-mini'. The system will use the FIRST model whose provider has a configured API key.",
                     },
                     "profile": {
                         "type": "string",
                         "description": "OPTIONAL: Profile to add the alias to (defaults to 'default' if not specified)",
                     },
                 },
-                "required": ["alias", "model"],
+                "required": ["alias", "models"],
                 "examples": [
-                    {"alias": "fast", "model": "openai:gpt-4o-mini"},
+                    {"alias": "fast", "models": "openai:gpt-4o-mini"},
                     {
                         "alias": "fast",
-                        "model": "anthropic:claude-3-haiku,openai:gpt-4o-mini",
-                        "_note": "Uses Claude if Anthropic key exists, else uses GPT",
+                        "models": "anthropic:claude-3-haiku,openai:gpt-4o-mini",
+                        "_note": "Creates fallback: Uses Claude if Anthropic key exists, otherwise uses GPT",
                     },
                     {
                         "alias": "advisor",
-                        "model": "anthropic:claude-opus-4-1-20250805,openai:gpt-4.1",
-                        "_note": "Adds OpenAI fallback to existing advisor",
+                        "models": "anthropic:claude-opus-4-1-20250805,openai:gpt-4.1",
+                        "_note": "Updates advisor with OpenAI fallback",
                     },
                     {
                         "alias": "deep",
-                        "model": "anthropic:claude-3-opus,openai:gpt-4,google:gemini-ultra",
-                        "_note": "Triple fallback chain",
+                        "models": "anthropic:claude-3-opus,openai:gpt-4,google:gemini-ultra",
+                        "_note": "Triple fallback chain - tries Anthropic, then OpenAI, then Google",
                     },
                 ],
             },

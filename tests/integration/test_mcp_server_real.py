@@ -125,8 +125,8 @@ async def test_server_tool_execution():
         # Get the wrapped function for add_alias
         add_alias_func = server.server.function_registry.functions["add_alias"]
 
-        # Execute directly - need to provide a model now
-        result = add_alias_func(alias="test_alias", model="openai:gpt-4o-mini")
+        # Execute directly - using 'models' parameter
+        result = add_alias_func(alias="test_alias", models="openai:gpt-4o-mini")
 
         assert result["success"] is True
         assert result["alias"] == "test_alias"
@@ -225,8 +225,8 @@ async def test_server_profile_operations():
         list_func = server.server.function_registry.functions["list_aliases"]
 
         # Add to different profiles
-        add_func(alias="fast", model="openai:gpt-4o-mini", profile="default")
-        add_func(alias="fast", model="anthropic:claude-3-haiku", profile="dev")
+        add_func(alias="fast", models="openai:gpt-4o-mini", profile="default")
+        add_func(alias="fast", models="anthropic:claude-3-haiku", profile="dev")
 
         # List from each profile
         default_result = list_func(profile="default")
@@ -250,7 +250,7 @@ async def test_server_configuration_export():
 
         # Add some configuration
         add_func = server.server.function_registry.functions["add_alias"]
-        add_func(alias="coder", model="anthropic:claude-3-5-sonnet")
+        add_func(alias="coder", models="anthropic:claude-3-5-sonnet")
 
         # Get configuration
         get_config_func = server.server.function_registry.functions["get_configuration"]
@@ -287,8 +287,8 @@ async def test_server_save_and_reload():
         save_func = server1.server.function_registry.functions["save_lockfile"]
 
         # Add aliases and save
-        add_func(alias="fast", model="openai:gpt-4o-mini")
-        add_func(alias="deep", model="anthropic:claude-3-5-sonnet")
+        add_func(alias="fast", models="openai:gpt-4o-mini")
+        add_func(alias="deep", models="anthropic:claude-3-5-sonnet")
         save_result = save_func()
 
         assert save_result["success"] is True
@@ -329,9 +329,9 @@ async def test_server_cost_analysis_integration():
         fast_model = test_lockfile.resolve_alias("fast")
         smart_model = test_lockfile.resolve_alias("smart")
         if fast_model:
-            add_func(alias="cheap", model=fast_model)
+            add_func(alias="cheap", models=fast_model[0])
         if smart_model:
-            add_func(alias="expensive", model=smart_model)
+            add_func(alias="expensive", models=smart_model[0])
 
         # Analyze costs
         analyze_func = server.server.function_registry.functions["analyze_costs"]
