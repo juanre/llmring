@@ -169,22 +169,39 @@ class LLMRing:
 
     def get_available_models(self) -> Dict[str, List[str]]:
         """
-        Get all available models from configured providers.
+        Get all available models from configured providers via the registry.
 
         Returns:
             Dictionary mapping provider names to lists of model names
         """
         models = {}
-        for provider_name, provider in self.providers.items():
+        for provider_name in self.providers.keys():
             try:
-                # Get models from provider's configuration
-                if hasattr(provider, "models"):
-                    models[provider_name] = list(provider.models.keys())
+                # Fetch models from registry for this provider
+                import asyncio
+
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If we're in an async context, create a task
+                    import concurrent.futures
+
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(
+                            asyncio.run, self.registry.fetch_current_models(provider_name)
+                        )
+                        registry_models = future.result(timeout=5)
                 else:
-                    # No hardcoded defaults - providers should fetch from registry
-                    # or have their own model discovery mechanism
-                    models[provider_name] = []
-            except Exception:
+                    # If no loop is running, we can run directly
+                    registry_models = asyncio.run(self.registry.fetch_current_models(provider_name))
+
+                # Extract model names from registry models
+                models[provider_name] = [
+                    model.model_name
+                    for model in registry_models
+                    if model.is_active  # Only include active models
+                ]
+            except Exception as e:
+                logger.debug(f"Could not fetch models for {provider_name} from registry: {e}")
                 models[provider_name] = []
         return models
 

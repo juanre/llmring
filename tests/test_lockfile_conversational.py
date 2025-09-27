@@ -63,7 +63,10 @@ async def test_add_alias_conversation():
         result = await conv.send(
             "I need a fast model for quick responses",
             tool_calls=[
-                {"tool": "add_alias", "arguments": {"alias": "fast", "model": "openai:gpt-4o-mini"}}
+                {
+                    "tool": "add_alias",
+                    "arguments": {"alias": "fast", "models": "openai:gpt-4o-mini"},
+                }
             ],
         )
 
@@ -99,7 +102,7 @@ async def test_cost_analysis_conversation():
         await conv.send(
             "Add a balanced model",
             tool_calls=[
-                {"tool": "add_alias", "arguments": {"alias": "balanced", "model": "openai:gpt-4o"}}
+                {"tool": "add_alias", "arguments": {"alias": "balanced", "models": "openai:gpt-4o"}}
             ],
         )
 
@@ -156,7 +159,7 @@ async def test_alias_lifecycle_conversation():
             tool_calls=[
                 {
                     "tool": "add_alias",
-                    "arguments": {"alias": "writer", "model": "anthropic:claude-3-5-sonnet"},
+                    "arguments": {"alias": "writer", "models": "anthropic:claude-3-5-sonnet"},
                 }
             ],
         )
@@ -198,11 +201,11 @@ async def test_save_configuration_conversation():
             tool_calls=[
                 {
                     "tool": "add_alias",
-                    "arguments": {"alias": "fast", "model": "openai:gpt-4o-mini"},
+                    "arguments": {"alias": "fast", "models": "openai:gpt-4o-mini"},
                 },
                 {
                     "tool": "add_alias",
-                    "arguments": {"alias": "deep", "model": "anthropic:claude-3-5-sonnet"},
+                    "arguments": {"alias": "deep", "models": "anthropic:claude-3-5-sonnet"},
                 },
             ],
         )
@@ -255,7 +258,7 @@ async def test_multi_profile_conversation():
                     "tool": "add_alias",
                     "arguments": {
                         "alias": "fast",
-                        "model": "openai:gpt-4o-mini",
+                        "models": "openai:gpt-4o-mini",
                         "profile": "default",
                     },
                 }
@@ -270,7 +273,7 @@ async def test_multi_profile_conversation():
                     "tool": "add_alias",
                     "arguments": {
                         "alias": "fast",
-                        "model": "anthropic:claude-3-haiku",
+                        "models": "anthropic:claude-3-haiku",
                         "profile": "development",
                     },
                 }
@@ -309,7 +312,10 @@ if __name__ == "__main__":
         result = await conv.send(
             "I need to add a fast model",
             tool_calls=[
-                {"tool": "add_alias", "arguments": {"alias": "fast", "model": "openai:gpt-4o-mini"}}
+                {
+                    "tool": "add_alias",
+                    "arguments": {"alias": "fast", "models": "openai:gpt-4o-mini"},
+                }
             ],
         )
 

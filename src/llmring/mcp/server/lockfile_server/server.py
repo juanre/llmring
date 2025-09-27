@@ -53,11 +53,11 @@ class LockfileServer:
         """Register all lockfile management tools with the MCP server."""
 
         # Add alias tool
-        self.server.function_registry.register(
+        self.server.register_tool(
             name="add_alias",
-            func=self._wrap_async(self.tools.add_alias),
-            description="Add or update an alias with automatic provider fallback. The 'models' parameter accepts EITHER a single model OR multiple comma-separated models. When multiple models are provided, they form a fallback chain - the system tries each model in order until it finds one with an available provider (API key configured). This ensures your aliases work even when some providers are unavailable.",
-            schema={
+            handler=self._wrap_async(self.tools.add_alias),
+            description="Add or update an alias with a model pool. The 'models' parameter accepts any numnber of comma-separated models forming a prioritized pool. This tool needs all the models in the pool, remember that it does not append to the existing pool.",
+            input_schema={
                 "type": "object",
                 "properties": {
                     "alias": {
@@ -66,11 +66,11 @@ class LockfileServer:
                     },
                     "models": {
                         "type": "string",
-                        "description": "REQUIRED: Model(s) to use. EITHER: (1) Single model: 'openai:gpt-4o' OR (2) Multiple comma-separated models for fallback: 'anthropic:claude-3-haiku,openai:gpt-4o-mini'. The system will use the FIRST model whose provider has a configured API key.",
+                        "description": "REQUIRED: Model(s) to bind to this alias separated by commas, for example 'openai:gpt-4o' for a single-model pool or 'anthropic:claude-3-haiku,openai:gpt-4o-mini' for a two-model pool.",
                     },
                     "profile": {
                         "type": "string",
-                        "description": "OPTIONAL: Profile to add the alias to (defaults to 'default' if not specified)",
+                        "description": "OPTIONAL: Profile to add the alias to (defaults to 'default' if not specified). Profiles are strings like 'dev', 'prod', or 'test' that allow different models to be assigned to an alias depending on whether we are developing, testing, staging, in production, etc.",
                     },
                 },
                 "required": ["alias", "models"],
@@ -79,27 +79,28 @@ class LockfileServer:
                     {
                         "alias": "fast",
                         "models": "anthropic:claude-3-haiku,openai:gpt-4o-mini",
-                        "_note": "Creates fallback: Uses Claude if Anthropic key exists, otherwise uses GPT",
+                        "_note": "LLMRing will use Claude when available and GPT-4o-mini as alternative",
                     },
                     {
                         "alias": "advisor",
                         "models": "anthropic:claude-opus-4-1-20250805,openai:gpt-4.1",
-                        "_note": "Updates advisor with OpenAI fallback",
+                        "_note": "High-quality model pool with cross-provider alternatives",
                     },
                     {
                         "alias": "deep",
                         "models": "anthropic:claude-3-opus,openai:gpt-4,google:gemini-ultra",
-                        "_note": "Triple fallback chain - tries Anthropic, then OpenAI, then Google",
+                        "_note": "Maximum availability with three provider alternatives",
                     },
                 ],
             },
         )
 
         # Remove alias tool
-        self.server.function_registry.register(
+        self.server.register_tool(
             name="remove_alias",
-            func=self._wrap_async(self.tools.remove_alias),
-            schema={
+            handler=self._wrap_async(self.tools.remove_alias),
+            description="Remove an alias from the lockfile.",
+            input_schema={
                 "type": "object",
                 "properties": {
                     "alias": {"type": "string", "description": "The alias name to remove"},
@@ -110,14 +111,14 @@ class LockfileServer:
                 },
                 "required": ["alias"],
             },
-            description="Remove an alias from the lockfile.",
         )
 
         # List aliases tool
-        self.server.function_registry.register(
+        self.server.register_tool(
             name="list_aliases",
-            func=self._wrap_async(self.tools.list_aliases),
-            schema={
+            handler=self._wrap_async(self.tools.list_aliases),
+            description="List all configured aliases and their bindings.",
+            input_schema={
                 "type": "object",
                 "properties": {
                     "profile": {"type": "string", "description": "Profile to list aliases from"},
@@ -127,14 +128,14 @@ class LockfileServer:
                     },
                 },
             },
-            description="List all configured aliases and their bindings.",
         )
 
         # Assess model tool
-        self.server.function_registry.register(
+        self.server.register_tool(
             name="assess_model",
-            func=self._wrap_async(self.tools.assess_model),
-            schema={
+            handler=self._wrap_async(self.tools.assess_model),
+            description="Assess a model's capabilities, costs, and suitability.",
+            input_schema={
                 "type": "object",
                 "properties": {
                     "model_ref": {
@@ -144,14 +145,14 @@ class LockfileServer:
                 },
                 "required": ["model_ref"],
             },
-            description="Assess a model's capabilities, costs, and suitability.",
         )
 
         # Analyze costs tool
-        self.server.function_registry.register(
+        self.server.register_tool(
             name="analyze_costs",
-            func=self._wrap_async(self.tools.analyze_costs),
-            schema={
+            handler=self._wrap_async(self.tools.analyze_costs),
+            description="Analyze estimated costs for current or hypothetical configuration.",
+            input_schema={
                 "type": "object",
                 "properties": {
                     "profile": {"type": "string", "description": "Profile to analyze"},
@@ -170,14 +171,14 @@ class LockfileServer:
                     },
                 },
             },
-            description="Analyze estimated costs for current or hypothetical configuration.",
         )
 
         # Save lockfile tool
-        self.server.function_registry.register(
+        self.server.register_tool(
             name="save_lockfile",
-            func=self._wrap_async(self.tools.save_lockfile),
-            schema={
+            handler=self._wrap_async(self.tools.save_lockfile),
+            description="Save the current lockfile configuration to disk.",
+            input_schema={
                 "type": "object",
                 "properties": {
                     "path": {
@@ -186,30 +187,30 @@ class LockfileServer:
                     }
                 },
             },
-            description="Save the current lockfile configuration to disk.",
         )
 
         # Get current configuration
-        self.server.function_registry.register(
+        self.server.register_tool(
             name="get_configuration",
-            func=self._wrap_async(self.tools.get_current_configuration),
-            schema={"type": "object", "properties": {}},
+            handler=self._wrap_async(self.tools.get_current_configuration),
             description="Get the complete current lockfile configuration.",
+            input_schema={"type": "object", "properties": {}},
         )
 
         # Get available providers
-        self.server.function_registry.register(
+        self.server.register_tool(
             name="get_available_providers",
-            func=self._wrap_async(self.tools.get_available_providers),
-            schema={"type": "object", "properties": {}},
+            handler=self._wrap_async(self.tools.get_available_providers),
             description="Check which providers have API keys configured in environment variables.",
+            input_schema={"type": "object", "properties": {}},
         )
 
         # List models
-        self.server.function_registry.register(
+        self.server.register_tool(
             name="list_models",
-            func=self._wrap_async(self.tools.list_models),
-            schema={
+            handler=self._wrap_async(self.tools.list_models),
+            description="List all available models with their specifications from the registry.",
+            input_schema={
                 "type": "object",
                 "properties": {
                     "providers": {
@@ -223,14 +224,14 @@ class LockfileServer:
                     },
                 },
             },
-            description="List all available models with their specifications from the registry.",
         )
 
         # Filter models by requirements
-        self.server.function_registry.register(
+        self.server.register_tool(
             name="filter_models_by_requirements",
-            func=self._wrap_async(self.tools.filter_models_by_requirements),
-            schema={
+            handler=self._wrap_async(self.tools.filter_models_by_requirements),
+            description="Filter models based on specific requirements like context size, cost, and capabilities.",
+            input_schema={
                 "type": "object",
                 "properties": {
                     "min_context": {
@@ -257,14 +258,14 @@ class LockfileServer:
                     },
                 },
             },
-            description="Filter models based on specific requirements like context size, cost, and capabilities.",
         )
 
         # Get model details
-        self.server.function_registry.register(
+        self.server.register_tool(
             name="get_model_details",
-            func=self._wrap_async(self.tools.get_model_details),
-            schema={
+            handler=self._wrap_async(self.tools.get_model_details),
+            description="Get complete details for specific models including pricing, capabilities, and specifications.",
+            input_schema={
                 "type": "object",
                 "properties": {
                     "models": {
@@ -275,7 +276,6 @@ class LockfileServer:
                 },
                 "required": ["models"],
             },
-            description="Get complete details for specific models including pricing, capabilities, and specifications.",
         )
 
         logger.info(

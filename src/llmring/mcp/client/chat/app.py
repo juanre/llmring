@@ -299,48 +299,20 @@ class MCPChatApp:
 
     def initialize(self) -> None:
         """Initialize the chat application."""
-        self.console.print(Panel("MCP Chat Interface", style="heading"))
-
-        # Load available tools if MCP client is configured
+        # Load available tools silently if MCP client is configured
         if self.mcp_client:
-            self.console.print("[info]Connecting to MCP server...[/info]")
             try:
-                # Refresh tools
+                # Refresh tools without verbose output
                 self._refresh_tools()
-
-                self.console.print(
-                    f"[success]Connected![/success] Found {len(self.available_tools)} tools"
-                )
-
-                # Display first few tools
-                if self.available_tools:
-                    max_display = 5
-                    displayed_tools = list(self.available_tools.values())[:max_display]
-
-                    for tool in displayed_tools:
-                        self.console.print(
-                            f"  [tool]{tool['name']}[/tool]: {tool.get('description', '')}"
-                        )
-
-                    # Show count of remaining tools
-                    remaining = len(self.available_tools) - max_display
-                    if remaining > 0:
-                        self.console.print(f"  [info]... and {remaining} more tools[/info]")
             except Exception as e:
-                self.console.print(f"[error]Failed to connect to MCP server:[/error] {e!s}")
+                # Only show error if critical
+                if "connection" in str(e).lower():
+                    self.console.print(f"[error]MCP server connection failed[/error]")
 
-        # Display available models
-        models = self.get_available_models()
-
-        if models:
-            self.console.print(
-                f"[info]Available models:[/info] {', '.join(m['display_name'] for m in models[:3])}..."
-            )
-        else:
-            self.console.print("[warning]No LLM models found in database[/warning]")
-
-        self.console.print(f"[info]Current model:[/info] [bold]{self.model}[/bold]")
-        self.console.print("\nType [command]/help[/command] for available commands")
+        # Simple prompt to start
+        self.console.print(
+            f"[dim]Model: {self.model}[/dim] • Type [bold]/help[/bold] for commands\n"
+        )
 
     async def initialize_async(self) -> None:
         """Initialize async resources."""
@@ -405,6 +377,11 @@ class MCPChatApp:
                     await self.process_response(response)
 
                 except KeyboardInterrupt:
+                    # Ctrl-C pressed - interrupt current operation but don't exit
+                    self.console.print("\n[dim]Interrupted. Press Ctrl-D to exit.[/dim]")
+                    continue
+                except EOFError:
+                    # Ctrl-D pressed - exit the chat
                     self.console.print("\n[warning]Exiting...[/warning]")
                     # Save conversation on exit
                     self._save_conversation()
@@ -621,32 +598,27 @@ When the user asks about aliases, models, or configurations, use the appropriate
                 tool_name = call.get("name", call.get("tool", ""))
                 arguments = call.get("arguments", {})
 
-            # Display tool call information
-            self.console.print(f"[tool]Calling tool:[/tool] {tool_name}")
-            if arguments:
-                self.console.print(JSON(json.dumps(arguments), indent=2))
+            # Display concise tool call information
+            self.console.print(f"[dim]Calling tool: {tool_name}[/dim]", end="")
 
             try:
                 # Execute the tool
-                with self.console.status(f"[info]Executing {tool_name}...[/info]"):
-                    result = self.mcp_client.call_tool(tool_name, arguments)
+                result = self.mcp_client.call_tool(tool_name, arguments)
 
-                # Display result
-                self.console.print("[success]Tool result:[/success]")
+                # Display success indicator
+                self.console.print(" [success]✓[/success]")
 
-                # Format result based on type
-                if isinstance(result, dict | list):
-                    self.console.print(JSON(json.dumps(result), indent=2))
-                elif isinstance(result, str) and (result.startswith("{") or result.startswith("[")):
-                    try:
-                        # Already JSON string, display as-is
-                        self.console.print(JSON(result, indent=2))
-                    except Exception:
-                        # Not valid JSON, print as text
-                        self.console.print(result)
-                else:
-                    # Regular text
-                    self.console.print(result)
+                # Only show verbose output if it's an error or warning
+                if isinstance(result, dict):
+                    # Check if result indicates an error
+                    if result.get("success") is False or result.get("error"):
+                        # Show error details
+                        self.console.print(
+                            f"[error]Error: {result.get('error') or result.get('message', 'Unknown error')}[/error]"
+                        )
+                    elif result.get("warning"):
+                        # Show warning
+                        self.console.print(f"[warning]Warning: {result.get('warning')}[/warning]")
 
                 # Add to results with tool_call_id if present
                 tool_result = {
@@ -665,24 +637,12 @@ When the user asks about aliases, models, or configurations, use the appropriate
                     for conn_err in ["connection", "transport", "disconnected", "timeout"]
                 ):
                     # Try to reconnect once
-                    self.console.print(
-                        f"[warning]Connection error detected, attempting reconnection...[/warning]"
-                    )
+                    self.console.print(" [warning]reconnecting...[/warning]", end="")
                     if await self.reconnect():
                         # Retry the tool call
                         try:
-                            with self.console.status(f"[info]Retrying {tool_name}...[/info]"):
-                                result = self.mcp_client.call_tool(tool_name, arguments)
-
-                            self.console.print(
-                                "[success]Tool result (after reconnection):[/success]"
-                            )
-
-                            # Display result
-                            if isinstance(result, dict | list):
-                                self.console.print(JSON(json.dumps(result), indent=2))
-                            else:
-                                self.console.print(result)
+                            result = self.mcp_client.call_tool(tool_name, arguments)
+                            self.console.print(" [success]✓[/success]")
 
                             tool_result = {
                                 "tool_call_id": call.get("id"),
@@ -696,7 +656,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
                             e = retry_e  # Use the retry error
 
                 # Handle error (connection or otherwise)
-                self.console.print(f"[error]Tool error:[/error] {e!s}")
+                self.console.print(f" [error]✗ {e!s}[/error]")
                 tool_result = {
                     "tool_call_id": call.get("id"),
                     "tool": tool_name,
@@ -1067,7 +1027,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
         # Save conversation before exiting
         self._save_conversation()
         self.console.print("[info]Conversation saved[/info]")
-        raise KeyboardInterrupt()
+        raise EOFError()  # Use EOFError to exit, since KeyboardInterrupt just interrupts now
 
 
 def main():
@@ -1093,8 +1053,11 @@ def main():
     # Run the chat app
     try:
         asyncio.run(app.run())
-    except KeyboardInterrupt:
+    except EOFError:
         print("\nExiting...")
+    except KeyboardInterrupt:
+        # KeyboardInterrupt is now handled inside the app.run() loop
+        pass
 
 
 if __name__ == "__main__":

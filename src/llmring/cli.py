@@ -30,21 +30,21 @@ load_dotenv()
 
 async def cmd_lock_init(args):
     """Initialize a new lockfile with basic defaults from registry."""
-    # Find project root if not explicitly specified
+    # Find package directory if not explicitly specified
     if args.file:
         path = Path(args.file)
-        project_root = path.parent
+        package_dir = path.parent
     else:
-        # Try to find project root
-        project_root = Lockfile.find_project_root()
-        if project_root:
-            path = project_root / LOCKFILE_NAME
-            print(f"Found project root: {project_root}")
+        # Try to find package directory where lockfile should be placed
+        package_dir = Lockfile.find_package_directory()
+        if package_dir:
+            path = package_dir / LOCKFILE_NAME
+            print(f"Found package directory: {package_dir}")
         else:
             # Fall back to current directory
             path = Path(LOCKFILE_NAME)
-            project_root = Path.cwd()
-            print(f"No project root found (no {', '.join(PROJECT_ROOT_INDICATORS)})")
+            package_dir = Path.cwd()
+            print(f"No package directory found")
             print(f"Creating lockfile in current directory: {path.resolve()}")
 
     if path.exists() and not args.force:
@@ -103,8 +103,13 @@ async def cmd_lock_init(args):
 def cmd_bind(args):
     """Bind an alias to one or more models (with fallback support)."""
     # Load or create lockfile
-    # For bind command, use current directory lockfile
-    lockfile_path = Path(LOCKFILE_NAME)
+    # Find the package directory where lockfile should be
+    package_dir = Lockfile.find_package_directory()
+    if package_dir:
+        lockfile_path = package_dir / LOCKFILE_NAME
+    else:
+        # Fall back to current directory if no package found
+        lockfile_path = Path(LOCKFILE_NAME)
 
     if lockfile_path.exists():
         lockfile = Lockfile.load(lockfile_path)
@@ -112,7 +117,6 @@ def cmd_bind(args):
         print(f"No lockfile found at {lockfile_path}")
         print("Creating a new lockfile...")
         lockfile = Lockfile.create_default()
-        lockfile_path = Path(LOCKFILE_NAME)
 
     # Parse model(s) - can be comma-separated for fallbacks
     models = args.model  # Already a string, can be comma-separated
@@ -152,10 +156,16 @@ def cmd_aliases(args):
 
 async def cmd_lock_validate(args):
     """Validate lockfile against registry."""
-    # Use lockfile from current directory
-    lockfile_path = Path(LOCKFILE_NAME)
+    # Find the package directory where lockfile should be
+    package_dir = Lockfile.find_package_directory()
+    if package_dir:
+        lockfile_path = package_dir / LOCKFILE_NAME
+    else:
+        # Fall back to current directory if no package found
+        lockfile_path = Path(LOCKFILE_NAME)
+
     if not lockfile_path.exists():
-        print(f"Error: No llmring.lock found in current directory")
+        print(f"Error: No llmring.lock found at {lockfile_path}")
         print("Run 'llmring lock init' to create one.")
         return 1
 
@@ -189,10 +199,16 @@ async def cmd_lock_validate(args):
 
 async def cmd_lock_bump_registry(args):
     """Update pinned registry versions to latest."""
-    # Use lockfile from current directory
-    lockfile_path = Path(LOCKFILE_NAME)
+    # Find the package directory where lockfile should be
+    package_dir = Lockfile.find_package_directory()
+    if package_dir:
+        lockfile_path = package_dir / LOCKFILE_NAME
+    else:
+        # Fall back to current directory if no package found
+        lockfile_path = Path(LOCKFILE_NAME)
+
     if not lockfile_path.exists():
-        print(f"Error: No llmring.lock found in current directory")
+        print(f"Error: No llmring.lock found at {lockfile_path}")
         print("Run 'llmring lock init' to create one.")
         return 1
 
@@ -238,53 +254,93 @@ async def cmd_lock_chat(args):
     print("🤖 LLMRing Conversational Lockfile Manager")
     print("=" * 50)
 
-    # For lock chat, we need to use llmring's bundled lockfile
-    # to ensure the 'advisor' alias works
-    os.environ["LLMRING_LOCKFILE_PATH"] = str(Lockfile.get_package_lockfile_path())
+    # Find the user's package lockfile path (inside their package for distribution)
+    package_dir = Lockfile.find_package_directory()
+    if package_dir:
+        user_lockfile_path = package_dir / LOCKFILE_NAME
+        print(f"📦 Package directory: {package_dir}")
+    else:
+        # Fall back to current directory if no package found
+        user_lockfile_path = Path.cwd() / LOCKFILE_NAME
+        print(f"📁 No package found, using current directory")
+    print(f"📄 Managing lockfile: {user_lockfile_path}")
 
     # If no server URL provided, we'll use embedded server
     if not args.server_url:
         # The stdio transport will be handled by the chat app directly
-        # We pass the command to run, not a URL
-        server_url = "stdio://python -m llmring.mcp.server.lockfile_server"
+        # Pass the lockfile path as an argument to the server
+        # This will override any LLMRING_LOCKFILE_PATH environment variable
+        server_url = (
+            f"stdio://python -m llmring.mcp.server.lockfile_server --lockfile {user_lockfile_path}"
+        )
         server_process = None  # stdio client will manage the process
         print("Will use embedded lockfile MCP server via stdio")
     else:
         server_url = args.server_url
         server_process = None
 
-    # System prompt that explains fallback models clearly
+    # Set the bundled lockfile path AFTER configuring the server URL
+    # This ensures the 'advisor' alias works but doesn't affect the server
+    os.environ["LLMRING_LOCKFILE_PATH"] = str(Lockfile.get_package_lockfile_path())
+
+    # System prompt that explains multi-model aliases and profiles clearly
     system_prompt = """You are the LLMRing Lockfile Manager assistant. You help users manage their LLM aliases and model configurations.
 
-IMPORTANT: Understanding Fallback Models in LLMRing
-====================================================
-LLMRing aliases support MULTIPLE models with automatic fallback based on provider availability.
-When you use add_alias with the 'models' parameter containing comma-separated values, you're creating a FALLBACK CHAIN.
+IMPORTANT: Understanding Model Pools in LLMRing
+================================================
+LLMRing aliases can be bound to a POOL OF MODELS - multiple prioritized alternatives that ensure your code always works regardless of which API keys you have configured.
 
-How it works:
-1. User provides multiple models in the 'models' parameter: "anthropic:claude-3-haiku,openai:gpt-4o-mini"
-2. LLMRing tries each model IN ORDER
-3. It uses the FIRST model whose provider has an API key configured
-4. This ensures code keeps working even when some API keys are missing
+IMPORTANT: Understanding Profiles
+=================================
+LLMRing supports PROFILES for environment-specific configurations (dev, staging, prod, test, etc.).
+The same alias can have different models in different profiles:
+- 'default' profile: Standard configuration
+- 'dev' profile: Cheaper/faster models for development
+- 'prod' profile: High-quality models for production
+- 'test' profile: Minimal models for automated testing
 
-TOOL USAGE - add_alias parameters:
-- alias: The name of the alias (e.g., "advisor", "fast", "coder")
-- models: Single model OR comma-separated models (e.g., "anthropic:claude-3-haiku,openai:gpt-4o-mini")
-- profile: Optional, defaults to "default"
+Users can specify profiles when adding aliases: add_alias(alias="fast", models="...", profile="dev")
 
-Example scenarios:
-- User has only OpenAI key: models="anthropic:claude-3-haiku,openai:gpt-4o-mini" → Uses openai:gpt-4o-mini
-- User has both keys: Same config → Uses anthropic:claude-3-haiku (first in list)
-- User has only Anthropic key: models="openai:gpt-4o,anthropic:claude-3-5-sonnet" → Uses anthropic:claude-3-5-sonnet
+How Model Pools Work:
+1. You provide multiple models in priority order: "anthropic:claude-3-haiku,openai:gpt-4o-mini"
+2. LLMRing intelligently selects the first available model based on configured API keys
+3. This ensures seamless operation across different environments and teams
+
+Why Use Model Pools?
+- **Flexibility**: Same code works whether you have OpenAI, Anthropic, or both API keys
+- **Resilience**: Automatic provider switching if one service is unavailable
+- **Collaboration**: Team members can use different providers without code changes
+- **Cost Optimization**: Prioritize cheaper models while maintaining alternatives
+
+Example Model Pool Configurations:
+- "fast": "anthropic:claude-3-haiku,openai:gpt-4o-mini" → Budget-friendly, fast responses
+- "advisor": "anthropic:claude-3-5-sonnet,openai:gpt-4o" → High-quality reasoning
+- "coder": "anthropic:claude-3-5-sonnet,openai:gpt-4o,google:gemini-pro" → Maximum availability
+
+Example Profile Usage:
+- add_alias(alias="fast", models="openai:gpt-3.5-turbo", profile="test") → Test profile
+- add_alias(alias="fast", models="openai:gpt-4o-mini", profile="dev") → Dev profile
+- add_alias(alias="fast", models="anthropic:claude-3-5-sonnet", profile="prod") → Prod profile
+- list_aliases(profile="dev") → Show dev profile aliases
+
+Smart Selection Examples:
+- Only OpenAI key available: Uses openai models from the pool
+- Both keys available: Uses first model in priority order
+- Only Anthropic key available: Uses anthropic models from the pool
 
 When helping users:
-- DO use the 'models' parameter (not 'model')
-- DO suggest adding multiple models to existing aliases for redundancy
-- DO explain this is about provider availability, not model quality
-- DON'T talk about choosing "a fallback model" - it's a fallback CHAIN
-- DON'T suggest single models when the user asks about fallbacks
+- Remember that the 'models' parameter (accepts single or multiple models)
+- DO suggest model pools for better flexibility and resilience
+- DO help users understand priority ordering in their model pools
+- DON'T suggest single models when users want flexibility
+- DO NOT
 
-You have access to tools that help manage the lockfile. Use them to provide accurate information and help users configure their aliases effectively."""
+You have access to tools that help manage the lockfile. Use them to provide accurate information and help users configure their model pools effectively.
+
+Your task is to guide users in creating or updating their lockfile, where they define their profiles and their alias pools.
+
+VERY IMPORTANT: you need to understand the use they want to give to the models and suggest the best option, but DO NOT add or delete anything until you are told to do so.
+    """
 
     try:
         # Create and run MCP chat app with system prompt
@@ -292,25 +348,8 @@ You have access to tools that help manage the lockfile. Use them to provide accu
             mcp_server_url=server_url, llm_model=args.model, system_prompt=system_prompt
         )
 
-        # Custom initialization message for lockfile management
+        # Minimal initialization
         await app.initialize_async()
-        app.console.print(
-            "\n[bold green]Welcome to LLMRing Conversational Lockfile Manager![/bold green]"
-        )
-        app.console.print("\n[bold yellow]🔄 New: Provider Fallback Support[/bold yellow]")
-        app.console.print("Aliases now support automatic fallback when providers are unavailable!")
-        app.console.print("Example: 'anthropic:claude-3-haiku,openai:gpt-4o-mini'")
-        app.console.print("  → Uses Claude if you have Anthropic API key")
-        app.console.print("  → Falls back to GPT-4o-mini if you only have OpenAI key")
-
-        app.console.print("\nYou can use natural language to manage your lockfile:")
-        app.console.print("  • 'Add OpenAI fallback to my advisor alias'")
-        app.console.print("  • 'Update fast alias to use both Claude and GPT models'")
-        app.console.print("  • 'What model should I use for coding?'")
-        app.console.print("  • 'Show me my current aliases'")
-        app.console.print("  • 'How much will my current setup cost?'")
-        app.console.print("  • 'Remove the writer alias'")
-        app.console.print("\nType [bold]/help[/bold] for commands or start chatting!\n")
 
         # Run the chat interface
         await app.run()
@@ -341,8 +380,14 @@ async def cmd_chat(args):
     """Send a chat message to an LLM."""
     # Check if we should use an alias
     if ":" not in args.model:
-        # Try to resolve as alias from current directory lockfile
-        lockfile_path = Path(LOCKFILE_NAME)
+        # Try to resolve as alias from package lockfile
+        package_dir = Lockfile.find_package_directory()
+        if package_dir:
+            lockfile_path = package_dir / LOCKFILE_NAME
+        else:
+            # Fall back to current directory if no package found
+            lockfile_path = Path(LOCKFILE_NAME)
+
         if lockfile_path.exists():
             lockfile = Lockfile.load(lockfile_path)
 
@@ -567,6 +612,54 @@ async def cmd_export(args):
     return 0
 
 
+async def cmd_cache_clear(args):
+    """Clear the registry cache."""
+    from llmring.registry import RegistryClient
+
+    registry = RegistryClient()
+    registry.clear_cache()
+    print("✅ Registry cache cleared successfully")
+    print("Next model lookups will fetch fresh data from the registry")
+    return 0
+
+
+async def cmd_cache_info(args):
+    """Show cache information."""
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from llmring.registry import RegistryClient
+
+    registry = RegistryClient()
+    cache_dir = registry.cache_dir
+
+    print(f"📁 Cache directory: {cache_dir}")
+    print(f"⏱️  Cache TTL: {registry.CACHE_DURATION_HOURS} hours")
+
+    # List cache files and their ages
+    cache_files = list(cache_dir.glob("*.json"))
+    if cache_files:
+        print(f"\n📄 Cached files ({len(cache_files)} total):")
+        for cache_file in sorted(cache_files):
+            # Get file age
+            mtime = datetime.fromtimestamp(cache_file.stat().st_mtime, tz=timezone.utc)
+            age_hours = (datetime.now(timezone.utc) - mtime).total_seconds() / 3600
+
+            # Check if still valid
+            is_valid = age_hours < registry.CACHE_DURATION_HOURS
+            status = "✅ valid" if is_valid else "❌ stale"
+
+            print(f"  • {cache_file.name}: {age_hours:.1f}h old ({status})")
+    else:
+        print("\n📄 No cached files")
+
+    # Show cache size
+    total_size = sum(f.stat().st_size for f in cache_files) if cache_files else 0
+    print(f"\n💾 Total cache size: {total_size / 1024:.1f} KB")
+
+    return 0
+
+
 async def cmd_register(args):
     """Register with LLMRing server (placeholder)."""
     print("⚠️  The 'register' command requires a server connection.")
@@ -638,7 +731,7 @@ def format_model_table(models: dict, show_all: bool = False):
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="LLMRing - Unified LLM Service CLI",
+        description="LLMRing - Unified LLM Service CLI with Profile Support\n\nProfiles allow environment-specific configurations (dev, prod, test).\nUse --profile flag or set LLMRING_PROFILE environment variable.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -736,6 +829,12 @@ def main():
         "--format", choices=["json", "csv"], default="json", help="Export format"
     )
 
+    # Cache management commands
+    cache_parser = subparsers.add_parser("cache", help="Registry cache management")
+    cache_subparsers = cache_parser.add_subparsers(dest="cache_command", help="Cache commands")
+    cache_subparsers.add_parser("clear", help="Clear the registry cache")
+    cache_info_parser = cache_subparsers.add_parser("info", help="Show cache information")
+
     # Register command
     register_parser = subparsers.add_parser(
         "register", help="Register with LLMRing server (for SaaS features)"
@@ -764,6 +863,20 @@ def main():
 
         if args.lock_command in lock_commands:
             return asyncio.run(lock_commands[args.lock_command](args))
+
+    # Handle cache subcommands
+    if args.command == "cache":
+        if not args.cache_command:
+            cache_parser.print_help()
+            return 1
+
+        cache_commands = {
+            "clear": cmd_cache_clear,
+            "info": cmd_cache_info,
+        }
+
+        if args.cache_command in cache_commands:
+            return asyncio.run(cache_commands[args.cache_command](args))
 
     # Run the appropriate command
     async_commands = {

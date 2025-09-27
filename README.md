@@ -250,6 +250,74 @@ request = LLMRequest(
 - **Cost-aware**: Transparent cost analysis and recommendations
 - **Self-hosted**: Uses LLMRing's own API to power intelligent lockfile creation
 
+### 🎭 Profiles: Environment-Specific Configurations
+
+LLMRing supports **profiles** to manage different model configurations for different environments (dev, staging, prod, etc.):
+
+```python
+# Use different models based on environment
+# Development: Use cheaper/faster models
+# Production: Use higher-quality models
+
+# Set profile via environment variable
+export LLMRING_PROFILE=dev  # or prod, staging, etc.
+
+# Or specify profile in code
+async with LLMRing() as service:
+    # Uses 'dev' profile bindings
+    response = await service.chat(request, profile="dev")
+```
+
+**Profile Configuration in Lockfiles:**
+
+```toml
+# llmring.lock - Different models per environment
+[profiles.default]
+[[profiles.default.bindings]]
+alias = "assistant"
+models = ["anthropic:claude-3-5-sonnet"]  # Production quality
+
+[profiles.dev]
+[[profiles.dev.bindings]]
+alias = "assistant"
+models = ["openai:gpt-4o-mini"]  # Cheaper for development
+
+[profiles.test]
+[[profiles.test.bindings]]
+alias = "assistant"
+models = ["ollama:llama3"]  # Local model for testing
+```
+
+**Using Profiles with CLI:**
+
+```bash
+# Bind aliases to specific profiles
+llmring bind assistant "openai:gpt-4o-mini" --profile dev
+llmring bind assistant "anthropic:claude-3-5-sonnet" --profile prod
+
+# List aliases in a profile
+llmring aliases --profile dev
+
+# Use profile for chat
+llmring chat "Hello" --profile dev
+
+# Set default profile via environment
+export LLMRING_PROFILE=dev
+llmring chat "Hello"  # Now uses dev profile
+```
+
+**Profile Selection Priority:**
+1. Explicit parameter: `profile="dev"` or `--profile dev` (highest priority)
+2. Environment variable: `LLMRING_PROFILE=dev`
+3. Default: `default` profile (if not specified)
+
+**Common Use Cases:**
+- **Development**: Use cheaper models to reduce costs during development
+- **Testing**: Use local models (Ollama) or mock responses
+- **Staging**: Use production models but with different rate limits
+- **Production**: Use highest quality models for best user experience
+- **A/B Testing**: Test different models for the same alias
+
 ### 🚪 Advanced: Direct Model Access
 
 While aliases are recommended, you can still use direct provider:model format when needed:

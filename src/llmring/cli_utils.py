@@ -65,7 +65,16 @@ def load_lockfile_or_exit(
     Note:
         This function may call sys.exit(1) if require_exists=True and no lockfile found
     """
-    lockfile_path = path or Path(LOCKFILE_NAME)
+    if path:
+        lockfile_path = path
+    else:
+        # Find the package directory where lockfile should be
+        package_dir = Lockfile.find_package_directory()
+        if package_dir:
+            lockfile_path = package_dir / LOCKFILE_NAME
+        else:
+            # Fall back to current directory if no package found
+            lockfile_path = Path(LOCKFILE_NAME)
 
     if require_exists and not lockfile_path.exists():
         print(format_error(ERROR_NO_LOCKFILE))
@@ -83,7 +92,7 @@ def load_lockfile_or_exit(
 
 def print_aliases(lockfile: Lockfile, profile: Optional[str] = None) -> None:
     """
-    Print aliases in a consistent format, showing fallback models.
+    Print aliases in a consistent format, showing model pools.
 
     Args:
         lockfile: The lockfile to print aliases from
@@ -94,10 +103,10 @@ def print_aliases(lockfile: Lockfile, profile: Optional[str] = None) -> None:
     if profile_config.bindings:
         print(f"\nAliases in profile '{profile_config.name}':")
         for binding in profile_config.bindings:
-            # Check if we have multiple models (fallbacks)
+            # Check if we have multiple models (model pool)
             if binding.models and len(binding.models) > 1:
                 print(f"  {binding.alias} → {binding.models[0]}")
-                print(f"      fallbacks: {', '.join(binding.models[1:])}")
+                print(f"      alternatives: {', '.join(binding.models[1:])}")
             else:
                 # Single model or legacy format
                 print(f"  {binding.alias} → {binding.model_ref}")

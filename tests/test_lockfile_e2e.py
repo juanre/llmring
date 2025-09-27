@@ -26,7 +26,7 @@ async def test_real_lockfile_operations():
 
         print("\n1️⃣ Testing add_alias...")
         # Add a real alias
-        result = await tools.add_alias(alias="test_fast", model="openai:gpt-4o-mini")
+        result = await tools.add_alias(alias="test_fast", models="openai:gpt-4o-mini")
         assert result["success"], f"Failed to add alias: {result}"
         print(f"   ✓ Added alias: {result['alias']} → {result['model']}")
 
