@@ -118,7 +118,9 @@ async def test_e2e_complete_workflow():
             for alias_info in aliases:
                 resolved = loaded_lockfile.resolve_alias(alias_info["alias"])
                 expected = f"{alias_info['provider']}:{alias_info['model']}"
-                assert resolved == expected, f"Alias {alias_info['alias']} not persisted correctly"
+                assert resolved == [
+                    expected
+                ], f"Alias {alias_info['alias']} not persisted correctly"
 
             print("   All aliases persisted correctly!")
 
@@ -307,7 +309,7 @@ async def test_e2e_multi_profile():
         for profile_name, aliases in profiles.items():
             for alias, expected_model in aliases.items():
                 resolved = loaded.resolve_alias(alias, profile=profile_name)
-                assert resolved == expected_model
+                assert resolved == [expected_model]
 
         print("\n✅ Multi-profile E2E test completed!")
 

@@ -210,7 +210,7 @@ class TestLockfileIntegration:
             # Note: bind_alias saves to disk automatically
             # Verify it was saved
             loaded = Lockfile.load(lockfile_path)
-            assert loaded.resolve_alias("test") == "openai:gpt-4"
+            assert loaded.resolve_alias("test") == ["openai:gpt-4"]
 
     def test_list_aliases_from_service(self, tmp_path):
         """Test listing aliases through service."""

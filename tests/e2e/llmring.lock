@@ -9,7 +9,6 @@ default_profile = "default"
 name = "default"
 [[profiles.default.bindings]]
 alias = "advisor"
-provider = "anthropic"
-model = "claude-opus-4-1-20250805"
+models = ["anthropic:claude-opus-4-1-20250805"]
 
 [profiles.default.registry_versions]

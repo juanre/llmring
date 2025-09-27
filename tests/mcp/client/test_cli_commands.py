@@ -65,8 +65,7 @@ def test_query_command():
                     "bindings": [
                         {
                             "alias": "test",
-                            "provider": "openai",
-                            "model": "gpt-4o-mini",
+                            "models": ["openai:gpt-4o-mini"],
                             "constraints": None,
                         }
                     ],

@@ -218,8 +218,8 @@ async def test_save_configuration_conversation():
 
         # Load and verify
         lockfile = Lockfile.load(lockfile_path)
-        assert lockfile.resolve_alias("fast") == "openai:gpt-4o-mini"
-        assert lockfile.resolve_alias("deep") == "anthropic:claude-3-5-sonnet"
+        assert lockfile.resolve_alias("fast") == ["openai:gpt-4o-mini"]
+        assert lockfile.resolve_alias("deep") == ["anthropic:claude-3-5-sonnet"]
 
 
 @pytest.mark.asyncio

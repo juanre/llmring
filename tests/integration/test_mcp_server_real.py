@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 import pytest
 from dotenv import load_dotenv
@@ -20,11 +20,11 @@ from dotenv import load_dotenv
 # Load environment variables for API keys
 load_dotenv()
 
-from llmring.mcp.server.lockfile_server.server import LockfileServer
+from llmring.lockfile_core import Lockfile
 from llmring.mcp.server import MCPServer
+from llmring.mcp.server.lockfile_server.server import LockfileServer
 from llmring.mcp.server.transport.stdio import StdioTransport
 from llmring.mcp.tools.lockfile_manager import LockfileManagerTools
-from llmring.lockfile_core import Lockfile
 
 
 class RealServerTestHarness:
@@ -40,13 +40,16 @@ class RealServerTestHarness:
         """Start server as subprocess for real stdio testing."""
         self.process = subprocess.Popen(
             [
-                sys.executable, "-m", "llmring.mcp.server.lockfile_server",
-                "--lockfile", str(self.lockfile_path)
+                sys.executable,
+                "-m",
+                "llmring.mcp.server.lockfile_server",
+                "--lockfile",
+                str(self.lockfile_path),
             ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
         )
         # Give it time to start
         await asyncio.sleep(0.2)
@@ -57,12 +60,7 @@ class RealServerTestHarness:
         if not self.process:
             raise RuntimeError("Server not started")
 
-        request = {
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params or {},
-            "id": 1
-        }
+        request = {"jsonrpc": "2.0", "method": method, "params": params or {}, "id": 1}
 
         # Send request
         request_str = json.dumps(request) + "\n"
@@ -109,7 +107,7 @@ async def test_server_initialization():
             "get_available_providers",
             "list_models",
             "filter_models_by_requirements",
-            "get_model_details"
+            "get_model_details",
         ]
 
         for tool_name in expected_tools:
@@ -128,10 +126,7 @@ async def test_server_tool_execution():
         add_alias_func = server.server.function_registry.functions["add_alias"]
 
         # Execute directly - need to provide a model now
-        result = add_alias_func(
-            alias="test_alias",
-            model="openai:gpt-4o-mini"
-        )
+        result = add_alias_func(alias="test_alias", model="openai:gpt-4o-mini")
 
         assert result["success"] is True
         assert result["alias"] == "test_alias"
@@ -317,8 +312,12 @@ async def test_server_cost_analysis_integration():
     """Test server cost analysis with real data."""
     # Load test lockfile to get real model references
     import os
+
     from llmring.lockfile_core import Lockfile
-    test_lockfile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json")
+
+    test_lockfile_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json"
+    )
     test_lockfile = Lockfile.load(Path(test_lockfile_path))
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -336,12 +335,7 @@ async def test_server_cost_analysis_integration():
 
         # Analyze costs
         analyze_func = server.server.function_registry.functions["analyze_costs"]
-        result = analyze_func(
-            monthly_volume={
-                "input_tokens": 1000000,
-                "output_tokens": 500000
-            }
-        )
+        result = analyze_func(monthly_volume={"input_tokens": 1000000, "output_tokens": 500000})
 
         assert "total_monthly_cost" in result
         assert "cost_breakdown" in result
@@ -358,14 +352,17 @@ async def test_server_cost_analysis_integration():
                 assert "alias" in item or isinstance(item, str)
 
 
-
 @pytest.mark.asyncio
 async def test_server_model_assessment():
     """Test server model assessment using test lockfile aliases."""
     # Use the test lockfile that has valid models
     import os
+
     from llmring.lockfile_core import Lockfile
-    test_lockfile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json")
+
+    test_lockfile_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json"
+    )
     test_lockfile = Lockfile.load(Path(test_lockfile_path))
 
     server = LockfileServer()
@@ -377,7 +374,8 @@ async def test_server_model_assessment():
     for alias in aliases_to_test:
         resolved = test_lockfile.resolve_alias(alias)
         if resolved:
-            models_to_test.append(resolved)
+            # resolve_alias returns a list, extract the first model
+            models_to_test.append(resolved[0])
 
     for model_ref in models_to_test:
         result = assess_func(model_ref=model_ref)

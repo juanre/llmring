@@ -430,7 +430,8 @@ class LockfileManagerTools:
         if ":" not in model_ref:
             resolved = self.lockfile.resolve_alias(model_ref)
             if resolved:
-                model_ref = resolved
+                # Take the first model from the list (primary model)
+                model_ref = resolved[0] if isinstance(resolved, list) else resolved
             else:
                 return {
                     "error": f"Invalid model reference: {model_ref}. Use format provider:model or a valid alias"

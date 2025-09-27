@@ -8,141 +8,164 @@
       "bindings": [
         {
           "alias": "fast",
-          "provider": "openai",
-          "model": "gpt-4o-mini",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "openai:gpt-4o-mini"
+          ]
         },
         {
           "alias": "balanced",
-          "provider": "openai",
-          "model": "gpt-4o-mini",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "openai:gpt-4o-mini"
+          ]
         },
         {
           "alias": "deep",
-          "provider": "anthropic",
-          "model": "claude-3-5-haiku-20241022",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "anthropic:claude-3-5-haiku-20241022"
+          ]
         },
         {
           "alias": "openai_fast",
-          "provider": "openai",
-          "model": "gpt-4o-mini",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "openai:gpt-4o-mini"
+          ]
         },
         {
           "alias": "openai_balanced",
-          "provider": "openai",
-          "model": "gpt-4o-mini",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "openai:gpt-4o-mini"
+          ]
         },
         {
           "alias": "anthropic_fast",
-          "provider": "anthropic",
-          "model": "claude-3-5-haiku-20241022",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "anthropic:claude-3-5-haiku-20241022"
+          ]
         },
         {
           "alias": "anthropic_balanced",
-          "provider": "anthropic",
-          "model": "claude-3-5-haiku-20241022",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "anthropic:claude-3-5-haiku-20241022"
+          ]
         },
         {
           "alias": "anthropic_deep",
-          "provider": "anthropic",
-          "model": "claude-3-opus-20240229",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "anthropic:claude-3-opus-20240229"
+          ]
         },
         {
           "alias": "google_fast",
-          "provider": "google",
-          "model": "gemini-2.0-flash",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "google:gemini-2.0-flash"
+          ]
         },
         {
           "alias": "google_balanced",
-          "provider": "google",
-          "model": "gemini-2.0-flash",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "google:gemini-2.0-flash"
+          ]
         },
         {
           "alias": "google_deep",
-          "provider": "google",
-          "model": "gemini-2.0-flash",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "google:gemini-2.0-flash"
+          ]
         },
         {
           "alias": "vision",
-          "provider": "openai",
-          "model": "gpt-4o",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "openai:gpt-4o"
+          ]
         },
         {
           "alias": "openai_vision",
-          "provider": "openai",
-          "model": "gpt-4o",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "openai:gpt-4o"
+          ]
         },
         {
           "alias": "anthropic_vision",
-          "provider": "anthropic",
-          "model": "claude-3-5-haiku-20241022",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "anthropic:claude-3-5-haiku-20241022"
+          ]
         },
         {
           "alias": "google_vision",
-          "provider": "google",
-          "model": "gemini-2.0-flash",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "google:gemini-2.0-flash"
+          ]
         },
         {
           "alias": "pdf",
-          "provider": "anthropic",
-          "model": "claude-3-5-haiku-20241022",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "anthropic:claude-3-5-haiku-20241022"
+          ]
         },
         {
           "alias": "multimodal",
-          "provider": "google",
-          "model": "gemini-2.0-flash",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "google:gemini-2.0-flash"
+          ]
         },
         {
           "alias": "ollama_local",
-          "provider": "ollama",
-          "model": "llama2",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "ollama:llama2"
+          ]
         },
         {
           "alias": "mvp_test",
-          "provider": "anthropic",
-          "model": "claude-opus-4-20250514",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "anthropic:claude-opus-4-20250514"
+          ]
         },
         {
           "alias": "mvp_vision",
-          "provider": "anthropic",
-          "model": "claude-opus-4-20250514",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "anthropic:claude-opus-4-20250514"
+          ]
         },
         {
           "alias": "mvp_deep",
-          "provider": "anthropic",
-          "model": "claude-opus-4-20250514",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "anthropic:claude-opus-4-20250514"
+          ]
         },
         {
           "alias": "mcp_agent",
-          "provider": "anthropic",
-          "model": "claude-opus-4-1-20250805",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "anthropic:claude-opus-4-1-20250805"
+          ]
         },
         {
           "alias": "smart",
-          "provider": "anthropic",
-          "model": "claude-opus-4-1-20250805",
-          "constraints": null
+          "constraints": null,
+          "models": [
+            "anthropic:claude-opus-4-1-20250805"
+          ]
         }
       ],
       "registry_versions": {}

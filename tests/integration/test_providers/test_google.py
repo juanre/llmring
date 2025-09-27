@@ -46,10 +46,12 @@ def get_google_test_model(alias: str = "google_fast") -> str:
     """Get Google model from test lockfile."""
     test_lockfile_path = Path(__file__).parent.parent.parent / "llmring.lock.json"
     lockfile = Lockfile.load(test_lockfile_path)
-    model_ref = lockfile.resolve_alias(alias)
-    if not model_ref:
+    model_refs = lockfile.resolve_alias(alias)
+    if not model_refs:
         # Fallback if alias not found
         return "gemini-2.0-flash"
+    # resolve_alias returns a list, take the first model
+    model_ref = model_refs[0]
     # Remove provider prefix if present
     if ":" in model_ref:
         return model_ref.split(":", 1)[1]

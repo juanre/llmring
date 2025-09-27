@@ -59,7 +59,7 @@ async def test_real_lockfile_operations():
         print("\n5️⃣ Testing load and verify...")
         # Load and verify the lockfile
         loaded = Lockfile.load(lockfile_path)
-        assert loaded.resolve_alias("test_fast") == "openai:gpt-4o-mini"
+        assert loaded.resolve_alias("test_fast") == ["openai:gpt-4o-mini"]
         print(f"   ✓ Loaded lockfile, alias resolves correctly")
 
         print("\n6️⃣ Testing remove_alias...")
@@ -114,11 +114,11 @@ async def test_advisor_alias():
     print(f"Deep alias: {deep}")
     print(f"Balanced alias: {balanced}")
 
-    assert fast == "openai:gpt-4o-mini", f"Fast should be gpt-4o-mini, got: {fast}"
-    assert (
-        deep == "anthropic:claude-3-5-haiku-20241022"
-    ), f"Deep should be claude-3-5-haiku, got: {deep}"
-    assert balanced == "openai:gpt-4o-mini", f"Balanced should be gpt-4o-mini, got: {balanced}"
+    assert fast == ["openai:gpt-4o-mini"], f"Fast should be gpt-4o-mini, got: {fast}"
+    assert deep == [
+        "anthropic:claude-3-5-haiku-20241022"
+    ], f"Deep should be claude-3-5-haiku, got: {deep}"
+    assert balanced == ["openai:gpt-4o-mini"], f"Balanced should be gpt-4o-mini, got: {balanced}"
 
     print("\n✅ All test lockfile aliases are properly configured!")
 
