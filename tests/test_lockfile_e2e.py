@@ -9,8 +9,8 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from llmring.mcp.tools.lockfile_manager import LockfileManagerTools
 from llmring.lockfile_core import Lockfile
+from llmring.mcp.tools.lockfile_manager import LockfileManagerTools
 
 
 async def test_real_lockfile_operations():
@@ -26,10 +26,7 @@ async def test_real_lockfile_operations():
 
         print("\n1️⃣ Testing add_alias...")
         # Add a real alias
-        result = await tools.add_alias(
-            alias="test_fast",
-            model="openai:gpt-4o-mini"
-        )
+        result = await tools.add_alias(alias="test_fast", model="openai:gpt-4o-mini")
         assert result["success"], f"Failed to add alias: {result}"
         print(f"   ✓ Added alias: {result['alias']} → {result['model']}")
 
@@ -50,30 +47,22 @@ async def test_real_lockfile_operations():
         print(f"   ✓ Assessed {result['model']}")
         print(f"     Capabilities: {result['capabilities']}")
 
-        print("\n4️⃣ Testing recommend_alias...")
-        # Get recommendations
-        result = await tools.recommend_alias("I need a model for coding")
-        assert "recommendations" in result, f"No recommendations: {result}"
-        recs = result["recommendations"]
-        assert len(recs) > 0, "No recommendations returned"
-        print(f"   ✓ Got {len(recs)} recommendations:")
-        for rec in recs:
-            print(f"     - {rec['alias']}: {rec['model']} ({rec['reason']})")
+        # Skip recommend_alias test - functionality removed in favor of LLM-based recommendations
 
-        print("\n5️⃣ Testing save_lockfile...")
+        print("\n4️⃣ Testing save_lockfile...")
         # Save the lockfile
         result = await tools.save_lockfile()
         assert result["success"], f"Failed to save: {result}"
         assert lockfile_path.exists(), "Lockfile not created"
         print(f"   ✓ Saved to {result['path']}")
 
-        print("\n6️⃣ Testing load and verify...")
+        print("\n5️⃣ Testing load and verify...")
         # Load and verify the lockfile
         loaded = Lockfile.load(lockfile_path)
         assert loaded.resolve_alias("test_fast") == "openai:gpt-4o-mini"
         print(f"   ✓ Loaded lockfile, alias resolves correctly")
 
-        print("\n7️⃣ Testing remove_alias...")
+        print("\n6️⃣ Testing remove_alias...")
         # Remove the alias
         result = await tools.remove_alias("test_fast")
         assert result["success"], f"Failed to remove: {result}"
@@ -85,7 +74,7 @@ async def test_real_lockfile_operations():
         assert "test_fast" not in alias_names, "Alias still exists after removal"
         print(f"   ✓ Verified removal")
 
-        print("\n8️⃣ Testing analyze_costs...")
+        print("\n7️⃣ Testing analyze_costs...")
         # Add an alias for cost analysis
         await tools.add_alias("cost_test", "openai:gpt-4o")
         result = await tools.analyze_costs(
@@ -95,7 +84,7 @@ async def test_real_lockfile_operations():
         assert "cost_breakdown" in result, "No cost breakdown"
         print(f"   ✓ Estimated monthly cost: ${result['total_monthly_cost']}")
 
-        print("\n9️⃣ Testing get_current_configuration...")
+        print("\n8️⃣ Testing get_current_configuration...")
         # Get full configuration
         result = await tools.get_current_configuration()
         assert "version" in result, "No version in config"
@@ -108,31 +97,30 @@ async def test_real_lockfile_operations():
 
 
 async def test_advisor_alias():
-    """Test that the advisor alias resolves correctly."""
-    print("\n🧪 Testing advisor alias resolution...")
+    """Test that the test lockfile aliases resolve correctly."""
+    print("\n🧪 Testing test lockfile alias resolution...")
     print("=" * 50)
 
-    # Load the main lockfile
-    lockfile = Lockfile.load(Path("llmring.lock"))
+    # Load the test lockfile
+    test_lockfile_path = Path(__file__).parent / "llmring.lock.json"
+    lockfile = Lockfile.load(test_lockfile_path)
 
-    # Check advisor alias
-    advisor_model = lockfile.resolve_alias("advisor")
-    print(f"Advisor alias resolves to: {advisor_model}")
-
-    assert advisor_model == "anthropic:claude-opus-4-1-20250805", \
-        f"Advisor should be Opus 4.1, got: {advisor_model}"
-
-    print("✅ Advisor alias configured correctly!")
-
-    # Also check other standard aliases
+    # Check some standard aliases from test lockfile
     fast = lockfile.resolve_alias("fast")
     deep = lockfile.resolve_alias("deep")
+    balanced = lockfile.resolve_alias("balanced")
 
     print(f"Fast alias: {fast}")
     print(f"Deep alias: {deep}")
+    print(f"Balanced alias: {balanced}")
 
-    assert fast is not None, "Fast alias not configured"
-    assert deep is not None, "Deep alias not configured"
+    assert fast == "openai:gpt-4o-mini", f"Fast should be gpt-4o-mini, got: {fast}"
+    assert (
+        deep == "anthropic:claude-3-5-haiku-20241022"
+    ), f"Deep should be claude-3-5-haiku, got: {deep}"
+    assert balanced == "openai:gpt-4o-mini", f"Balanced should be gpt-4o-mini, got: {balanced}"
+
+    print("\n✅ All test lockfile aliases are properly configured!")
 
     return True
 

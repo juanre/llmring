@@ -6,12 +6,13 @@ These tests require a valid GOOGLE_API_KEY or GEMINI_API_KEY environment variabl
 import asyncio
 import os
 from functools import wraps
+from pathlib import Path
 
 import pytest
 
+from llmring.lockfile_core import Lockfile
 from llmring.providers.google_api import GoogleProvider
 from llmring.schemas import LLMResponse, Message
-from tests.conftest_models import get_test_model
 
 
 def skip_on_quota_exceeded(func):
@@ -39,6 +40,20 @@ def skip_on_quota_exceeded(func):
             raise
 
     return wrapper
+
+
+def get_google_test_model(alias: str = "google_fast") -> str:
+    """Get Google model from test lockfile."""
+    test_lockfile_path = Path(__file__).parent.parent.parent / "llmring.lock.json"
+    lockfile = Lockfile.load(test_lockfile_path)
+    model_ref = lockfile.resolve_alias(alias)
+    if not model_ref:
+        # Fallback if alias not found
+        return "gemini-2.0-flash"
+    # Remove provider prefix if present
+    if ":" in model_ref:
+        return model_ref.split(":", 1)[1]
+    return model_ref
 
 
 @pytest.mark.llm
@@ -71,13 +86,13 @@ class TestGoogleProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model=get_test_model("google"),  # Use faster model for tests
+            model=get_google_test_model(),  # Use model from test lockfile
             max_tokens=50,
         )
 
         assert isinstance(response, LLMResponse)
         assert "Hello from Gemini" in response.content
-        assert response.model == get_test_model("google")
+        assert response.model == get_google_test_model()
 
         # Google API might not always provide usage metadata
         if response.usage:
@@ -97,7 +112,7 @@ class TestGoogleProviderIntegration:
         ]
 
         response = await provider.chat(
-            messages=messages, model=get_test_model("google"), max_tokens=100
+            messages=messages, model=get_google_test_model(), max_tokens=100
         )
 
         assert isinstance(response, LLMResponse)
@@ -113,7 +128,7 @@ class TestGoogleProviderIntegration:
         # Test with low temperature (more deterministic)
         response_low = await provider.chat(
             messages=messages,
-            model=get_test_model("google"),
+            model=get_google_test_model(),
             temperature=0.1,
             max_tokens=50,
         )
@@ -121,7 +136,7 @@ class TestGoogleProviderIntegration:
         # Test with high temperature (more creative)
         response_high = await provider.chat(
             messages=messages,
-            model=get_test_model("google"),
+            model=get_google_test_model(),
             temperature=0.9,
             max_tokens=50,
         )
@@ -141,7 +156,7 @@ class TestGoogleProviderIntegration:
 
         response = await provider.chat(
             messages=messages,
-            model=get_test_model("google"),
+            model=get_google_test_model(),
             max_tokens=20,  # Very small limit
         )
 
@@ -163,7 +178,7 @@ class TestGoogleProviderIntegration:
         ]
 
         response = await provider.chat(
-            messages=messages, model=get_test_model("google"), max_tokens=50
+            messages=messages, model=get_google_test_model(), max_tokens=50
         )
 
         assert isinstance(response, LLMResponse)
@@ -188,7 +203,7 @@ class TestGoogleProviderIntegration:
         async def make_request(i):
             messages = [Message(role="user", content=f"Count to {i}")]
             return await provider.chat(
-                messages=messages, model=get_test_model("google"), max_tokens=50
+                messages=messages, model=get_google_test_model(), max_tokens=50
             )
 
         # Make 3 concurrent requests
@@ -235,7 +250,9 @@ class TestGoogleProviderIntegration:
         try:
             response = await provider.chat(
                 messages=messages,
-                model=get_test_model("google", "vision"),  # Use vision-capable model
+                model=get_google_test_model(
+                    "google_vision"
+                ),  # Use vision-capable model from lockfile
                 max_tokens=100,
             )
 
@@ -263,7 +280,7 @@ class TestGoogleProviderIntegration:
 
         try:
             response = await provider.chat(
-                messages=messages, model=get_test_model("google"), max_tokens=50
+                messages=messages, model=get_google_test_model(), max_tokens=50
             )
 
             assert isinstance(response, LLMResponse)
@@ -292,7 +309,7 @@ class TestGoogleProviderIntegration:
 
         try:
             response = await provider.chat(
-                messages=messages, model=get_test_model("google"), max_tokens=100
+                messages=messages, model=get_google_test_model(), max_tokens=100
             )
 
             assert isinstance(response, LLMResponse)
@@ -321,7 +338,7 @@ class TestGoogleProviderIntegration:
 
         try:
             response = await provider.chat(
-                messages=messages, model=get_test_model("google"), max_tokens=200
+                messages=messages, model=get_google_test_model(), max_tokens=200
             )
 
             assert isinstance(response, LLMResponse)
@@ -346,7 +363,7 @@ class TestGoogleProviderIntegration:
 
         try:
             response = await provider.chat(
-                messages=messages, model=get_test_model("google"), max_tokens=200
+                messages=messages, model=get_google_test_model(), max_tokens=200
             )
 
             assert isinstance(response, LLMResponse)

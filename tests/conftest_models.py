@@ -23,28 +23,28 @@ VALID_OPENAI_MODELS = [
 ]
 
 VALID_GOOGLE_MODELS = [
-    "gemini-1.5-flash",  # Fast, affordable with vision
-    "gemini-1.5-pro",  # More capable
-    "gemini-2.0-flash",  # Newer version with vision
+    "gemini-2.0-flash",  # Fast, affordable with vision
+    "gemini-2.5-pro",  # More capable
+    "gemini-2.0-flash-001",  # Newer version with vision
 ]
 
 # Default models to use in tests (should be stable and available)
 DEFAULT_TEST_MODELS = {
     "anthropic": "claude-3-haiku-20240307",  # Fast and cheap for tests
     "openai": "gpt-4o-mini",  # Multimodal and in registry
-    "google": "gemini-1.5-flash",  # Fast Gemini model
+    "google": "gemini-2.0-flash",  # Fast Gemini model
 }
 
 # Models with specific capabilities
 VISION_CAPABLE_MODELS = {
     "anthropic": "claude-3-5-haiku-20241022",  # Has vision support
     "openai": "gpt-4o-mini",  # GPT-4o-mini has vision
-    "google": "gemini-1.5-flash",  # All Gemini models support vision
+    "google": "gemini-2.0-flash",  # All Gemini models support vision
 }
 
 PDF_CAPABLE_MODELS = {
     "anthropic": "claude-3-5-haiku-20241022",  # Newer model with PDF support
-    "google": "gemini-1.5-flash",  # Can process documents
+    "google": "gemini-2.0-flash",  # Can process documents
     "openai": "gpt-4o-mini",  # Via assistants API
 }
 

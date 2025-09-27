@@ -57,19 +57,19 @@
         {
           "alias": "google_fast",
           "provider": "google",
-          "model": "gemini-1.5-flash",
+          "model": "gemini-2.0-flash",
           "constraints": null
         },
         {
           "alias": "google_balanced",
           "provider": "google",
-          "model": "gemini-1.5-flash",
+          "model": "gemini-2.0-flash",
           "constraints": null
         },
         {
           "alias": "google_deep",
           "provider": "google",
-          "model": "gemini-1.5-pro",
+          "model": "gemini-2.5-pro",
           "constraints": null
         },
         {
@@ -93,7 +93,7 @@
         {
           "alias": "google_vision",
           "provider": "google",
-          "model": "gemini-1.5-flash",
+          "model": "gemini-2.0-flash",
           "constraints": null
         },
         {
@@ -105,7 +105,7 @@
         {
           "alias": "multimodal",
           "provider": "google",
-          "model": "gemini-1.5-flash",
+          "model": "gemini-2.0-flash",
           "constraints": null
         },
         {

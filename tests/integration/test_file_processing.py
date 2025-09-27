@@ -234,6 +234,14 @@ class TestFileProcessing:
                 ]
             ):
                 pytest.skip(f"Google API quota exceeded: {str(e)[:100]}")
+            # Check for model not found errors
+            if "not found" in error_msg and "model" in error_msg:
+                pytest.skip(f"Google model not available: {str(e)[:100]}")
+            # Check for ModelNotFoundError
+            from llmring.exceptions import ModelNotFoundError
+
+            if isinstance(e, ModelNotFoundError):
+                pytest.skip(f"Google model not available: {str(e)[:100]}")
             raise
 
     @pytest.mark.asyncio
@@ -320,6 +328,14 @@ class TestFileProcessing:
                 ]
             ):
                 pytest.skip(f"Google API quota exceeded: {str(e)[:100]}")
+            # Check for model not found errors
+            if "not found" in error_msg and "model" in error_msg:
+                pytest.skip(f"Google model not available: {str(e)[:100]}")
+            # Check for ModelNotFoundError
+            from llmring.exceptions import ModelNotFoundError
+
+            if isinstance(e, ModelNotFoundError):
+                pytest.skip(f"Google model not available: {str(e)[:100]}")
             raise
 
     @pytest.mark.asyncio

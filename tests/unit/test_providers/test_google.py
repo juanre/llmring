@@ -7,9 +7,11 @@ Tests are minimal to avoid excessive API usage costs.
 import json
 import os
 from functools import wraps
+from pathlib import Path
 
 import pytest
 
+from llmring.lockfile_core import Lockfile
 from llmring.providers.google_api import GoogleProvider
 from llmring.schemas import LLMResponse, Message
 
@@ -39,6 +41,20 @@ def skip_on_quota_exceeded(func):
             raise
 
     return wrapper
+
+
+def get_google_test_model(alias: str = "google_fast") -> str:
+    """Get Google model from test lockfile."""
+    test_lockfile_path = Path(__file__).parent.parent.parent / "llmring.lock.json"
+    lockfile = Lockfile.load(test_lockfile_path)
+    model_ref = lockfile.resolve_alias(alias)
+    if not model_ref:
+        # Fallback if alias not found
+        return "gemini-2.0-flash"
+    # Remove provider prefix if present
+    if ":" in model_ref:
+        return model_ref.split(":", 1)[1]
+    return model_ref
 
 
 @pytest.mark.llm
@@ -96,14 +112,14 @@ class TestGoogleProviderUnit:
         """Test basic chat functionality with minimal token usage."""
         response = await google_provider.chat(
             messages=simple_user_message,
-            model="gemini-1.5-pro",
+            model=get_google_test_model(),
             max_tokens=10,  # Minimal tokens to reduce cost
         )
 
         assert isinstance(response, LLMResponse)
         assert response.content is not None
         assert len(response.content) > 0
-        assert response.model == "gemini-1.5-pro"
+        assert response.model == get_google_test_model()
         assert response.usage is not None
         assert response.usage["prompt_tokens"] > 0
         assert response.usage["completion_tokens"] > 0
@@ -115,7 +131,7 @@ class TestGoogleProviderUnit:
     async def test_chat_with_system_message(self, google_provider, system_user_messages):
         """Test chat with system message."""
         response = await google_provider.chat(
-            messages=system_user_messages, model="gemini-1.5-pro", max_tokens=10
+            messages=system_user_messages, model=get_google_test_model(), max_tokens=10
         )
 
         assert isinstance(response, LLMResponse)
@@ -127,11 +143,11 @@ class TestGoogleProviderUnit:
     async def test_chat_with_provider_prefix_removal(self, google_provider, simple_user_message):
         """Test that provider prefix is correctly removed from model name."""
         response = await google_provider.chat(
-            messages=simple_user_message, model="google:gemini-1.5-pro", max_tokens=10
+            messages=simple_user_message, model=f"google:{get_google_test_model()}", max_tokens=10
         )
 
         assert isinstance(response, LLMResponse)
-        assert response.model == "gemini-1.5-pro"  # Prefix should be removed
+        assert response.model == get_google_test_model()  # Prefix should be removed
 
     @pytest.mark.asyncio
     @skip_on_quota_exceeded
@@ -139,7 +155,7 @@ class TestGoogleProviderUnit:
         """Test chat with temperature and max_tokens parameters."""
         response = await google_provider.chat(
             messages=simple_user_message,
-            model="gemini-1.5-pro",
+            model=get_google_test_model(),
             temperature=0.7,
             max_tokens=15,
         )
@@ -194,7 +210,7 @@ class TestGoogleProviderUnit:
     async def test_chat_multi_turn_conversation(self, google_provider, multi_turn_conversation):
         """Test multi-turn conversation handling."""
         response = await google_provider.chat(
-            messages=multi_turn_conversation, model="gemini-1.5-pro", max_tokens=20
+            messages=multi_turn_conversation, model=get_google_test_model(), max_tokens=20
         )
 
         assert isinstance(response, LLMResponse)
@@ -211,7 +227,7 @@ class TestGoogleProviderUnit:
         messages = [Message(role="user", content="Describe this text: Hello World")]
 
         response = await google_provider.chat(
-            messages=messages, model="gemini-1.5-pro", max_tokens=20
+            messages=messages, model=get_google_test_model(), max_tokens=20
         )
 
         assert isinstance(response, LLMResponse)
@@ -223,7 +239,7 @@ class TestGoogleProviderUnit:
     async def test_chat_response_without_usage_metadata(self, google_provider, simple_user_message):
         """Test handling when usage metadata is not available."""
         response = await google_provider.chat(
-            messages=simple_user_message, model="gemini-1.5-pro", max_tokens=10
+            messages=simple_user_message, model=get_google_test_model(), max_tokens=10
         )
 
         assert isinstance(response, LLMResponse)
@@ -255,7 +271,7 @@ class TestGoogleProviderUnit:
 
         response = await google_provider.chat(
             messages=messages,
-            model="gemini-1.5-pro",
+            model=get_google_test_model(),
             response_format=json_response_format,
             max_tokens=50,
         )
@@ -278,7 +294,7 @@ class TestGoogleProviderUnit:
         with pytest.raises(Exception) as exc_info:
             await provider.chat(
                 messages=[Message(role="user", content="test")],
-                model="gemini-1.5-pro",
+                model=get_google_test_model(),
                 max_tokens=10,
             )
 

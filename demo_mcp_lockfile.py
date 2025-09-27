@@ -47,15 +47,16 @@ async def demo_features():
     print("🎯 Demo Scenarios")
     print("=" * 70)
 
-    from llmring.mcp.client.chat.app import MCPChatApp
-    from llmring.schemas import Message, LLMResponse
     from unittest.mock import AsyncMock
+
+    from llmring.mcp.client.chat.app import MCPChatApp
+    from llmring.schemas import LLMResponse, Message
 
     # Create chat app with all features enabled
     app = MCPChatApp(
         mcp_server_url="stdio://python -m llmring.mcp.server.lockfile_server",
         llm_model="advisor",
-        enable_telemetry=True  # Will auto-detect based on env
+        enable_telemetry=True,  # Will auto-detect based on env
     )
 
     # Initialize
@@ -100,8 +101,8 @@ async def demo_features():
 
     conversations = [
         ("List my aliases", "list_aliases", "Shows current alias configuration"),
-        ("Add a fast alias", "add_alias", "Intelligently recommends model"),
-        ("What's best for coding?", "recommend_alias", "Analyzes use case"),
+        ("Add a fast alias", "add_alias", "Adds alias with specified model"),
+        ("Show model details", "assess_model", "Shows model capabilities"),
         ("Analyze my costs", "analyze_costs", "Estimates monthly expenses"),
     ]
 
@@ -143,6 +144,7 @@ async def main():
     except Exception as e:
         print(f"\nError during demo: {e}")
         import traceback
+
         traceback.print_exc()
 
 

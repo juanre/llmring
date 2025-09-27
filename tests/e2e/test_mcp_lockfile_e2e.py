@@ -11,18 +11,20 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 import pytest
 
+from llmring.lockfile_core import Lockfile
 from llmring.mcp.client.chat.app import MCPChatApp
 from llmring.mcp.server.lockfile_server.server import LockfileServer
 from llmring.mcp.tools.lockfile_manager import LockfileManagerTools
-from llmring.lockfile_core import Lockfile
-from llmring.schemas import Message, LLMRequest
+from llmring.schemas import LLMRequest, Message
 
 
-async def simulate_tool_execution(app: MCPChatApp, tool_calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+async def simulate_tool_execution(
+    app: MCPChatApp, tool_calls: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     """Simulate the tool execution flow that would happen in the chat app."""
     results = []
 
@@ -36,19 +38,10 @@ async def simulate_tool_execution(app: MCPChatApp, tool_calls: List[Dict[str, An
 
             # Execute via MCP client
             try:
-                result = await app.mcp_client.call_tool(
-                    name=tool_name,
-                    arguments=arguments
-                )
-                results.append({
-                    "tool": tool_name,
-                    "result": result
-                })
+                result = await app.mcp_client.call_tool(name=tool_name, arguments=arguments)
+                results.append({"tool": tool_name, "result": result})
             except Exception as e:
-                results.append({
-                    "tool": tool_name,
-                    "error": str(e)
-                })
+                results.append({"tool": tool_name, "error": str(e)})
 
     return results
 
@@ -61,11 +54,7 @@ async def test_e2e_complete_workflow():
 
         # Create initial lockfile with advisor
         lockfile = Lockfile(path=lockfile_path)
-        lockfile.set_binding(
-            "advisor",
-            "anthropic:claude-opus-4-1-20250805",
-            profile="default"
-        )
+        lockfile.set_binding("advisor", "anthropic:claude-opus-4-1-20250805", profile="default")
         lockfile.save()
 
         # Set environment
@@ -73,42 +62,28 @@ async def test_e2e_complete_workflow():
 
         try:
             # Initialize chat app without MCP server URL (direct tool access)
-            app = MCPChatApp(
-                mcp_server_url=None,
-                llm_model="advisor",
-                enable_telemetry=False
-            )
+            app = MCPChatApp(mcp_server_url=None, llm_model="advisor", enable_telemetry=False)
 
             # Since we don't have a real MCP server running, we'll test tools directly
             tools = LockfileManagerTools(lockfile_path=lockfile_path)
 
-            # Step 1: User asks for recommendations
-            print("\n📝 Step 1: Getting recommendations for coding...")
+            # Step 1: Add test aliases directly (no more recommend_alias)
+            print("\n✅ Step 1: Adding test aliases...")
 
-            rec_result = await tools.recommend_alias(
-                use_case="coding and debugging Python applications"
-            )
+            test_aliases = [
+                {"alias": "fast", "model": "openai:gpt-4o-mini"},
+                {"alias": "deep", "model": "anthropic:claude-3-5-sonnet"},
+            ]
 
-            assert rec_result["recommendations"]
-            recommendations = rec_result["recommendations"]
-
-            print(f"   Got {len(recommendations)} recommendations")
-            for rec in recommendations[:3]:
-                print(f"   - {rec['alias']}: {rec['model']} - {rec['reason'][:50]}...")
-
-            # Step 2: Add recommended aliases
-            print("\n✅ Step 2: Adding recommended aliases...")
-
-            for rec in recommendations[:2]:  # Add first two
+            for alias_config in test_aliases:
                 add_result = await tools.add_alias(
-                    alias=rec["alias"],
-                    model=rec["model"]
+                    alias=alias_config["alias"], model=alias_config["model"]
                 )
                 assert add_result["success"]
-                print(f"   Added {rec['alias']} -> {rec['model']}")
+                print(f"   Added {alias_config['alias']} -> {alias_config['model']}")
 
-            # Step 3: List current configuration
-            print("\n📋 Step 3: Listing current aliases...")
+            # Step 2: List current configuration
+            print("\n📋 Step 2: Listing current aliases...")
 
             list_result = await tools.list_aliases()
             aliases = list_result["aliases"]
@@ -117,30 +92,27 @@ async def test_e2e_complete_workflow():
             for alias_info in aliases:
                 print(f"   - {alias_info['alias']}: {alias_info['model']}")
 
-            # Step 4: Analyze costs
-            print("\n💰 Step 4: Analyzing monthly costs...")
+            # Step 3: Analyze costs
+            print("\n💰 Step 3: Analyzing monthly costs...")
 
             cost_result = await tools.analyze_costs(
-                monthly_volume={
-                    "input_tokens": 5000000,
-                    "output_tokens": 2000000
-                }
+                monthly_volume={"input_tokens": 5000000, "output_tokens": 2000000}
             )
 
             print(f"   Total monthly cost: ${cost_result['total_monthly_cost']:.2f}")
             print("   Breakdown by alias:")
-            for item in cost_result["cost_breakdown"]:
-                print(f"   - {item['alias']}: ${item['monthly_cost']:.2f}")
+            for alias, details in cost_result["cost_breakdown"].items():
+                print(f"   - {alias}: ${details['total_cost']:.2f}")
 
-            # Step 5: Save configuration
-            print("\n💾 Step 5: Saving configuration...")
+            # Step 4: Save configuration
+            print("\n💾 Step 4: Saving configuration...")
 
             save_result = await tools.save_lockfile()
             assert save_result["success"]
             print(f"   Saved to {lockfile_path}")
 
-            # Step 6: Verify persistence
-            print("\n🔍 Step 6: Verifying persistence...")
+            # Step 5: Verify persistence
+            print("\n🔍 Step 5: Verifying persistence...")
 
             loaded_lockfile = Lockfile.load(lockfile_path)
             for alias_info in aliases:
@@ -175,10 +147,7 @@ async def test_e2e_conversational_flow():
         # Conversation 1: User wants fast responses
         print("\n👤 User: I need a really fast model for quick responses")
 
-        result = await tools.add_alias(
-            alias="fast",
-            use_case="quick responses with minimal latency"
-        )
+        result = await tools.add_alias(alias="fast", model="openai:gpt-4o-mini")
 
         print(f"🤖 Assistant: I've added the 'fast' alias with {result['model']}")
         print(f"   Recommendation: {result.get('recommendation', 'Optimized for speed')}")
@@ -187,32 +156,22 @@ async def test_e2e_conversational_flow():
         print("\n👤 User: How much will this cost me per month if I use it heavily?")
 
         cost_result = await tools.analyze_costs(
-            monthly_volume={
-                "input_tokens": 10000000,
-                "output_tokens": 5000000
-            }
+            monthly_volume={"input_tokens": 10000000, "output_tokens": 5000000}
         )
 
         print(f"🤖 Assistant: With heavy usage (15M tokens/month):")
         print(f"   Total cost: ${cost_result['total_monthly_cost']:.2f}")
 
         # Conversation 3: User wants coding model
-        print("\n👤 User: I also need something for coding. What do you recommend?")
+        print("\n👤 User: I also need something for coding.")
 
-        rec_result = await tools.recommend_alias(
-            use_case="Python and JavaScript development with code generation and debugging"
-        )
+        # Add a coding-optimized model directly
+        print(f"🤖 Assistant: I'll add a coding-optimized model:")
+        print(f"   coder: openai:gpt-4o")
+        print(f"   This model has excellent code generation capabilities")
 
-        top_rec = rec_result["recommendations"][0]
-        print(f"🤖 Assistant: For coding, I recommend:")
-        print(f"   {top_rec['alias']}: {top_rec['model']}")
-        print(f"   Reason: {top_rec['reason']}")
-
-        # Add the recommendation
-        await tools.add_alias(
-            alias=top_rec["alias"],
-            model=top_rec["model"]
-        )
+        # Add the alias
+        await tools.add_alias(alias="coder", model="openai:gpt-4o")
 
         # Conversation 4: User wants to see everything
         print("\n👤 User: Show me all my aliases")
@@ -222,8 +181,6 @@ async def test_e2e_conversational_flow():
         print("🤖 Assistant: Here are your configured aliases:")
         for alias in list_result["aliases"]:
             print(f"   • {alias['alias']}: {alias['model']}")
-            if alias.get("profile") != "default":
-                print(f"     (Profile: {alias['profile']})")
 
         # Conversation 5: Save configuration
         print("\n👤 User: Save this configuration")
@@ -254,10 +211,7 @@ async def test_e2e_error_recovery():
         # Error 1: Invalid model format
         print("\n❌ Attempting invalid model format...")
 
-        result = await tools.add_alias(
-            alias="broken",
-            model="this:is:not:valid:format"
-        )
+        result = await tools.add_alias(alias="broken", model="this:is:not:valid:format")
 
         if not result["success"]:
             print(f"   Handled gracefully: {result.get('message', 'Invalid format detected')}")
@@ -291,10 +245,7 @@ async def test_e2e_error_recovery():
         # Recovery: Continue working after errors
         print("\n✅ Continuing normal operations after errors...")
 
-        final_result = await tools.add_alias(
-            alias="working",
-            use_case="general purpose after recovery"
-        )
+        final_result = await tools.add_alias(alias="working", model="openai:gpt-4o-mini")
 
         assert final_result["success"]
         print(f"   Successfully added 'working' alias: {final_result['model']}")
@@ -314,18 +265,9 @@ async def test_e2e_multi_profile():
 
         # Setup profiles
         profiles = {
-            "default": {
-                "fast": "openai:gpt-4o-mini",
-                "deep": "anthropic:claude-3-5-sonnet"
-            },
-            "development": {
-                "fast": "ollama:llama3",
-                "deep": "anthropic:claude-3-haiku"
-            },
-            "production": {
-                "fast": "openai:gpt-4o",
-                "deep": "anthropic:claude-3-opus"
-            }
+            "default": {"fast": "openai:gpt-4o-mini", "deep": "anthropic:claude-3-5-sonnet"},
+            "development": {"fast": "ollama:llama3", "deep": "anthropic:claude-3-haiku"},
+            "production": {"fast": "openai:gpt-4o", "deep": "anthropic:claude-3-opus"},
         }
 
         # Add aliases to each profile
@@ -333,11 +275,7 @@ async def test_e2e_multi_profile():
             print(f"\n📁 Setting up profile: {profile_name}")
 
             for alias, model in aliases.items():
-                result = await tools.add_alias(
-                    alias=alias,
-                    model=model,
-                    profile=profile_name
-                )
+                result = await tools.add_alias(alias=alias, model=model, profile=profile_name)
                 assert result["success"]
                 print(f"   Added {alias} -> {model}")
 
@@ -355,10 +293,7 @@ async def test_e2e_multi_profile():
         volume = {"input_tokens": 1000000, "output_tokens": 500000}
 
         for profile_name in profiles.keys():
-            cost_result = await tools.analyze_costs(
-                profile=profile_name,
-                monthly_volume=volume
-            )
+            cost_result = await tools.analyze_costs(profile=profile_name, monthly_volume=volume)
 
             print(f"   {profile_name}: ${cost_result['total_monthly_cost']:.2f}/month")
 
@@ -390,7 +325,7 @@ async def test_e2e_model_assessment():
         "openai:gpt-4o-mini",
         "anthropic:claude-3-5-sonnet",
         "anthropic:claude-3-haiku",
-        "google:gemini-1.5-pro"
+        "google:gemini-1.5-pro",
     ]
 
     assessments = {}
@@ -405,27 +340,7 @@ async def test_e2e_model_assessment():
             print(f"     Active: {result.get('active', 'Unknown')}")
             print(f"     Capabilities: {', '.join(result.get('capabilities', []))[:50]}...")
 
-    # Compare for specific use case
-    print("\n🎯 Getting recommendations for specific use cases:")
-
-    use_cases = [
-        "Fast chatbot responses with low cost",
-        "Complex reasoning tasks",
-        "Code generation for software development"
-    ]
-
-    for use_case in use_cases:
-        print(f"\n   Use case: {use_case}")
-
-        rec_result = await tools.recommend_alias(
-            use_case=use_case
-        )
-
-        top_recs = rec_result["recommendations"][:2]
-        for rec in top_recs:
-            print(f"     • {rec['alias']}: {rec['model']}")
-            print(f"       {rec['reason'][:60]}...")
-
+    # Test is complete - recommendation functionality was removed
     print("\n✅ Model assessment E2E test completed!")
 
 
@@ -450,6 +365,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"\n❌ E2E test failed: {e}")
             import traceback
+
             traceback.print_exc()
 
     asyncio.run(main())
