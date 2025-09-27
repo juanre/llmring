@@ -138,12 +138,13 @@ The `advisor` alias is specifically configured for:
 
 ## Integration with Existing Workflow
 
-The conversational interface works with your existing `llmring.lock` file:
-1. It reads your current configuration on startup
-2. Makes changes in memory during the conversation
-3. Saves changes when you request it
+The conversational interface intelligently manages your `llmring.lock` file:
+1. **Automatic Project Root Discovery**: Finds your project root (where pyproject.toml, setup.py, or .git is located)
+2. **Creates/loads lockfile at project root**: Ensures lockfile is in the right place for packaging
+3. **Packaging guidance**: When saving, provides instructions for including lockfile in your package distribution
+4. **In-memory changes**: Experiment with configurations before committing
 
-This allows you to experiment with different configurations before committing changes.
+This ensures your lockfile is always in the right location for both development and distribution.
 
 ## Benefits
 

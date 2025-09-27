@@ -33,6 +33,18 @@ uv add llmring
 pip install llmring
 ```
 
+**Including Lockfiles in Your Package:**
+
+To ship your `llmring.lock` with your package (like llmring does), add to your `pyproject.toml`:
+
+```toml
+[tool.hatch.build]
+include = [
+    "src/yourpackage/**/*.py",
+    "src/yourpackage/**/*.lock",  # Include lockfiles
+]
+```
+
 ### Basic Usage
 
 ```python
@@ -185,17 +197,14 @@ request = LLMRequest(
 
 ### 🧠 Intelligent Model Aliases
 
-LLMRing features intelligent lockfile creation that analyzes the current registry and recommends optimal aliases:
+LLMRing automatically creates lockfiles at your project root and provides intelligent alias management:
 
 ```bash
-# Interactive mode - answers prompts about your needs
-llmring lock init --interactive
+# Initialize lockfile at project root (finds pyproject.toml, setup.py, or .git)
+llmring lock init
 
-# With requirements from a file
-llmring lock init --interactive --requirements-file requirements.txt
-
-# With requirements directly in command
-llmring lock init --interactive --requirements "I need cost-effective models for coding"
+# Interactive lockfile management with AI advisor
+llmring lock chat  # Uses built-in advisor for natural language configuration
 
 # Analyze your configuration
 llmring lock analyze
@@ -203,6 +212,12 @@ llmring lock analyze
 # Optimize existing lockfile
 llmring lock optimize
 ```
+
+**Lockfile Resolution Order:**
+1. Explicit path via `lockfile_path` parameter
+2. `LLMRING_LOCKFILE_PATH` environment variable
+3. `./llmring.lock` in current directory
+4. Bundled lockfile (fallback for packages)
 
 **Interactive Mode** prompts you for:
 - **Use cases**: What you'll primarily use LLMs for (coding, writing, analysis, etc.)

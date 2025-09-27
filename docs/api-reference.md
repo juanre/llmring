@@ -13,10 +13,15 @@ from llmring.service import LLMRing
 async with LLMRing(
     origin="myapp",                    # Optional: Origin identifier
     registry_url=None,                 # Optional: Custom registry URL
-    lockfile_path="./llmring.lock"     # Optional: Custom lockfile path
+    lockfile_path="/path/to/custom.lock"  # Optional: Explicit lockfile path
 ) as service:
     # Use service here
     response = await service.chat(request)
+
+# Lockfile Resolution Order (when lockfile_path not specified):
+# 1. LLMRING_LOCKFILE_PATH environment variable
+# 2. ./llmring.lock in current directory
+# 3. Bundled lockfile from package (fallback)
 
 # Or manual resource management
 service = LLMRing()
