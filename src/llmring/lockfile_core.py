@@ -12,7 +12,7 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import toml
 from pydantic import BaseModel, Field
@@ -33,29 +33,64 @@ except ImportError:
 
 
 class AliasBinding(BaseModel):
-    """Represents an alias to model binding."""
+    """Represents an alias to model binding with fallback support."""
 
     alias: str = Field(..., description="Alias name (e.g., 'summarizer')")
-    provider: str = Field(..., description="Provider name (e.g., 'openai')")
-    model: str = Field(..., description="Model name (e.g., 'gpt-4')")
+    models: List[str] = Field(..., description="Ordered list of model references (provider:model)")
     constraints: Optional[Dict[str, Any]] = Field(None, description="Optional constraints")
 
     @property
     def model_ref(self) -> str:
-        """Get the full model reference (provider:model)."""
-        return f"{self.provider}:{self.model}"
+        """Get the primary model reference (first in list)."""
+        return self.models[0] if self.models else ""
+
+    @property
+    def provider(self) -> str:
+        """Get the provider of the primary model."""
+        if self.models and ":" in self.models[0]:
+            return self.models[0].split(":", 1)[0]
+        return ""
+
+    @property
+    def model(self) -> str:
+        """Get the model name of the primary model."""
+        if self.models and ":" in self.models[0]:
+            return self.models[0].split(":", 1)[1]
+        return ""
+
+    @classmethod
+    def from_model_refs(
+        cls, alias: str, model_refs: Union[str, List[str]], constraints: Optional[Dict] = None
+    ) -> "AliasBinding":
+        """Create from model reference(s).
+
+        Args:
+            alias: Alias name
+            model_refs: Single model ref string or list of model refs
+            constraints: Optional constraints
+        """
+        if isinstance(model_refs, str):
+            # Handle comma-separated string
+            if "," in model_refs:
+                models = [ref.strip() for ref in model_refs.split(",")]
+            else:
+                models = [model_refs.strip()]
+        else:
+            models = model_refs
+
+        # Validate each model reference
+        for ref in models:
+            if ":" not in ref:
+                raise ValueError(f"Invalid model reference: {ref}. Expected format: provider:model")
+
+        return cls(alias=alias, models=models, constraints=constraints)
 
     @classmethod
     def from_model_ref(
         cls, alias: str, model_ref: str, constraints: Optional[Dict] = None
     ) -> "AliasBinding":
-        """Create from a model reference string like 'openai:gpt-4'."""
-        if ":" not in model_ref:
-            raise ValueError(
-                f"Invalid model reference: {model_ref}. Expected format: provider:model"
-            )
-        provider, model = model_ref.split(":", 1)
-        return cls(alias=alias, provider=provider, model=model, constraints=constraints)
+        """Create from a single model reference (backward compatibility)."""
+        return cls.from_model_refs(alias, model_ref, constraints)
 
 
 class ProfileConfig(BaseModel):
@@ -74,12 +109,20 @@ class ProfileConfig(BaseModel):
                 return binding
         return None
 
-    def set_binding(self, alias: str, model_ref: str, constraints: Optional[Dict] = None):
-        """Set or update a binding."""
+    def set_binding(
+        self, alias: str, model_refs: Union[str, List[str]], constraints: Optional[Dict] = None
+    ):
+        """Set or update a binding.
+
+        Args:
+            alias: Alias name
+            model_refs: Single model ref, comma-separated refs, or list of refs
+            constraints: Optional constraints
+        """
         # Remove existing binding if present
         self.bindings = [b for b in self.bindings if b.alias != alias]
         # Add new binding
-        binding = AliasBinding.from_model_ref(alias, model_ref, constraints)
+        binding = AliasBinding.from_model_refs(alias, model_refs, constraints)
         self.bindings.append(binding)
 
     def remove_binding(self, alias: str) -> bool:
@@ -332,13 +375,20 @@ class Lockfile(BaseModel):
     def set_binding(
         self,
         alias: str,
-        model_ref: str,
+        model_refs: Union[str, List[str]],
         profile: Optional[str] = None,
         constraints: Optional[Dict] = None,
     ):
-        """Set a binding in the specified profile."""
+        """Set a binding in the specified profile.
+
+        Args:
+            alias: Alias name
+            model_refs: Single model ref, comma-separated refs, or list of refs
+            profile: Optional profile name
+            constraints: Optional constraints
+        """
         profile_config = self.get_profile(profile)
-        profile_config.set_binding(alias, model_ref, constraints)
+        profile_config.set_binding(alias, model_refs, constraints)
         self.updated_at = datetime.now(timezone.utc)
 
     def get_binding(self, alias: str, profile: Optional[str] = None) -> Optional[AliasBinding]:
@@ -351,10 +401,18 @@ class Lockfile(BaseModel):
         profile_config = self.get_profile(profile)
         return [b.alias for b in profile_config.bindings]
 
-    def resolve_alias(self, alias: str, profile: Optional[str] = None) -> Optional[str]:
-        """Resolve an alias to a model reference (provider:model)."""
+    def resolve_alias(self, alias: str, profile: Optional[str] = None) -> List[str]:
+        """Resolve an alias to an ordered list of model references.
+
+        Args:
+            alias: Alias name to resolve
+            profile: Optional profile name
+
+        Returns:
+            List of model references in priority order, empty list if not found
+        """
         binding = self.get_binding(alias, profile)
-        return binding.model_ref if binding else None
+        return binding.models if binding else []
 
     def save(self, path: Optional[Path] = None):
         """Save the lockfile to disk."""

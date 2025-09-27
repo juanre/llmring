@@ -162,13 +162,13 @@ class TestLockfile:
         lockfile = Lockfile()
         lockfile.set_binding("summarizer", "openai:gpt-3.5-turbo")
 
-        # Resolve existing alias
-        model_ref = lockfile.resolve_alias("summarizer")
-        assert model_ref == "openai:gpt-3.5-turbo"
+        # Resolve existing alias - now returns a list
+        model_refs = lockfile.resolve_alias("summarizer")
+        assert model_refs == ["openai:gpt-3.5-turbo"]
 
         # Try to resolve non-existent alias
-        model_ref = lockfile.resolve_alias("non_existent")
-        assert model_ref is None
+        model_refs = lockfile.resolve_alias("non_existent")
+        assert model_refs == []
 
     def test_profile_management(self):
         """Test profile creation and management."""
@@ -284,7 +284,7 @@ class TestProfileConfig:
     def test_get_binding(self):
         """Test getting a specific binding from profile."""
         profile = ProfileConfig(name="test")
-        binding = AliasBinding(alias="test", provider="openai", model="gpt-4")
+        binding = AliasBinding(alias="test", models=["openai:gpt-4"])
         profile.bindings.append(binding)
 
         found = profile.get_binding("test")
@@ -317,7 +317,7 @@ class TestAliasBinding:
 
     def test_alias_binding_creation(self):
         """Test creating an alias binding."""
-        binding = AliasBinding(alias="summarizer", provider="openai", model="gpt-3.5-turbo")
+        binding = AliasBinding(alias="summarizer", models=["openai:gpt-3.5-turbo"])
 
         assert binding.alias == "summarizer"
         assert binding.provider == "openai"
@@ -328,15 +328,13 @@ class TestAliasBinding:
     def test_alias_binding_with_constraints(self):
         """Test alias binding with constraints."""
         constraints = {"max_tokens": 500, "temperature": 0.7}
-        binding = AliasBinding(
-            alias="creative", provider="openai", model="gpt-4", constraints=constraints
-        )
+        binding = AliasBinding(alias="creative", models=["openai:gpt-4"], constraints=constraints)
 
         assert binding.constraints == constraints
 
     def test_from_model_ref(self):
         """Test creating binding from model reference."""
-        binding = AliasBinding.from_model_ref("test_alias", "anthropic:claude-3-opus-20240229")
+        binding = AliasBinding.from_model_refs("test_alias", "anthropic:claude-3-opus-20240229")
 
         assert binding.alias == "test_alias"
         assert binding.provider == "anthropic"
@@ -346,19 +344,19 @@ class TestAliasBinding:
     def test_from_model_ref_with_constraints(self):
         """Test creating binding from model ref with constraints."""
         constraints = {"temperature": 0.5}
-        binding = AliasBinding.from_model_ref("precise", "openai:gpt-4", constraints=constraints)
+        binding = AliasBinding.from_model_refs("precise", "openai:gpt-4", constraints=constraints)
 
         assert binding.constraints == constraints
 
     def test_from_model_ref_invalid(self):
         """Test invalid model reference."""
         with pytest.raises(ValueError, match="Invalid model reference"):
-            AliasBinding.from_model_ref("alias", "invalid_model_ref")
+            AliasBinding.from_model_refs("alias", "invalid_model_ref")
 
         with pytest.raises(ValueError, match="Invalid model reference"):
-            AliasBinding.from_model_ref("alias", "")
+            AliasBinding.from_model_refs("alias", "")
 
         # Edge case: multiple colons
-        binding = AliasBinding.from_model_ref("alias", "provider:model:version")
+        binding = AliasBinding.from_model_refs("alias", "provider:model:version")
         assert binding.provider == "provider"
         assert binding.model == "model:version"  # Everything after first colon

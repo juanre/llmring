@@ -12,7 +12,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 
@@ -25,15 +25,14 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
 class LockfileServer:
     """MCP server for conversational lockfile management."""
-    
+
     def __init__(self, lockfile_path: Optional[Path] = None):
         """
         Initialize the lockfile server.
@@ -42,22 +41,17 @@ class LockfileServer:
             lockfile_path: Path to the lockfile (defaults to llmring.lock)
         """
         # Initialize lockfile tools
-        self.tools = LockfileManagerTools(
-            lockfile_path=lockfile_path
-        )
-        
+        self.tools = LockfileManagerTools(lockfile_path=lockfile_path)
+
         # Create MCP server
-        self.server = MCPServer(
-            name="LLMRing Lockfile Manager",
-            version="1.0.0"
-        )
-        
+        self.server = MCPServer(name="LLMRing Lockfile Manager", version="1.0.0")
+
         # Register all lockfile management tools
         self._register_tools()
-        
+
     def _register_tools(self):
         """Register all lockfile management tools with the MCP server."""
-        
+
         # Add alias tool
         self.server.function_registry.register(
             name="add_alias",
@@ -68,26 +62,30 @@ class LockfileServer:
                 "properties": {
                     "alias": {
                         "type": "string",
-                        "description": "REQUIRED: The alias name to create (e.g., 'fast', 'deep', 'coder', 'pdf_converter')"
+                        "description": "REQUIRED: The alias name to create (e.g., 'fast', 'deep', 'coder', 'pdf_converter')",
                     },
                     "model": {
                         "type": "string",
-                        "description": "REQUIRED: Model reference in format provider:model (e.g., 'openai:gpt-4o-mini', 'anthropic:claude-3-haiku')"
+                        "description": "REQUIRED: Model reference(s) - single model or comma-separated list for fallbacks (e.g., 'anthropic:claude-3-opus,openai:gpt-4')",
                     },
                     "profile": {
                         "type": "string",
-                        "description": "OPTIONAL: Profile to add the alias to (defaults to 'default' if not specified)"
-                    }
+                        "description": "OPTIONAL: Profile to add the alias to (defaults to 'default' if not specified)",
+                    },
                 },
                 "required": ["alias", "model"],
                 "examples": [
                     {"alias": "fast", "model": "openai:gpt-5-nano"},
                     {"alias": "pdf_converter", "model": "openai:gpt-4o-mini"},
-                    {"alias": "deep", "model": "anthropic:claude-3-opus", "profile": "production"}
-                ]
-            }
+                    {"alias": "deep", "model": "anthropic:claude-3-opus", "profile": "production"},
+                    {
+                        "alias": "summarizer",
+                        "model": "anthropic:claude-3-haiku,openai:gpt-4o-mini,google:gemini-pro",
+                    },
+                ],
+            },
         )
-        
+
         # Remove alias tool
         self.server.function_registry.register(
             name="remove_alias",
@@ -95,20 +93,17 @@ class LockfileServer:
             schema={
                 "type": "object",
                 "properties": {
-                    "alias": {
-                        "type": "string",
-                        "description": "The alias name to remove"
-                    },
+                    "alias": {"type": "string", "description": "The alias name to remove"},
                     "profile": {
                         "type": "string",
-                        "description": "Profile to remove from (default: 'default')"
-                    }
+                        "description": "Profile to remove from (default: 'default')",
+                    },
                 },
-                "required": ["alias"]
+                "required": ["alias"],
             },
-            description="Remove an alias from the lockfile."
+            description="Remove an alias from the lockfile.",
         )
-        
+
         # List aliases tool
         self.server.function_registry.register(
             name="list_aliases",
@@ -116,19 +111,16 @@ class LockfileServer:
             schema={
                 "type": "object",
                 "properties": {
-                    "profile": {
-                        "type": "string",
-                        "description": "Profile to list aliases from"
-                    },
+                    "profile": {"type": "string", "description": "Profile to list aliases from"},
                     "verbose": {
                         "type": "boolean",
-                        "description": "Include detailed model information"
-                    }
-                }
+                        "description": "Include detailed model information",
+                    },
+                },
             },
-            description="List all configured aliases and their bindings."
+            description="List all configured aliases and their bindings.",
         )
-        
+
         # Assess model tool
         self.server.function_registry.register(
             name="assess_model",
@@ -138,14 +130,14 @@ class LockfileServer:
                 "properties": {
                     "model_ref": {
                         "type": "string",
-                        "description": "Model to assess (alias or provider:model format)"
+                        "description": "Model to assess (alias or provider:model format)",
                     }
                 },
-                "required": ["model_ref"]
+                "required": ["model_ref"],
             },
-            description="Assess a model's capabilities, costs, and suitability."
+            description="Assess a model's capabilities, costs, and suitability.",
         )
-        
+
         # Analyze costs tool
         self.server.function_registry.register(
             name="analyze_costs",
@@ -153,28 +145,25 @@ class LockfileServer:
             schema={
                 "type": "object",
                 "properties": {
-                    "profile": {
-                        "type": "string",
-                        "description": "Profile to analyze"
-                    },
+                    "profile": {"type": "string", "description": "Profile to analyze"},
                     "monthly_volume": {
                         "type": "object",
                         "properties": {
                             "input_tokens": {"type": "integer"},
-                            "output_tokens": {"type": "integer"}
+                            "output_tokens": {"type": "integer"},
                         },
-                        "description": "Expected monthly token usage"
+                        "description": "Expected monthly token usage",
                     },
                     "hypothetical_models": {
                         "type": "object",
                         "additionalProperties": {"type": "string"},
-                        "description": "Optional hypothetical alias:model mappings for what-if analysis"
-                    }
-                }
+                        "description": "Optional hypothetical alias:model mappings for what-if analysis",
+                    },
+                },
             },
-            description="Analyze estimated costs for current or hypothetical configuration."
+            description="Analyze estimated costs for current or hypothetical configuration.",
         )
-        
+
         # Save lockfile tool
         self.server.function_registry.register(
             name="save_lockfile",
@@ -184,33 +173,27 @@ class LockfileServer:
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Optional path to save to (defaults to current lockfile path)"
+                        "description": "Optional path to save to (defaults to current lockfile path)",
                     }
-                }
+                },
             },
-            description="Save the current lockfile configuration to disk."
+            description="Save the current lockfile configuration to disk.",
         )
-        
+
         # Get current configuration
         self.server.function_registry.register(
             name="get_configuration",
             func=self._wrap_async(self.tools.get_current_configuration),
-            schema={
-                "type": "object",
-                "properties": {}
-            },
-            description="Get the complete current lockfile configuration."
+            schema={"type": "object", "properties": {}},
+            description="Get the complete current lockfile configuration.",
         )
 
         # Get available providers
         self.server.function_registry.register(
             name="get_available_providers",
             func=self._wrap_async(self.tools.get_available_providers),
-            schema={
-                "type": "object",
-                "properties": {}
-            },
-            description="Check which providers have API keys configured in environment variables."
+            schema={"type": "object", "properties": {}},
+            description="Check which providers have API keys configured in environment variables.",
         )
 
         # List models
@@ -223,15 +206,15 @@ class LockfileServer:
                     "providers": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Filter by specific providers"
+                        "description": "Filter by specific providers",
                     },
                     "include_inactive": {
                         "type": "boolean",
-                        "description": "Include inactive/deprecated models"
-                    }
-                }
+                        "description": "Include inactive/deprecated models",
+                    },
+                },
             },
-            description="List all available models with their specifications from the registry."
+            description="List all available models with their specifications from the registry.",
         )
 
         # Filter models by requirements
@@ -243,29 +226,29 @@ class LockfileServer:
                 "properties": {
                     "min_context": {
                         "type": "integer",
-                        "description": "Minimum context window size required"
+                        "description": "Minimum context window size required",
                     },
                     "max_input_cost": {
                         "type": "number",
-                        "description": "Maximum cost per million input tokens"
+                        "description": "Maximum cost per million input tokens",
                     },
                     "max_output_cost": {
                         "type": "number",
-                        "description": "Maximum cost per million output tokens"
+                        "description": "Maximum cost per million output tokens",
                     },
                     "required_capabilities": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Required capabilities (e.g., vision, function_calling)"
+                        "description": "Required capabilities (e.g., vision, function_calling)",
                     },
                     "providers": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Filter by specific providers"
-                    }
-                }
+                        "description": "Filter by specific providers",
+                    },
+                },
             },
-            description="Filter models based on specific requirements like context size, cost, and capabilities."
+            description="Filter models based on specific requirements like context size, cost, and capabilities.",
         )
 
         # Get model details
@@ -278,16 +261,18 @@ class LockfileServer:
                     "models": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of model references to get details for"
+                        "description": "List of model references to get details for",
                     }
                 },
-                "required": ["models"]
+                "required": ["models"],
             },
-            description="Get complete details for specific models including pricing, capabilities, and specifications."
+            description="Get complete details for specific models including pricing, capabilities, and specifications.",
         )
 
-        logger.info(f"Registered {len(self.server.function_registry.functions)} lockfile management tools")
-        
+        logger.info(
+            f"Registered {len(self.server.function_registry.functions)} lockfile management tools"
+        )
+
     def _wrap_async(self, async_func):
         """Wrap async function for synchronous call from MCP server with enhanced error handling."""
         import concurrent.futures
@@ -295,7 +280,7 @@ class LockfileServer:
 
         def wrapper(**kwargs):
             # Extract timeout if provided in kwargs (with _ prefix to avoid conflicts)
-            timeout = kwargs.pop('_timeout', 30)
+            timeout = kwargs.pop("_timeout", 30)
 
             # Check if we're in an async context
             try:
@@ -313,7 +298,9 @@ class LockfileServer:
                         logger.error(f"Tool {async_func.__name__} timed out after {timeout}s")
                         raise TimeoutError(f"Tool execution timed out after {timeout}s")
                     except Exception as e:
-                        logger.error(f"Tool {async_func.__name__} execution error: {e}", exc_info=True)
+                        logger.error(
+                            f"Tool {async_func.__name__} execution error: {e}", exc_info=True
+                        )
                         raise
 
             except RuntimeError:
@@ -321,11 +308,13 @@ class LockfileServer:
                 try:
                     return asyncio.run(async_func(**kwargs))
                 except Exception as e:
-                    logger.error(f"Tool {async_func.__name__} execution error (new loop): {e}", exc_info=True)
+                    logger.error(
+                        f"Tool {async_func.__name__} execution error (new loop): {e}", exc_info=True
+                    )
                     raise
 
         return wrapper
-        
+
     async def run(self, transport=None):
         """Run the MCP server.
 
@@ -355,9 +344,7 @@ async def main():
         lockfile_path = Path(lockfile_path)
 
     # Create server
-    server = LockfileServer(
-        lockfile_path=lockfile_path
-    )
+    server = LockfileServer(lockfile_path=lockfile_path)
 
     # Use STDIO transport for now
     transport = StdioTransport()

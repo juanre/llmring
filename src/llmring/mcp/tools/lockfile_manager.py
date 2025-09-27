@@ -326,11 +326,11 @@ class LockfileManagerTools:
         self, alias: str, model: str, profile: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Add or update an alias in the lockfile.
+        Add or update an alias in the lockfile with fallback support.
 
         Args:
             alias: Name of the alias to add
-            model: Model reference (provider:model)
+            model: Model reference(s) - single or comma-separated for fallbacks
             profile: Profile to add to, defaults to current working profile
 
         Returns:
@@ -338,18 +338,33 @@ class LockfileManagerTools:
         """
         profile = profile or self.working_profile
 
+        # Parse model(s) - handle comma-separated fallbacks
+        models = model  # Can be single or comma-separated
+
         # Add the binding
-        self.lockfile.set_binding(alias, model, profile=profile)
+        self.lockfile.set_binding(alias, models, profile=profile)
 
         # Save
         self.lockfile.save(self.lockfile_path)
 
+        # Format message based on whether there are fallbacks
+        if "," in models:
+            model_list = [m.strip() for m in models.split(",")]
+            message = f"Added alias '{alias}' → {model_list[0]} (with {len(model_list)-1} fallback(s)) to profile '{profile}'"
+            models_info = {"primary": model_list[0], "fallbacks": model_list[1:]}
+        else:
+            message = f"Added alias '{alias}' → {models} to profile '{profile}'"
+            models_info = models
+
         return {
             "success": True,
             "alias": alias,
-            "model": model,
+            "model": (
+                models if isinstance(models, str) else models_info
+            ),  # Keep 'model' for backward compat
+            "models": models_info,  # New field with structured info
             "profile": profile,
-            "message": f"Added alias '{alias}' → {model} to profile '{profile}'",
+            "message": message,
         }
 
     async def remove_alias(self, alias: str, profile: Optional[str] = None) -> Dict[str, Any]:

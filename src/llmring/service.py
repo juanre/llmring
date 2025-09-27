@@ -239,7 +239,7 @@ class LLMRing:
             profile: Optional profile name (defaults to lockfile default or env var)
 
         Returns:
-            Resolved model string (provider:model)
+            Resolved model string (provider:model) - first available from fallback list
         """
         # If it looks like a model reference (contains colon), return as-is
         if ":" in alias_or_model:
@@ -263,12 +263,40 @@ class LLMRing:
         # Try to resolve as alias from lockfile
         if self.lockfile:
             profile_name = profile or os.getenv("LLMRING_PROFILE")
-            resolved = self.lockfile.resolve_alias(alias_or_model, profile_name)
-            if resolved:
-                logger.debug(f"Resolved alias '{alias_or_model}' to '{resolved}'")
-                # Add to cache
-                self._add_to_alias_cache(cache_key, resolved)
-                return resolved
+            model_refs = self.lockfile.resolve_alias(alias_or_model, profile_name)
+
+            if model_refs:
+                # Try each model in order until we find one with an available provider
+                unavailable_models = []
+                for model_ref in model_refs:
+                    try:
+                        provider_type, _ = self._parse_model_string(model_ref)
+                        if provider_type in self.providers:
+                            logger.debug(
+                                f"Resolved alias '{alias_or_model}' to '{model_ref}' (provider available)"
+                            )
+                            # Add to cache
+                            self._add_to_alias_cache(cache_key, model_ref)
+                            return model_ref
+                        else:
+                            unavailable_models.append(f"{model_ref} (no {provider_type} API key)")
+                            logger.debug(
+                                f"Skipping '{model_ref}' - provider '{provider_type}' not available"
+                            )
+                    except ValueError:
+                        # Invalid model reference format
+                        logger.warning(
+                            f"Invalid model reference in alias '{alias_or_model}': {model_ref}"
+                        )
+                        continue
+
+                # No available providers found
+                if unavailable_models:
+                    raise ValueError(
+                        f"No available providers for alias '{alias_or_model}'. "
+                        f"Tried models: {', '.join(unavailable_models)}. "
+                        f"Please configure the required API keys."
+                    )
 
         # If no lockfile or alias not found, this is an error
         # We require explicit provider:model format or valid aliases

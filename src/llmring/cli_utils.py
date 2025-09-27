@@ -83,7 +83,7 @@ def load_lockfile_or_exit(
 
 def print_aliases(lockfile: Lockfile, profile: Optional[str] = None) -> None:
     """
-    Print aliases in a consistent format.
+    Print aliases in a consistent format, showing fallback models.
 
     Args:
         lockfile: The lockfile to print aliases from
@@ -94,7 +94,13 @@ def print_aliases(lockfile: Lockfile, profile: Optional[str] = None) -> None:
     if profile_config.bindings:
         print(f"\nAliases in profile '{profile_config.name}':")
         for binding in profile_config.bindings:
-            print(f"  {binding.alias} → {binding.model_ref}")
+            # Check if we have multiple models (fallbacks)
+            if binding.models and len(binding.models) > 1:
+                print(f"  {binding.alias} → {binding.models[0]}")
+                print(f"      fallbacks: {', '.join(binding.models[1:])}")
+            else:
+                # Single model or legacy format
+                print(f"  {binding.alias} → {binding.model_ref}")
     else:
         print(f"\nNo aliases configured in profile '{profile_config.name}'")
 

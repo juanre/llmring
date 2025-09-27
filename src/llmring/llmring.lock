@@ -17,8 +17,7 @@ name = "default"
 # The advisor alias is used by "llmring lock chat" for intelligent lockfile management
 [[profiles.default.bindings]]
 alias = "advisor"
-provider = "anthropic"
-model = "claude-opus-4-1-20250805"
+models = ["anthropic:claude-opus-4-1-20250805"]
 
 [profiles.default.registry_versions]
 # Empty by default - will be populated when users run registry commands

@@ -101,7 +101,7 @@ async def cmd_lock_init(args):
 
 
 def cmd_bind(args):
-    """Bind an alias to a model."""
+    """Bind an alias to one or more models (with fallback support)."""
     # Load or create lockfile
     # For bind command, use current directory lockfile
     lockfile_path = Path(LOCKFILE_NAME)
@@ -114,14 +114,24 @@ def cmd_bind(args):
         lockfile = Lockfile.create_default()
         lockfile_path = Path(LOCKFILE_NAME)
 
+    # Parse model(s) - can be comma-separated for fallbacks
+    models = args.model  # Already a string, can be comma-separated
+
     # Set binding
-    lockfile.set_binding(args.alias, args.model, profile=args.profile)
+    lockfile.set_binding(args.alias, models, profile=args.profile)
 
     # Save
     lockfile.save(lockfile_path)
 
     profile_name = args.profile or lockfile.default_profile
-    print(f"✅ Bound '{args.alias}' → '{args.model}' in profile '{profile_name}'")
+
+    # Display what was bound
+    if "," in models:
+        model_list = [m.strip() for m in models.split(",")]
+        print(f"✅ Bound '{args.alias}' → {model_list[0]} in profile '{profile_name}'")
+        print(f"   Fallbacks: {', '.join(model_list[1:])}")
+    else:
+        print(f"✅ Bound '{args.alias}' → '{models}' in profile '{profile_name}'")
 
     return 0
 
@@ -621,9 +631,14 @@ def main():
     )
 
     # Bind command
-    bind_parser = subparsers.add_parser("bind", help="Bind an alias to a model")
+    bind_parser = subparsers.add_parser(
+        "bind", help="Bind an alias to model(s) with fallback support"
+    )
     bind_parser.add_argument("alias", help="Alias name")
-    bind_parser.add_argument("model", help="Model reference (provider:model)")
+    bind_parser.add_argument(
+        "model",
+        help="Model reference(s) - single or comma-separated for fallbacks (e.g., 'anthropic:claude-3-opus,openai:gpt-4')",
+    )
     bind_parser.add_argument("--profile", help="Profile to use (default: default)")
 
     # Aliases command
