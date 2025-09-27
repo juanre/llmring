@@ -214,10 +214,17 @@ llmring lock optimize
 ```
 
 **Lockfile Resolution Order:**
-1. Explicit path via `lockfile_path` parameter
-2. `LLMRING_LOCKFILE_PATH` environment variable
-3. `./llmring.lock` in current directory
-4. Bundled lockfile (fallback for packages)
+1. Explicit path via `lockfile_path` parameter (file must exist)
+2. `LLMRING_LOCKFILE_PATH` environment variable (file must exist)
+3. `./llmring.lock` in current directory (if exists)
+4. Bundled lockfile at `src/llmring/llmring.lock` (fallback)
+
+**Packaging Your Own Lockfile:**
+Libraries using LLMRing can ship with their own lockfiles. See [Lockfile Packaging Guide](docs/lockfile-packaging.md) for details on:
+- Including lockfiles in your package distribution
+- Project root discovery for optimal lockfile placement
+- Testing with explicit lockfile creation
+- Environment-specific configuration
 
 **Interactive Mode** prompts you for:
 - **Use cases**: What you'll primarily use LLMs for (coding, writing, analysis, etc.)
@@ -385,6 +392,7 @@ response = await llm.chat([
 
 - **[Provider Usage Guide](docs/provider-usage.md)** - Provider-specific features and examples
 - **[API Reference](docs/api-reference.md)** - Detailed API documentation
+- **[Lockfile Packaging Guide](docs/lockfile-packaging.md)** - How to package and distribute lockfiles
 - **[Structured Output](docs/structured-output.md)** - Unified JSON schema across all providers
 - **[MCP Integration](docs/mcp-integration.md)** - Model Context Protocol guide
 - **[MCP Chat Client](docs/mcp-chat-client.md)** - Generic MCP chat client with persistent history

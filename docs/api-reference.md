@@ -19,9 +19,9 @@ async with LLMRing(
     response = await service.chat(request)
 
 # Lockfile Resolution Order (when lockfile_path not specified):
-# 1. LLMRING_LOCKFILE_PATH environment variable
-# 2. ./llmring.lock in current directory
-# 3. Bundled lockfile from package (fallback)
+# 1. LLMRING_LOCKFILE_PATH environment variable (file must exist)
+# 2. ./llmring.lock in current directory (if exists)
+# 3. Bundled lockfile from package at src/llmring/llmring.lock (fallback)
 
 # Or manual resource management
 service = LLMRing()
