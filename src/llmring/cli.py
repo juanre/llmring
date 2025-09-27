@@ -253,9 +253,39 @@ async def cmd_lock_chat(args):
         server_url = args.server_url
         server_process = None
 
+    # System prompt that explains fallback models clearly
+    system_prompt = """You are the LLMRing Lockfile Manager assistant. You help users manage their LLM aliases and model configurations.
+
+IMPORTANT: Understanding Fallback Models in LLMRing
+====================================================
+LLMRing aliases support MULTIPLE models with automatic fallback based on provider availability.
+When you use add_alias with comma-separated models, you're creating a FALLBACK CHAIN, not choosing a single "fallback" model.
+
+How it works:
+1. User provides multiple models: "anthropic:claude-3-haiku,openai:gpt-4o-mini"
+2. LLMRing tries each model IN ORDER
+3. It uses the FIRST model whose provider has an API key configured
+4. This ensures code keeps working even when some API keys are missing
+
+Example scenarios:
+- User has only OpenAI key: "anthropic:claude-3-haiku,openai:gpt-4o-mini" → Uses openai:gpt-4o-mini
+- User has both keys: Same config → Uses anthropic:claude-3-haiku (first in list)
+- User has only Anthropic key: "openai:gpt-4o,anthropic:claude-3-5-sonnet" → Uses anthropic:claude-3-5-sonnet
+
+When helping users:
+- DO suggest adding multiple models to existing aliases for redundancy
+- DO explain this is about provider availability, not model quality
+- DO use add_alias with comma-separated models when appropriate
+- DON'T talk about choosing "a fallback model" - it's a fallback CHAIN
+- DON'T suggest single models when the user asks about fallbacks
+
+You have access to tools that help manage the lockfile. Use them to provide accurate information and help users configure their aliases effectively."""
+
     try:
-        # Create and run MCP chat app
-        app = MCPChatApp(mcp_server_url=server_url, llm_model=args.model)
+        # Create and run MCP chat app with system prompt
+        app = MCPChatApp(
+            mcp_server_url=server_url, llm_model=args.model, system_prompt=system_prompt
+        )
 
         # Custom initialization message for lockfile management
         await app.initialize_async()
@@ -269,8 +299,8 @@ async def cmd_lock_chat(args):
         app.console.print("  → Falls back to GPT-4o-mini if you only have OpenAI key")
 
         app.console.print("\nYou can use natural language to manage your lockfile:")
-        app.console.print("  • 'Add an alias called fast with fallback models'")
-        app.console.print("  • 'Explain how fallback models work'")
+        app.console.print("  • 'Add OpenAI fallback to my advisor alias'")
+        app.console.print("  • 'Update fast alias to use both Claude and GPT models'")
         app.console.print("  • 'What model should I use for coding?'")
         app.console.print("  • 'Show me my current aliases'")
         app.console.print("  • 'How much will my current setup cost?'")

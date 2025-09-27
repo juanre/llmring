@@ -101,6 +101,7 @@ class MCPChatApp:
         llm_model: str = "balanced",
         session_id: str | None = None,
         enable_telemetry: bool = None,
+        system_prompt: str | None = None,
     ):
         """
         Initialize the chat application.
@@ -110,6 +111,7 @@ class MCPChatApp:
             llm_model: LLM model to use
             session_id: Optional session ID to load
             enable_telemetry: Enable llmring-server telemetry (auto-detects if None)
+            system_prompt: Optional system prompt to include in conversations
         """
         # Rich console for output
         self.console = Console(theme=RICH_THEME)
@@ -117,6 +119,7 @@ class MCPChatApp:
         # LLMRing will be initialized in async context
         self.llmring = None
         self.model = llm_model
+        self.system_prompt = system_prompt
 
         # Telemetry integration (optional)
         self.integration = None
@@ -129,9 +132,11 @@ class MCPChatApp:
                 self.integration = MCPLLMRingIntegration(
                     origin="mcp-chat",
                     llmring_server_url=os.getenv("LLMRING_SERVER_URL"),
-                    api_key=os.getenv("LLMRING_API_KEY")
+                    api_key=os.getenv("LLMRING_API_KEY"),
                 )
-                self.console.print(f"[info]Telemetry enabled: {os.getenv('LLMRING_SERVER_URL', 'default')}[/info]")
+                self.console.print(
+                    f"[info]Telemetry enabled: {os.getenv('LLMRING_SERVER_URL', 'default')}[/info]"
+                )
             except Exception as e:
                 self.console.print(f"[warning]Telemetry disabled: {e}[/warning]")
                 self.integration = None
@@ -258,8 +263,8 @@ class MCPChatApp:
                 "function": {
                     "name": tool["name"],
                     "description": tool.get("description", ""),
-                    "parameters": tool.get("input_schema", {"type": "object", "properties": {}})
-                }
+                    "parameters": tool.get("input_schema", {"type": "object", "properties": {}}),
+                },
             }
             llm_tools.append(llm_tool)
 
@@ -286,7 +291,7 @@ class MCPChatApp:
                         "model_key": f"{provider}:{model_name}",
                         "display_name": f"{provider}:{model_name}",
                         "full_name": f"{provider}:{model_name}",
-                        "context_length": "N/A"  # We don't have this info readily available
+                        "context_length": "N/A",  # We don't have this info readily available
                     }
                 )
 
@@ -419,6 +424,10 @@ class MCPChatApp:
         Returns:
             System message content
         """
+        # Use custom system prompt if provided
+        if self.system_prompt:
+            return self.system_prompt
+
         if not self.available_tools:
             return "You are a helpful assistant. Respond directly to the user's questions."
 
@@ -474,8 +483,8 @@ When the user asks about aliases, models, or configurations, use the appropriate
                         "type": "function",
                         "function": {
                             "name": call.get("tool", call.get("name", "")),
-                            "arguments": json.dumps(call.get("arguments", {}))
-                        }
+                            "arguments": json.dumps(call.get("arguments", {})),
+                        },
                     }
                     native_calls.append(native_call)
 
@@ -543,8 +552,10 @@ When the user asks about aliases, models, or configurations, use the appropriate
                     return True
             except Exception as e:
                 if attempt < 2:
-                    wait_time = 2 ** attempt  # Exponential backoff: 1, 2, 4 seconds
-                    self.console.print(f"[warning]Reconnection attempt {attempt + 1} failed, waiting {wait_time}s...[/warning]")
+                    wait_time = 2**attempt  # Exponential backoff: 1, 2, 4 seconds
+                    self.console.print(
+                        f"[warning]Reconnection attempt {attempt + 1} failed, waiting {wait_time}s...[/warning]"
+                    )
                     await asyncio.sleep(wait_time)
                 else:
                     self.console.print(f"[error]Failed to reconnect after 3 attempts: {e}[/error]")
@@ -572,21 +583,19 @@ When the user asks about aliases, models, or configurations, use the appropriate
         if not self.mcp_client:
             self.console.print("[error]Cannot execute tools: No MCP server connected[/error]")
             # Add to conversation
-            self.conversation.append(Message(
-                role="assistant",
-                content=response.content,
-                tool_calls=response.tool_calls
-            ))
+            self.conversation.append(
+                Message(role="assistant", content=response.content, tool_calls=response.tool_calls)
+            )
             # Save after response
             self._save_conversation()
             return
 
         # Add assistant message with tool calls to conversation
-        self.conversation.append(Message(
-            role="assistant",
-            content=response.content or "",
-            tool_calls=response.tool_calls
-        ))
+        self.conversation.append(
+            Message(
+                role="assistant", content=response.content or "", tool_calls=response.tool_calls
+            )
+        )
         # Save after adding message
         self._save_conversation()
 
@@ -644,23 +653,30 @@ When the user asks about aliases, models, or configurations, use the appropriate
                     "tool_call_id": call.get("id"),
                     "tool": tool_name,
                     "result": result,
-                    "success": True
+                    "success": True,
                 }
                 tool_results.append(tool_result)
 
             except Exception as e:
                 # Check if it's a connection error
                 error_str = str(e).lower()
-                if any(conn_err in error_str for conn_err in ["connection", "transport", "disconnected", "timeout"]):
+                if any(
+                    conn_err in error_str
+                    for conn_err in ["connection", "transport", "disconnected", "timeout"]
+                ):
                     # Try to reconnect once
-                    self.console.print(f"[warning]Connection error detected, attempting reconnection...[/warning]")
+                    self.console.print(
+                        f"[warning]Connection error detected, attempting reconnection...[/warning]"
+                    )
                     if await self.reconnect():
                         # Retry the tool call
                         try:
                             with self.console.status(f"[info]Retrying {tool_name}...[/info]"):
                                 result = self.mcp_client.call_tool(tool_name, arguments)
 
-                            self.console.print("[success]Tool result (after reconnection):[/success]")
+                            self.console.print(
+                                "[success]Tool result (after reconnection):[/success]"
+                            )
 
                             # Display result
                             if isinstance(result, dict | list):
@@ -672,7 +688,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
                                 "tool_call_id": call.get("id"),
                                 "tool": tool_name,
                                 "result": result,
-                                "success": True
+                                "success": True,
                             }
                             tool_results.append(tool_result)
                             continue  # Skip to next tool
@@ -685,7 +701,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
                     "tool_call_id": call.get("id"),
                     "tool": tool_name,
                     "error": str(e),
-                    "success": False
+                    "success": False,
                 }
                 tool_results.append(tool_result)
 
@@ -694,11 +710,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
             # Create tool result message
             content = json.dumps(result.get("result", result.get("error", "")))
             self.conversation.append(
-                Message(
-                    role="tool",
-                    content=content,
-                    tool_call_id=result.get("tool_call_id")
-                )
+                Message(role="tool", content=content, tool_call_id=result.get("tool_call_id"))
             )
             # Save after tool result
             self._save_conversation()
@@ -777,10 +789,10 @@ When the user asks about aliases, models, or configurations, use the appropriate
                     {
                         "role": msg.role,
                         "content": msg.content,
-                        "timestamp": getattr(msg, "timestamp", datetime.now().isoformat())
+                        "timestamp": getattr(msg, "timestamp", datetime.now().isoformat()),
                     }
                     for msg in self.conversation
-                ]
+                ],
             }
 
             # Save to the session-specific file
@@ -803,14 +815,13 @@ When the user asks about aliases, models, or configurations, use the appropriate
                 # Restore conversation messages
                 self.conversation = []
                 for msg_data in data.get("messages", []):
-                    msg = Message(
-                        role=msg_data["role"],
-                        content=msg_data["content"]
-                    )
+                    msg = Message(role=msg_data["role"], content=msg_data["content"])
                     self.conversation.append(msg)
 
                 if self.conversation:
-                    self.console.print(f"[info]Loaded {len(self.conversation)} messages from previous session[/info]")
+                    self.console.print(
+                        f"[info]Loaded {len(self.conversation)} messages from previous session[/info]"
+                    )
                     self.console.print("[dim]Use /history to view conversation history[/dim]")
 
         except Exception as e:
@@ -825,12 +836,14 @@ When the user asks about aliases, models, or configurations, use the appropriate
                 try:
                     with open(session_file, "r") as f:
                         data = json.load(f)
-                        sessions.append({
-                            "session_id": data.get("session_id", "unknown"),
-                            "created_at": data.get("created_at", "unknown"),
-                            "message_count": len(data.get("messages", [])),
-                            "model": data.get("model", "unknown")
-                        })
+                        sessions.append(
+                            {
+                                "session_id": data.get("session_id", "unknown"),
+                                "created_at": data.get("created_at", "unknown"),
+                                "message_count": len(data.get("messages", [])),
+                                "model": data.get("model", "unknown"),
+                            }
+                        )
                 except:
                     continue
 
@@ -880,13 +893,12 @@ When the user asks about aliases, models, or configurations, use the appropriate
 
         for session in sessions[:10]:  # Show latest 10
             session_id = session["session_id"][:8] + "..."
-            created = session["created_at"][:19] if isinstance(session["created_at"], str) else str(session["created_at"])
-            table.add_row(
-                session_id,
-                created,
-                str(session["message_count"]),
-                session["model"]
+            created = (
+                session["created_at"][:19]
+                if isinstance(session["created_at"], str)
+                else str(session["created_at"])
             )
+            table.add_row(session_id, created, str(session["message_count"]), session["model"])
 
         self.console.print(table)
         self.console.print("\n[dim]Use /load <session_id> to load a session[/dim]")
@@ -912,7 +924,9 @@ When the user asks about aliases, models, or configurations, use the appropriate
             return
 
         if len(matching) > 1:
-            self.console.print(f"[warning]Multiple sessions match. Please be more specific:[/warning]")
+            self.console.print(
+                f"[warning]Multiple sessions match. Please be more specific:[/warning]"
+            )
             for s in matching[:5]:
                 self.console.print(f"  - {s['session_id'][:12]}... ({s['message_count']} messages)")
             return
@@ -921,7 +935,9 @@ When the user asks about aliases, models, or configurations, use the appropriate
         session = matching[0]
         self.session_id = session["session_id"]
         self._load_conversation()
-        self.console.print(f"[success]Loaded session with {len(self.conversation)} messages[/success]")
+        self.console.print(
+            f"[success]Loaded session with {len(self.conversation)} messages[/success]"
+        )
 
     async def cmd_clear(self, args: str) -> None:
         """
@@ -1052,7 +1068,6 @@ When the user asks about aliases, models, or configurations, use the appropriate
         self._save_conversation()
         self.console.print("[info]Conversation saved[/info]")
         raise KeyboardInterrupt()
-
 
 
 def main():

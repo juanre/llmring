@@ -56,17 +56,17 @@ class LockfileServer:
         self.server.function_registry.register(
             name="add_alias",
             func=self._wrap_async(self.tools.add_alias),
-            description="Add or update an alias with automatic provider fallback support. When multiple models are specified (comma-separated), the system tries them in order until finding an available provider (one with a configured API key).",
+            description="Add or update an alias. You can provide MULTIPLE models separated by commas. This creates a fallback chain - if the user lacks the API key for the first model's provider, the system automatically uses the next model in the list. This is NOT about choosing a 'fallback' model - it's about ensuring the alias works even when certain providers are unavailable.",
             schema={
                 "type": "object",
                 "properties": {
                     "alias": {
                         "type": "string",
-                        "description": "REQUIRED: The alias name to create (e.g., 'fast', 'deep', 'coder', 'pdf_converter')",
+                        "description": "REQUIRED: The alias name to create or update (e.g., 'fast', 'deep', 'coder', 'advisor')",
                     },
                     "model": {
                         "type": "string",
-                        "description": "REQUIRED: Either a single model (e.g., 'openai:gpt-4o') OR comma-separated models for automatic fallback when providers are unavailable (e.g., 'anthropic:claude-3-haiku,openai:gpt-4o-mini')",
+                        "description": "REQUIRED: Model(s) to use. Can be: (1) Single model: 'openai:gpt-4o' (2) Multiple models with fallback: 'anthropic:claude-3-haiku,openai:gpt-4o-mini' - the FIRST model with an available API key will be used",
                     },
                     "profile": {
                         "type": "string",
@@ -75,12 +75,21 @@ class LockfileServer:
                 },
                 "required": ["alias", "model"],
                 "examples": [
-                    {"alias": "fast", "model": "openai:gpt-5-nano"},
-                    {"alias": "pdf_converter", "model": "openai:gpt-4o-mini"},
-                    {"alias": "deep", "model": "anthropic:claude-3-opus", "profile": "production"},
+                    {"alias": "fast", "model": "openai:gpt-4o-mini"},
                     {
-                        "alias": "summarizer",
-                        "model": "anthropic:claude-3-haiku,openai:gpt-4o-mini,google:gemini-pro",
+                        "alias": "fast",
+                        "model": "anthropic:claude-3-haiku,openai:gpt-4o-mini",
+                        "_note": "Uses Claude if Anthropic key exists, else uses GPT",
+                    },
+                    {
+                        "alias": "advisor",
+                        "model": "anthropic:claude-opus-4-1-20250805,openai:gpt-4.1",
+                        "_note": "Adds OpenAI fallback to existing advisor",
+                    },
+                    {
+                        "alias": "deep",
+                        "model": "anthropic:claude-3-opus,openai:gpt-4,google:gemini-ultra",
+                        "_note": "Triple fallback chain",
                     },
                 ],
             },
@@ -267,17 +276,6 @@ class LockfileServer:
                 "required": ["models"],
             },
             description="Get complete details for specific models including pricing, capabilities, and specifications.",
-        )
-
-        # Explain fallback models
-        self.server.function_registry.register(
-            name="explain_fallback_models",
-            func=self._wrap_async(self.tools.explain_fallback_models),
-            schema={
-                "type": "object",
-                "properties": {},
-            },
-            description="Explain how fallback models work in LLMRing - automatic provider failover when API keys are missing.",
         )
 
         logger.info(
