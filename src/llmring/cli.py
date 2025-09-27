@@ -262,8 +262,15 @@ async def cmd_lock_chat(args):
         app.console.print(
             "\n[bold green]Welcome to LLMRing Conversational Lockfile Manager![/bold green]"
         )
+        app.console.print("\n[bold yellow]🔄 New: Provider Fallback Support[/bold yellow]")
+        app.console.print("Aliases now support automatic fallback when providers are unavailable!")
+        app.console.print("Example: 'anthropic:claude-3-haiku,openai:gpt-4o-mini'")
+        app.console.print("  → Uses Claude if you have Anthropic API key")
+        app.console.print("  → Falls back to GPT-4o-mini if you only have OpenAI key")
+
         app.console.print("\nYou can use natural language to manage your lockfile:")
-        app.console.print("  • 'Add an alias called fast for quick responses'")
+        app.console.print("  • 'Add an alias called fast with fallback models'")
+        app.console.print("  • 'Explain how fallback models work'")
         app.console.print("  • 'What model should I use for coding?'")
         app.console.print("  • 'Show me my current aliases'")
         app.console.print("  • 'How much will my current setup cost?'")

@@ -108,6 +108,7 @@ async def test_server_initialization():
             "list_models",
             "filter_models_by_requirements",
             "get_model_details",
+            "explain_fallback_models",
         ]
 
         for tool_name in expected_tools:
@@ -392,6 +393,33 @@ async def test_server_model_assessment():
             if ":" in model_ref:
                 provider = model_ref.split(":")[0]
                 assert result.get("provider") == provider or "model" in result
+
+
+@pytest.mark.asyncio
+async def test_explain_fallback_models():
+    """Test the explain_fallback_models tool."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        lockfile_path = Path(tmpdir) / "test.lock"
+
+        server = LockfileServer(lockfile_path=lockfile_path)
+
+        # Get the wrapped function for explain_fallback_models
+        explain_func = server.server.function_registry.functions["explain_fallback_models"]
+
+        # Execute the function
+        result = explain_func()
+
+        # Verify the result structure
+        assert "concept" in result
+        assert "how_it_works" in result
+        assert isinstance(result["how_it_works"], list)
+        assert "your_status" in result
+        assert "examples" in result
+        assert isinstance(result["examples"], list)
+
+        # Check that it includes provider status
+        assert "configured_providers" in result["your_status"]
+        assert "missing_providers" in result["your_status"]
 
 
 if __name__ == "__main__":

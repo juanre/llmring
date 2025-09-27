@@ -56,7 +56,7 @@ class LockfileServer:
         self.server.function_registry.register(
             name="add_alias",
             func=self._wrap_async(self.tools.add_alias),
-            description="Add or update an alias in the lockfile. REQUIRES both 'alias' and 'model' parameters.",
+            description="Add or update an alias with automatic provider fallback support. When multiple models are specified (comma-separated), the system tries them in order until finding an available provider (one with a configured API key).",
             schema={
                 "type": "object",
                 "properties": {
@@ -66,7 +66,7 @@ class LockfileServer:
                     },
                     "model": {
                         "type": "string",
-                        "description": "REQUIRED: Model reference(s) - single model or comma-separated list for fallbacks (e.g., 'anthropic:claude-3-opus,openai:gpt-4')",
+                        "description": "REQUIRED: Either a single model (e.g., 'openai:gpt-4o') OR comma-separated models for automatic fallback when providers are unavailable (e.g., 'anthropic:claude-3-haiku,openai:gpt-4o-mini')",
                     },
                     "profile": {
                         "type": "string",
@@ -267,6 +267,17 @@ class LockfileServer:
                 "required": ["models"],
             },
             description="Get complete details for specific models including pricing, capabilities, and specifications.",
+        )
+
+        # Explain fallback models
+        self.server.function_registry.register(
+            name="explain_fallback_models",
+            func=self._wrap_async(self.tools.explain_fallback_models),
+            schema={
+                "type": "object",
+                "properties": {},
+            },
+            description="Explain how fallback models work in LLMRing - automatic provider failover when API keys are missing.",
         )
 
         logger.info(

@@ -326,15 +326,23 @@ class LockfileManagerTools:
         self, alias: str, model: str, profile: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Add or update an alias in the lockfile with fallback support.
+        Add or update an alias in the lockfile with automatic provider fallback support.
+
+        When multiple models are specified (comma-separated), the system will try them
+        in order. If the first model's provider is not available (e.g., missing API key),
+        it automatically falls back to the next model in the list.
+
+        Example: alias="fast" model="anthropic:claude-3-haiku,openai:gpt-4o-mini"
+        If the user lacks an ANTHROPIC_API_KEY, the system will use openai:gpt-4o-mini.
 
         Args:
-            alias: Name of the alias to add
-            model: Model reference(s) - single or comma-separated for fallbacks
+            alias: Name of the alias to add (e.g., "fast", "smart", "coder")
+            model: Either a single model (e.g., "openai:gpt-4o") or comma-separated
+                   models for fallback (e.g., "anthropic:claude-3-haiku,openai:gpt-4o-mini")
             profile: Profile to add to, defaults to current working profile
 
         Returns:
-            Result with the alias configuration
+            Result with the alias configuration including fallback information
         """
         profile = profile or self.working_profile
 
@@ -350,10 +358,10 @@ class LockfileManagerTools:
         # Format message based on whether there are fallbacks
         if "," in models:
             model_list = [m.strip() for m in models.split(",")]
-            message = f"Added alias '{alias}' → {model_list[0]} (with {len(model_list)-1} fallback(s)) to profile '{profile}'"
+            message = f"Added alias '{alias}' with provider fallback: {model_list[0]} (primary), fallbacks: {', '.join(model_list[1:])} to profile '{profile}'"
             models_info = {"primary": model_list[0], "fallbacks": model_list[1:]}
         else:
-            message = f"Added alias '{alias}' → {models} to profile '{profile}'"
+            message = f"Added alias '{alias}' → {models} to profile '{profile}' (no fallbacks)"
             models_info = models
 
         return {
@@ -686,6 +694,79 @@ class LockfileManagerTools:
             "recommendations": recommendations,
             "models_analyzed": len(models_to_analyze),
         }
+
+    async def explain_fallback_models(self) -> Dict[str, Any]:
+        """
+        Explain how fallback models work in LLMRing aliases.
+
+        Returns:
+            Explanation and examples of the fallback model feature
+        """
+        providers = await self.get_available_providers()
+        configured = providers["configured"]
+        unconfigured = providers["unconfigured"]
+
+        explanation = {
+            "concept": "Fallback models provide automatic failover when a provider is unavailable",
+            "how_it_works": [
+                "1. You can specify multiple models for an alias, separated by commas",
+                "2. LLMRing tries each model in order until it finds an available provider",
+                "3. 'Available' means the provider has a valid API key configured",
+                "4. This ensures your code keeps working even if you lack certain API keys",
+            ],
+            "your_status": {
+                "configured_providers": configured,
+                "missing_providers": unconfigured,
+            },
+            "examples": [],
+            "current_aliases": [],
+        }
+
+        # Add relevant examples based on their provider status
+        if "anthropic" not in configured and "openai" in configured:
+            explanation["examples"].append(
+                {
+                    "scenario": "You lack Anthropic API key but have OpenAI",
+                    "command": "llmring bind fast anthropic:claude-3-haiku,openai:gpt-4o-mini",
+                    "result": "Will use openai:gpt-4o-mini since Anthropic is not available",
+                }
+            )
+
+        if "openai" not in configured and "anthropic" in configured:
+            explanation["examples"].append(
+                {
+                    "scenario": "You lack OpenAI API key but have Anthropic",
+                    "command": "llmring bind smart openai:gpt-4o,anthropic:claude-3-5-sonnet",
+                    "result": "Will use anthropic:claude-3-5-sonnet since OpenAI is not available",
+                }
+            )
+
+        # Generic examples
+        explanation["examples"].append(
+            {
+                "scenario": "Cross-provider redundancy",
+                "command": "llmring bind balanced anthropic:claude-3-5-haiku,openai:gpt-4o,google:gemini-1.5-flash",
+                "result": "Tries providers in order: Anthropic → OpenAI → Google",
+            }
+        )
+
+        # Show current aliases with fallbacks
+        aliases = await self.list_aliases()
+        for alias_info in aliases["aliases"]:
+            if "," in str(alias_info.get("models", alias_info.get("model", ""))):
+                models = alias_info.get("models", [alias_info.get("model", "")])
+                if isinstance(models, str):
+                    models = [m.strip() for m in models.split(",")]
+
+                explanation["current_aliases"].append(
+                    {
+                        "alias": alias_info["alias"],
+                        "models": models,
+                        "active_model": "Will use first available from the list",
+                    }
+                )
+
+        return explanation
 
     async def get_current_configuration(self) -> Dict[str, Any]:
         """
