@@ -30,9 +30,21 @@ class LockfileManagerTools:
         Initialize lockfile manager tools.
 
         Args:
-            lockfile_path: Path to lockfile, defaults to llmring.lock
+            lockfile_path: Path to lockfile, defaults to finding project root
         """
-        self.lockfile_path = lockfile_path or Path("llmring.lock")
+        if lockfile_path:
+            self.lockfile_path = lockfile_path
+            self.project_root = lockfile_path.parent
+        else:
+            # Try to find project root
+            self.project_root = Lockfile.find_project_root()
+            if self.project_root:
+                self.lockfile_path = self.project_root / "llmring.lock"
+            else:
+                # Fall back to current directory
+                self.lockfile_path = Path("llmring.lock")
+                self.project_root = Path.cwd()
+
         self.lockfile = None
         self.registry = RegistryClient()
         self.working_profile = "default"
@@ -53,20 +65,19 @@ class LockfileManagerTools:
         provider_configs = {
             "openai": {
                 "env_var": "OPENAI_API_KEY",
-                "has_key": bool(os.environ.get("OPENAI_API_KEY"))
+                "has_key": bool(os.environ.get("OPENAI_API_KEY")),
             },
             "anthropic": {
                 "env_var": "ANTHROPIC_API_KEY",
-                "has_key": bool(os.environ.get("ANTHROPIC_API_KEY"))
+                "has_key": bool(os.environ.get("ANTHROPIC_API_KEY")),
             },
             "google": {
                 "env_vars": ["GOOGLE_API_KEY", "GEMINI_API_KEY"],
-                "has_key": bool(os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"))
+                "has_key": bool(
+                    os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+                ),
             },
-            "ollama": {
-                "env_var": None,
-                "has_key": True  # Ollama doesn't require API key
-            }
+            "ollama": {"env_var": None, "has_key": True},  # Ollama doesn't require API key
         }
 
         configured = []
@@ -78,16 +89,10 @@ class LockfileManagerTools:
             else:
                 unconfigured.append(provider)
 
-        return {
-            "configured": configured,
-            "unconfigured": unconfigured,
-            "details": provider_configs
-        }
+        return {"configured": configured, "unconfigured": unconfigured, "details": provider_configs}
 
     async def list_models(
-        self,
-        providers: Optional[List[str]] = None,
-        include_inactive: bool = False
+        self, providers: Optional[List[str]] = None, include_inactive: bool = False
     ) -> Dict[str, Any]:
         """
         List all available models with their specifications.
@@ -134,8 +139,10 @@ class LockfileManagerTools:
                         "input_cost": model.dollars_per_million_tokens_input,  # Alias
                         "output_cost": model.dollars_per_million_tokens_output,  # Alias
                         "added_date": model.added_date.isoformat() if model.added_date else None,
-                        "deprecated_date": model.deprecated_date.isoformat() if model.deprecated_date else None,
-                        "capabilities": []  # Will be populated below
+                        "deprecated_date": (
+                            model.deprecated_date.isoformat() if model.deprecated_date else None
+                        ),
+                        "capabilities": [],  # Will be populated below
                     }
 
                     # Add capability indicators
@@ -154,7 +161,7 @@ class LockfileManagerTools:
         return {
             "models": all_models,
             "total_count": len(all_models),
-            "providers_included": providers
+            "providers_included": providers,
         }
 
     async def filter_models_by_requirements(
@@ -166,7 +173,7 @@ class LockfileManagerTools:
         requires_functions: Optional[bool] = None,
         requires_json_mode: Optional[bool] = None,
         providers: Optional[List[str]] = None,
-        include_inactive: bool = False
+        include_inactive: bool = False,
     ) -> Dict[str, Any]:
         """
         Filter models based on specific requirements.
@@ -236,16 +243,9 @@ class LockfileManagerTools:
         if providers:
             applied_filters.append(f"providers={','.join(providers)}")
 
-        return {
-            "models": filtered,
-            "count": len(filtered),
-            "applied_filters": applied_filters
-        }
+        return {"models": filtered, "count": len(filtered), "applied_filters": applied_filters}
 
-    async def get_model_details(
-        self,
-        models: List[str]
-    ) -> Dict[str, Any]:
+    async def get_model_details(self, models: List[str]) -> Dict[str, Any]:
         """
         Get complete details for specific models.
 
@@ -259,10 +259,9 @@ class LockfileManagerTools:
 
         for model_ref in models:
             if ":" not in model_ref:
-                detailed_models.append({
-                    "error": f"Invalid model reference: {model_ref}",
-                    "model": model_ref
-                })
+                detailed_models.append(
+                    {"error": f"Invalid model reference: {model_ref}", "model": model_ref}
+                )
                 continue
 
             provider, model_name = model_ref.split(":", 1)
@@ -274,53 +273,56 @@ class LockfileManagerTools:
                 # Find the specific model
                 for model in provider_models:
                     if model.model_name == model_name:
-                        detailed_models.append({
-                            "model_ref": model_ref,
-                            "provider": provider,
-                            "model_name": model.model_name,
-                            "display_name": model.display_name,
-                            "description": model.description,
-                            "full_details": {
+                        detailed_models.append(
+                            {
+                                "model_ref": model_ref,
+                                "provider": provider,
+                                "model_name": model.model_name,
                                 "display_name": model.display_name,
                                 "description": model.description,
-                                "context_window": model.max_input_tokens,
-                                "max_output": model.max_output_tokens,
-                                "dollars_per_million_tokens_input": model.dollars_per_million_tokens_input,
-                                "dollars_per_million_tokens_output": model.dollars_per_million_tokens_output,
-                                "supports_vision": model.supports_vision,
-                                "supports_function_calling": model.supports_function_calling,
-                                "supports_json_mode": model.supports_json_mode,
-                                "supports_parallel_tool_calls": model.supports_parallel_tool_calls,
-                                "active": model.is_active,
-                                "knowledge_cutoff": getattr(model, "knowledge_cutoff", None),
-                                "added_date": model.added_date.isoformat() if model.added_date else None,
-                                "deprecated_date": model.deprecated_date.isoformat() if model.deprecated_date else None
+                                "full_details": {
+                                    "display_name": model.display_name,
+                                    "description": model.description,
+                                    "context_window": model.max_input_tokens,
+                                    "max_output": model.max_output_tokens,
+                                    "dollars_per_million_tokens_input": model.dollars_per_million_tokens_input,
+                                    "dollars_per_million_tokens_output": model.dollars_per_million_tokens_output,
+                                    "supports_vision": model.supports_vision,
+                                    "supports_function_calling": model.supports_function_calling,
+                                    "supports_json_mode": model.supports_json_mode,
+                                    "supports_parallel_tool_calls": model.supports_parallel_tool_calls,
+                                    "active": model.is_active,
+                                    "knowledge_cutoff": getattr(model, "knowledge_cutoff", None),
+                                    "added_date": (
+                                        model.added_date.isoformat() if model.added_date else None
+                                    ),
+                                    "deprecated_date": (
+                                        model.deprecated_date.isoformat()
+                                        if model.deprecated_date
+                                        else None
+                                    ),
+                                },
                             }
-                        })
+                        )
                         break
                 else:
-                    detailed_models.append({
-                        "error": f"Model {model_ref} not found",
-                        "model": model_ref
-                    })
+                    detailed_models.append(
+                        {"error": f"Model {model_ref} not found", "model": model_ref}
+                    )
 
             except Exception as e:
-                detailed_models.append({
-                    "error": f"Failed to fetch details: {str(e)}",
-                    "model": model_ref
-                })
+                detailed_models.append(
+                    {"error": f"Failed to fetch details: {str(e)}", "model": model_ref}
+                )
 
         return {
             "models": detailed_models,
             "requested": models,
-            "found": len([m for m in detailed_models if "error" not in m])
+            "found": len([m for m in detailed_models if "error" not in m]),
         }
 
     async def add_alias(
-        self,
-        alias: str,
-        model: str,
-        profile: Optional[str] = None
+        self, alias: str, model: str, profile: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Add or update an alias in the lockfile.
@@ -346,7 +348,7 @@ class LockfileManagerTools:
             "alias": alias,
             "model": model,
             "profile": profile,
-            "message": f"Added alias '{alias}' → {model} to profile '{profile}'"
+            "message": f"Added alias '{alias}' → {model} to profile '{profile}'",
         }
 
     async def remove_alias(self, alias: str, profile: Optional[str] = None) -> Dict[str, Any]:
@@ -365,14 +367,11 @@ class LockfileManagerTools:
 
         if profile_config.remove_binding(alias):
             self.lockfile.save(self.lockfile_path)
-            return {
-                "success": True,
-                "message": f"Removed alias '{alias}' from profile '{profile}'"
-            }
+            return {"success": True, "message": f"Removed alias '{alias}' from profile '{profile}'"}
         else:
             return {
                 "success": False,
-                "message": f"Alias '{alias}' not found in profile '{profile}'"
+                "message": f"Alias '{alias}' not found in profile '{profile}'",
             }
 
     async def list_aliases(self, profile: Optional[str] = None) -> Dict[str, Any]:
@@ -390,18 +389,16 @@ class LockfileManagerTools:
 
         aliases = []
         for binding in profile_config.bindings:
-            aliases.append({
-                "alias": binding.alias,
-                "provider": binding.provider,
-                "model": binding.model,
-                "model_ref": binding.model_ref
-            })
+            aliases.append(
+                {
+                    "alias": binding.alias,
+                    "provider": binding.provider,
+                    "model": binding.model,
+                    "model_ref": binding.model_ref,
+                }
+            )
 
-        return {
-            "profile": profile,
-            "aliases": aliases,
-            "count": len(aliases)
-        }
+        return {"profile": profile, "aliases": aliases, "count": len(aliases)}
 
     async def assess_model(self, model_ref: str) -> Dict[str, Any]:
         """
@@ -437,9 +434,7 @@ class LockfileManagerTools:
                     break
 
             if not model_data:
-                return {
-                    "error": f"Model {model_ref} not found in registry"
-                }
+                return {"error": f"Model {model_ref} not found in registry"}
 
             # Prepare comprehensive assessment
             assessment = {
@@ -455,34 +450,57 @@ class LockfileManagerTools:
                     "supports_vision": model_data.supports_vision,
                     "supports_functions": model_data.supports_function_calling,
                     "supports_json_mode": model_data.supports_json_mode,
-                    "supports_parallel_tools": model_data.supports_parallel_tool_calls
+                    "supports_parallel_tools": model_data.supports_parallel_tool_calls,
                 },
                 "pricing": {
                     "input": model_data.dollars_per_million_tokens_input,
                     "output": model_data.dollars_per_million_tokens_output,
                     "input_cost_per_million": model_data.dollars_per_million_tokens_input,
-                    "output_cost_per_million": model_data.dollars_per_million_tokens_output
+                    "output_cost_per_million": model_data.dollars_per_million_tokens_output,
                 },
                 "specifications": {
                     "context_window": model_data.max_input_tokens,
                     "max_output": model_data.max_output_tokens,
-                    "knowledge_cutoff": getattr(model_data, "knowledge_cutoff", None)
+                    "knowledge_cutoff": getattr(model_data, "knowledge_cutoff", None),
                 },
                 "metadata": {
-                    "added_date": model_data.added_date.isoformat() if model_data.added_date else None,
-                    "deprecated_date": model_data.deprecated_date.isoformat() if model_data.deprecated_date else None,
-                    "is_deprecated": model_data.deprecated_date is not None if model_data.deprecated_date else False
+                    "added_date": (
+                        model_data.added_date.isoformat() if model_data.added_date else None
+                    ),
+                    "deprecated_date": (
+                        model_data.deprecated_date.isoformat()
+                        if model_data.deprecated_date
+                        else None
+                    ),
+                    "is_deprecated": (
+                        model_data.deprecated_date is not None
+                        if model_data.deprecated_date
+                        else False
+                    ),
                 },
                 "status": {
-                    "added_date": model_data.added_date.isoformat() if model_data.added_date else None,
-                    "deprecated_date": model_data.deprecated_date.isoformat() if model_data.deprecated_date else None,
-                    "is_deprecated": model_data.deprecated_date is not None if model_data.deprecated_date else False
+                    "added_date": (
+                        model_data.added_date.isoformat() if model_data.added_date else None
+                    ),
+                    "deprecated_date": (
+                        model_data.deprecated_date.isoformat()
+                        if model_data.deprecated_date
+                        else None
+                    ),
+                    "is_deprecated": (
+                        model_data.deprecated_date is not None
+                        if model_data.deprecated_date
+                        else False
+                    ),
                 },
-                "recommended_for": []
+                "recommended_for": [],
             }
 
             # Add recommendations based on capabilities
-            if model_data.dollars_per_million_tokens_input and model_data.dollars_per_million_tokens_input < 1.0:
+            if (
+                model_data.dollars_per_million_tokens_input
+                and model_data.dollars_per_million_tokens_input < 1.0
+            ):
                 assessment["recommended_for"].append("high-volume tasks")
                 assessment["recommended_for"].append("quick responses")
 
@@ -501,18 +519,35 @@ class LockfileManagerTools:
             return assessment
 
         except Exception as e:
-            return {
-                "error": f"Failed to assess model: {str(e)}"
-            }
+            return {"error": f"Failed to assess model: {str(e)}"}
 
     async def save_lockfile(self) -> Dict[str, Any]:
         """Save the current lockfile state."""
         self.lockfile.save(self.lockfile_path)
-        return {
+
+        # Check if we should provide pyproject.toml guidance
+        result = {
             "success": True,
             "path": str(self.lockfile_path),
-            "message": f"Lockfile saved to {self.lockfile_path}"
+            "message": f"Lockfile saved to {self.lockfile_path}",
         }
+
+        # Check for pyproject.toml to provide packaging guidance
+        pyproject_path = self.project_root / "pyproject.toml"
+        if pyproject_path.exists():
+            result["packaging_note"] = (
+                "To include this lockfile in your package distribution, "
+                "add the following to your pyproject.toml:\n\n"
+                "[tool.hatch.build]  # or similar for your build system\n"
+                "include = [\n"
+                '    "src/yourpackage/**/*.py",  # your existing patterns\n'
+                '    "src/yourpackage/**/*.lock",  # add this line\n'
+                "]\n\n"
+                "Or if using setuptools with setup.py, add to MANIFEST.in:\n"
+                "include src/yourpackage/*.lock"
+            )
+
+        return result
 
     async def switch_profile(self, profile: str) -> Dict[str, Any]:
         """
@@ -527,17 +562,13 @@ class LockfileManagerTools:
         self.working_profile = profile
         # Ensure profile exists
         self.lockfile.get_profile(profile)
-        return {
-            "success": True,
-            "profile": profile,
-            "message": f"Switched to profile '{profile}'"
-        }
+        return {"success": True, "profile": profile, "message": f"Switched to profile '{profile}'"}
 
     async def analyze_costs(
         self,
         profile: Optional[str] = None,
         monthly_volume: Optional[Dict[str, int]] = None,
-        hypothetical_models: Optional[Dict[str, str]] = None
+        hypothetical_models: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """
         Analyze estimated costs for current or hypothetical configuration.
@@ -554,10 +585,7 @@ class LockfileManagerTools:
 
         if not monthly_volume:
             # Default estimate: 1M input, 500K output per month
-            monthly_volume = {
-                "input_tokens": 1_000_000,
-                "output_tokens": 500_000
-            }
+            monthly_volume = {"input_tokens": 1_000_000, "output_tokens": 500_000}
 
         # Determine which models to analyze
         models_to_analyze = {}
@@ -602,8 +630,12 @@ class LockfileManagerTools:
                 model = next((m for m in models if m.model_name == model_name), None)
 
                 if model and model.dollars_per_million_tokens_input:
-                    input_cost = (monthly_volume["input_tokens"] / 1_000_000) * model.dollars_per_million_tokens_input
-                    output_cost = (monthly_volume["output_tokens"] / 1_000_000) * model.dollars_per_million_tokens_output
+                    input_cost = (
+                        monthly_volume["input_tokens"] / 1_000_000
+                    ) * model.dollars_per_million_tokens_input
+                    output_cost = (
+                        monthly_volume["output_tokens"] / 1_000_000
+                    ) * model.dollars_per_million_tokens_output
                     alias_cost = input_cost + output_cost
 
                     cost_breakdown[alias] = {
@@ -613,8 +645,8 @@ class LockfileManagerTools:
                         "total_cost": round(alias_cost, 2),
                         "pricing": {
                             "prompt": model.dollars_per_million_tokens_input,
-                            "completion": model.dollars_per_million_tokens_output
-                        }
+                            "completion": model.dollars_per_million_tokens_output,
+                        },
                     }
                     total_cost += alias_cost
             except Exception as e:
@@ -622,7 +654,9 @@ class LockfileManagerTools:
 
         recommendations = []
         if total_cost > 100:
-            recommendations.append("Consider using more cost-effective models for high-volume aliases")
+            recommendations.append(
+                "Consider using more cost-effective models for high-volume aliases"
+            )
         if total_cost < 10:
             recommendations.append("You have room to use more capable models if needed")
 
@@ -633,7 +667,7 @@ class LockfileManagerTools:
             "cost_breakdown": cost_breakdown,
             "total_monthly_cost": round(total_cost, 2),
             "recommendations": recommendations,
-            "models_analyzed": len(models_to_analyze)
+            "models_analyzed": len(models_to_analyze),
         }
 
     async def get_current_configuration(self) -> Dict[str, Any]:
@@ -652,7 +686,7 @@ class LockfileManagerTools:
                         "alias": b.alias,
                         "provider": b.provider,
                         "model": b.model,
-                        "model_ref": b.model_ref
+                        "model_ref": b.model_ref,
                     }
                     for b in profile.bindings
                 ]
@@ -663,5 +697,61 @@ class LockfileManagerTools:
             "default_profile": self.lockfile.default_profile,
             "profiles": profiles,
             "metadata": self.lockfile.metadata or {},
-            "lockfile_path": str(self.lockfile_path)
+            "lockfile_path": str(self.lockfile_path),
+            "project_root": str(self.project_root),
         }
+
+    async def check_packaging_setup(self) -> Dict[str, Any]:
+        """
+        Check if the project is set up to package the lockfile.
+
+        Returns:
+            Information about packaging setup and recommendations
+        """
+        result = {
+            "lockfile_path": str(self.lockfile_path),
+            "project_root": str(self.project_root),
+            "properly_configured": False,
+        }
+
+        # Check for pyproject.toml
+        pyproject_path = self.project_root / "pyproject.toml"
+        if pyproject_path.exists():
+            import toml
+
+            try:
+                with open(pyproject_path) as f:
+                    pyproject = toml.load(f)
+
+                # Check if lockfiles are included in build
+                build_config = pyproject.get("tool", {}).get("hatch", {}).get("build", {})
+                include_patterns = build_config.get("include", [])
+
+                # Check if any pattern would include .lock files
+                has_lock_pattern = any(
+                    "*.lock" in pattern or "**/*.lock" in pattern for pattern in include_patterns
+                )
+
+                result["has_pyproject"] = True
+                result["has_lock_pattern"] = has_lock_pattern
+                result["properly_configured"] = has_lock_pattern
+
+                if not has_lock_pattern:
+                    result["recommendation"] = (
+                        "Your pyproject.toml doesn't include lockfiles in the package. "
+                        "Add this to [tool.hatch.build]:\\n"
+                        "include = [\\n"
+                        '    "src/yourpackage/**/*.py",\\n'
+                        '    "src/yourpackage/**/*.lock",  # Add this line\\n'
+                        "]"
+                    )
+            except Exception as e:
+                result["error"] = f"Could not parse pyproject.toml: {e}"
+        else:
+            result["has_pyproject"] = False
+            result["recommendation"] = (
+                "No pyproject.toml found. If you're packaging this project, "
+                "ensure your build system includes the lockfile."
+            )
+
+        return result
