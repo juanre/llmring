@@ -378,7 +378,8 @@ class LLMRing:
                     # Store the pinned version for this validation
                     provider._registry_client._pinned_version = pinned_version
 
-        # Log warning if model is not in registry (but don't block)
+        # Get model info from registry (cached)
+        registry_model = None
         try:
             registry_model = await self.get_model_from_registry(provider_type, model_name)
             if not registry_model:
@@ -406,6 +407,16 @@ class LLMRing:
         adapted_request = await self._apply_structured_output_adapter(
             request, provider_type, provider
         )
+
+        # Filter out unsupported parameters based on model capabilities
+        if registry_model:
+            if not registry_model.supports_temperature and adapted_request.temperature is not None:
+                logger.debug(
+                    f"Model {provider_type}:{model_name} doesn't support temperature, removing parameter"
+                )
+                adapted_request.temperature = None
+
+            # Could add more capability checks here in the future (streaming, etc.)
 
         # Check if streaming is requested
         if adapted_request.stream:

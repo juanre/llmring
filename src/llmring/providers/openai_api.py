@@ -498,9 +498,12 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         request_params = {
             "model": model,
             "messages": openai_messages,
-            "temperature": temperature or 0.7,
             "stream": True,  # Enable streaming
         }
+
+        # Only include temperature if explicitly provided (not None)
+        if temperature is not None:
+            request_params["temperature"] = temperature
 
         if max_tokens:
             request_params["max_tokens"] = max_tokens
@@ -914,8 +917,11 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         request_params = {
             "model": model,
             "messages": openai_messages,
-            "temperature": temperature or 0.7,
         }
+
+        # Only include temperature if explicitly provided (not None)
+        if temperature is not None:
+            request_params["temperature"] = temperature
 
         if max_tokens:
             request_params["max_tokens"] = max_tokens
