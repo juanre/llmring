@@ -965,11 +965,16 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                             if isinstance(msg.content, str):
                                 try:
                                     response_obj = json.loads(msg.content)
+                                    # Ensure response_obj is a dict (it might be a list or primitive)
+                                    if not isinstance(response_obj, dict):
+                                        response_obj = {"result": response_obj}
                                 except json.JSONDecodeError:
+                                    # If it's not valid JSON, wrap it as a result
                                     response_obj = {"result": msg.content}
                             elif isinstance(msg.content, dict):
                                 response_obj = msg.content
                             else:
+                                # For any other type, convert to string and wrap
                                 response_obj = {"result": str(msg.content)}
 
                             call_id = getattr(msg, "tool_call_id", None)
