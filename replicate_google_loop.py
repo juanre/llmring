@@ -131,6 +131,17 @@ Be helpful and informative. When showing configurations, format them clearly."""
         depth += 1
         print(f"--- Iteration {depth}/{max_depth} ---")
 
+        # Debug: Show message structure
+        print(f"   Current messages structure:")
+        for i, m in enumerate(messages):
+            role = m.role
+            has_content = bool(m.content)
+            has_tool_calls = bool(getattr(m, "tool_calls", None))
+            has_tool_id = bool(getattr(m, "tool_call_id", None))
+            print(
+                f"     [{i}] role={role}, has_content={has_content}, has_tool_calls={has_tool_calls}, has_tool_id={has_tool_id}"
+            )
+
         # Create request with tools
         request = LLMRequest(
             messages=messages, model="google:gemini-2.5-pro", tools=tools, tool_choice="auto"

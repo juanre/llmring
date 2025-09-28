@@ -442,32 +442,24 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         config = types.GenerateContentConfig(**config_params)
 
-        # Convert conversation messages to Google format
+        # Convert conversation messages to Google format, including function calls and responses
         google_messages = []
+        tool_name_by_id: Dict[str, str] = {}
         for msg in conversation_messages:
-            if msg.role in ["user", "assistant"]:
-                # Handle different content types
+            if msg.role == "user":
                 if isinstance(msg.content, str):
-                    google_messages.append(
-                        types.Content(
-                            role="user" if msg.role == "user" else "model",
-                            parts=[types.Part(text=msg.content)],
-                        )
-                    )
+                    parts = [types.Part(text=msg.content)]
                 elif isinstance(msg.content, list):
-                    # Handle multimodal content
                     parts = []
                     for item in msg.content:
                         if isinstance(item, str):
                             parts.append(types.Part(text=item))
                         elif isinstance(item, dict):
                             if item.get("type") == "text":
-                                parts.append(types.Part(text=item["text"]))
+                                parts.append(types.Part(text=item.get("text", "")))
                             elif item.get("type") == "image_url":
-                                # Convert image to Google format
-                                image_data = item["image_url"]["url"]
+                                image_data = item.get("image_url", {}).get("url", "")
                                 if image_data.startswith("data:"):
-                                    # Extract base64 data
                                     media_type, base64_data = (
                                         image_data.split(";")[0].split(":")[1],
                                         image_data.split(",")[1],
@@ -480,14 +472,78 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                             )
                                         )
                                     )
+                else:
+                    parts = [types.Part(text=str(msg.content))]
 
-                    if parts:
-                        google_messages.append(
-                            types.Content(
-                                role="user" if msg.role == "user" else "model",
-                                parts=parts,
+                google_messages.append(types.Content(role="user", parts=parts))
+
+            elif msg.role == "assistant":
+                parts: List[types.Part] = []
+                if isinstance(msg.content, str) and msg.content:
+                    parts.append(types.Part(text=msg.content))
+                elif isinstance(msg.content, list):
+                    for item in msg.content:
+                        if isinstance(item, str):
+                            parts.append(types.Part(text=item))
+                        elif isinstance(item, dict) and item.get("type") == "text":
+                            parts.append(types.Part(text=item.get("text", "")))
+
+                if getattr(msg, "tool_calls", None):
+                    for call in msg.tool_calls or []:
+                        name = call.get("function", {}).get("name")
+                        args = call.get("function", {}).get("arguments")
+                        if isinstance(args, str):
+                            try:
+                                args_dict = json.loads(args)
+                            except json.JSONDecodeError:
+                                args_dict = {}
+                        elif isinstance(args, dict):
+                            args_dict = args
+                        else:
+                            args_dict = {}
+
+                        call_id = call.get("id")
+                        if call_id and name:
+                            tool_name_by_id[call_id] = name
+
+                        parts.append(
+                            types.Part(
+                                function_call=types.FunctionCall(name=name or "", args=args_dict)
                             )
                         )
+
+                google_messages.append(
+                    types.Content(role="model", parts=parts or [types.Part(text="")])
+                )
+
+            elif msg.role == "tool":
+                # Map tool outputs to function_response parts on user role
+                if isinstance(msg.content, str):
+                    try:
+                        response_obj = json.loads(msg.content)
+                    except json.JSONDecodeError:
+                        response_obj = {"result": msg.content}
+                elif isinstance(msg.content, dict):
+                    response_obj = msg.content
+                else:
+                    response_obj = {"result": str(msg.content)}
+
+                call_id = getattr(msg, "tool_call_id", None)
+                func_name = tool_name_by_id.get(call_id or "", "")
+
+                google_messages.append(
+                    types.Content(
+                        role="user",
+                        parts=[
+                            types.Part(
+                                function_response=types.FunctionResponse(
+                                    name=func_name or "",
+                                    response=response_obj,
+                                )
+                            )
+                        ],
+                    )
+                )
 
         try:
             key = f"google:{model}"
@@ -844,29 +900,16 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 response = await retry_async(_do_call)
                 await self._breaker.record_success(key)
 
-                response_text = response.text
-
             else:
                 # For multi-turn conversations, construct proper history
                 # Split conversation into history and current message
                 if conversation_messages:
-                    # Build history from all messages except the last user message
-                    current_message = None
-                    history_messages = []
+                    # Treat the last message (whatever the role) as the current input
+                    current_message = conversation_messages[-1]
+                    history_messages = conversation_messages[:-1]
 
-                    # Find the last user message
-                    for i in reversed(range(len(conversation_messages))):
-                        if conversation_messages[i].role == "user":
-                            current_message = conversation_messages[i]
-                            history_messages = conversation_messages[:i]
-                            break
-
-                    if not current_message:
-                        # No user message found, treat the last message as the query
-                        current_message = conversation_messages[-1]
-                        history_messages = conversation_messages[:-1]
-
-                    # Convert history to google-genai format
+                    # Convert history to google-genai format (include tool calls and responses)
+                    tool_name_by_id_hist: Dict[str, str] = {}
                     for msg in history_messages:
                         if msg.role == "user":
                             converted_content = self._convert_content_to_google_format(msg.content)
@@ -876,8 +919,73 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                 parts = converted_content
                             history.append(types.Content(role="user", parts=parts))
                         elif msg.role == "assistant":
+                            parts: List[types.Part] = []
+                            if isinstance(msg.content, str) and msg.content:
+                                parts.append(types.Part(text=msg.content))
+                            elif isinstance(msg.content, list):
+                                for item in msg.content:
+                                    if isinstance(item, str):
+                                        parts.append(types.Part(text=item))
+                                    elif isinstance(item, dict) and item.get("type") == "text":
+                                        parts.append(types.Part(text=item.get("text", "")))
+
+                            # Add function_call parts if present
+                            if getattr(msg, "tool_calls", None):
+                                for call in msg.tool_calls or []:
+                                    name = call.get("function", {}).get("name")
+                                    args = call.get("function", {}).get("arguments")
+                                    if isinstance(args, str):
+                                        try:
+                                            args_dict = json.loads(args)
+                                        except json.JSONDecodeError:
+                                            args_dict = {}
+                                    elif isinstance(args, dict):
+                                        args_dict = args
+                                    else:
+                                        args_dict = {}
+
+                                    call_id = call.get("id")
+                                    if call_id and name:
+                                        tool_name_by_id_hist[call_id] = name
+
+                                    parts.append(
+                                        types.Part(
+                                            function_call=types.FunctionCall(
+                                                name=name or "", args=args_dict
+                                            )
+                                        )
+                                    )
+
                             history.append(
-                                types.Content(role="model", parts=[types.Part(text=msg.content)])
+                                types.Content(role="model", parts=parts or [types.Part(text="")])
+                            )
+
+                        elif msg.role == "tool":
+                            # Map tool outputs into function_response on the user role
+                            if isinstance(msg.content, str):
+                                try:
+                                    response_obj = json.loads(msg.content)
+                                except json.JSONDecodeError:
+                                    response_obj = {"result": msg.content}
+                            elif isinstance(msg.content, dict):
+                                response_obj = msg.content
+                            else:
+                                response_obj = {"result": str(msg.content)}
+
+                            call_id = getattr(msg, "tool_call_id", None)
+                            func_name = tool_name_by_id_hist.get(call_id or "", "")
+                            history.append(
+                                types.Content(
+                                    role="user",
+                                    parts=[
+                                        types.Part(
+                                            function_response=types.FunctionResponse(
+                                                name=func_name or "",
+                                                response=response_obj,
+                                            )
+                                        )
+                                    ],
+                                )
                             )
 
                     # Create chat with history and send the current message
@@ -885,10 +993,41 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         chat = self.client.chats.create(
                             model=api_model, config=config, history=history
                         )
-                        converted_content = self._convert_content_to_google_format(
-                            current_message.content
-                        )
-                        return chat.send_message(converted_content)
+                        # Send current message. If it's a tool response, send function_response parts
+                        if current_message.role == "tool":
+                            # Reconstruct function_response part for current message
+                            if isinstance(current_message.content, str):
+                                try:
+                                    resp_obj = json.loads(current_message.content)
+                                except json.JSONDecodeError:
+                                    resp_obj = {"result": current_message.content}
+                            elif isinstance(current_message.content, dict):
+                                resp_obj = current_message.content
+                            else:
+                                resp_obj = {"result": str(current_message.content)}
+
+                            call_id_cur = getattr(current_message, "tool_call_id", None)
+                            # Try to find function name from previously seen calls
+                            func_name_cur = ""
+                            try:
+                                func_name_cur = tool_name_by_id_hist.get(call_id_cur or "", "")
+                            except Exception:
+                                func_name_cur = ""
+
+                            parts = [
+                                types.Part(
+                                    function_response=types.FunctionResponse(
+                                        name=func_name_cur or "",
+                                        response=resp_obj,
+                                    )
+                                )
+                            ]
+                            return chat.send_message(parts)
+                        else:
+                            converted_content = self._convert_content_to_google_format(
+                                current_message.content
+                            )
+                            return chat.send_message(converted_content)
 
                     # Run the chat in thread pool
                     total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
@@ -906,7 +1045,6 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         )
                     response = await retry_async(_do_chat)
                     await self._breaker.record_success(key)
-                    response_text = response.text
                 else:
                     # No messages? This shouldn't happen but handle gracefully
                     raise ProviderResponseError("No messages provided for chat", provider="google")
@@ -987,44 +1125,51 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Parse for native function calls from Google response
         tool_calls = None
-        if tools and hasattr(response, "candidates") and response.candidates:
+        if hasattr(response, "candidates") and response.candidates:
             candidate = response.candidates[0]
             if hasattr(candidate, "content") and candidate.content:
-                tool_calls = []
                 for part in candidate.content.parts:
                     if hasattr(part, "function_call") and part.function_call:
-                        # Handle native function calls
                         function_call = part.function_call
+                        tool_calls = tool_calls or []
                         tool_calls.append(
                             {
-                                "id": f"call_{len(tool_calls)}",  # Google doesn't provide IDs
+                                "id": f"call_{len(tool_calls)}",
                                 "type": "function",
                                 "function": {
-                                    "name": function_call.name,
+                                    "name": getattr(function_call, "name", ""),
                                     "arguments": (
-                                        json.dumps(function_call.args)
-                                        if function_call.args
+                                        json.dumps(getattr(function_call, "args", {}))
+                                        if getattr(function_call, "args", None) is not None
                                         else "{}"
                                     ),
                                 },
                             }
                         )
 
-                # If no tool calls found, reset to None
-                if not tool_calls:
-                    tool_calls = None
+        # Build content text from parts to avoid SDK non-text warning
+        response_text_accum = ""
+        try:
+            if hasattr(response, "candidates") and response.candidates:
+                candidate0 = response.candidates[0]
+                if hasattr(candidate0, "content") and candidate0.content:
+                    for _part in candidate0.content.parts:
+                        if hasattr(_part, "text") and _part.text:
+                            response_text_accum += _part.text
+        except Exception:
+            response_text_accum = ""
 
         # Simple usage tracking (google-genai doesn't provide detailed token counts)
         usage = {
             "prompt_tokens": self.get_token_count("\n".join([str(m.content) for m in messages])),
-            "completion_tokens": self.get_token_count(response_text or ""),
-            "total_tokens": 0,  # Will be calculated below
+            "completion_tokens": self.get_token_count(response_text_accum or ""),
+            "total_tokens": 0,
         }
         usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
 
         # Prepare the response
         llm_response = LLMResponse(
-            content=response_text or "",
+            content=response_text_accum or "",
             model=model,  # Return the original model name
             usage=usage,
             finish_reason="stop",  # google-genai doesn't provide this
