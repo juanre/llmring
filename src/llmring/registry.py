@@ -8,10 +8,10 @@ with per-provider model lists and versioned archives.
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class RegistryModel(BaseModel):
@@ -21,6 +21,7 @@ class RegistryModel(BaseModel):
     model_name: str = Field(..., description="Model identifier")
     display_name: str = Field(..., description="Human-friendly name")
     description: Optional[str] = Field(None, description="Model description")
+    model_aliases: Optional[List[str]] = Field(None, description="Alternative names for the model")
 
     # Token limits
     max_input_tokens: Optional[int] = Field(None, description="Max input tokens")
@@ -39,6 +40,23 @@ class RegistryModel(BaseModel):
     supports_function_calling: bool = Field(False, description="Supports functions")
     supports_json_mode: bool = Field(False, description="Supports JSON output")
     supports_parallel_tool_calls: bool = Field(False, description="Supports parallel tools")
+    supports_temperature: bool = Field(True, description="Supports temperature parameter")
+    supports_streaming: bool = Field(True, description="Supports streaming responses")
+
+    # API routing hints
+    api_endpoint: Optional[Literal["chat", "responses", "assistants", "generateContent"]] = Field(
+        None, description="Preferred API endpoint (chat/responses/assistants/generateContent)"
+    )
+
+    @field_validator("api_endpoint")
+    @classmethod
+    def validate_api_endpoint(cls, v):
+        """Validate api_endpoint is one of the allowed values."""
+        if v is not None and v not in ["chat", "responses", "assistants", "generateContent"]:
+            raise ValueError(
+                f"Invalid api_endpoint: {v}. Must be 'chat', 'responses', 'assistants', or 'generateContent'"
+            )
+        return v
 
     # Status
     is_active: bool = Field(True, description="Model is currently available")

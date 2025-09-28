@@ -217,6 +217,63 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         # Google SDK doesn't use httpx client directly
         pass
 
+    def _should_use_single_turn(self, messages: List[Message]) -> bool:
+        """
+        Determine if we can use single-turn generation (simpler path).
+
+        Args:
+            messages: List of conversation messages
+
+        Returns:
+            True if single-turn path can be used
+        """
+        return len(messages) == 1 and messages[0].role == "user"
+
+    def _split_conversation(
+        self, messages: List[Message]
+    ) -> tuple[List[Message], Optional[Message]]:
+        """
+        Split conversation into history and current message.
+
+        Args:
+            messages: List of conversation messages
+
+        Returns:
+            Tuple of (history_messages, current_message)
+        """
+        if not messages:
+            return [], None
+
+        # Last message is current, rest is history
+        return messages[:-1], messages[-1]
+
+    def _parse_tool_response(self, content: Any) -> Dict[str, Any]:
+        """
+        Parse tool response content into a dictionary suitable for FunctionResponse.
+
+        Args:
+            content: The tool response content (str, dict, or other)
+
+        Returns:
+            Dictionary with the tool response
+        """
+        if isinstance(content, str):
+            try:
+                response_obj = json.loads(content)
+                # Ensure response_obj is a dict (it might be a list or primitive)
+                if not isinstance(response_obj, dict):
+                    response_obj = {"result": response_obj}
+            except json.JSONDecodeError:
+                # If it's not valid JSON, wrap it as a result
+                response_obj = {"result": content}
+        elif isinstance(content, dict):
+            response_obj = content
+        else:
+            # For any other type, convert to string and wrap
+            response_obj = {"result": str(content)}
+
+        return response_obj
+
     async def get_capabilities(self) -> ProviderCapabilities:
         """
         Get the capabilities of this provider.
@@ -518,15 +575,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
             elif msg.role == "tool":
                 # Map tool outputs to function_response parts on user role
-                if isinstance(msg.content, str):
-                    try:
-                        response_obj = json.loads(msg.content)
-                    except json.JSONDecodeError:
-                        response_obj = {"result": msg.content}
-                elif isinstance(msg.content, dict):
-                    response_obj = msg.content
-                else:
-                    response_obj = {"result": str(msg.content)}
+                response_obj = self._parse_tool_response(msg.content)
 
                 call_id = getattr(msg, "tool_call_id", None)
                 func_name = tool_name_by_id.get(call_id or "", "")
@@ -869,7 +918,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         try:
             # For single user message, we can use generate_content directly
-            if len(conversation_messages) == 1 and conversation_messages[0].role == "user":
+            if self._should_use_single_turn(conversation_messages):
                 msg = conversation_messages[0]
 
                 # Convert content to Google format
@@ -903,156 +952,127 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             else:
                 # For multi-turn conversations, construct proper history
                 # Split conversation into history and current message
-                if conversation_messages:
-                    # Treat the last message (whatever the role) as the current input
-                    current_message = conversation_messages[-1]
-                    history_messages = conversation_messages[:-1]
+                history_messages, current_message = self._split_conversation(conversation_messages)
 
-                    # Convert history to google-genai format (include tool calls and responses)
-                    tool_name_by_id_hist: Dict[str, str] = {}
-                    for msg in history_messages:
-                        if msg.role == "user":
-                            converted_content = self._convert_content_to_google_format(msg.content)
-                            if isinstance(converted_content, str):
-                                parts = [types.Part(text=converted_content)]
-                            else:
-                                parts = converted_content
-                            history.append(types.Content(role="user", parts=parts))
-                        elif msg.role == "assistant":
-                            parts: List[types.Part] = []
-                            if isinstance(msg.content, str) and msg.content:
-                                parts.append(types.Part(text=msg.content))
-                            elif isinstance(msg.content, list):
-                                for item in msg.content:
-                                    if isinstance(item, str):
-                                        parts.append(types.Part(text=item))
-                                    elif isinstance(item, dict) and item.get("type") == "text":
-                                        parts.append(types.Part(text=item.get("text", "")))
-
-                            # Add function_call parts if present
-                            if getattr(msg, "tool_calls", None):
-                                for call in msg.tool_calls or []:
-                                    name = call.get("function", {}).get("name")
-                                    args = call.get("function", {}).get("arguments")
-                                    if isinstance(args, str):
-                                        try:
-                                            args_dict = json.loads(args)
-                                        except json.JSONDecodeError:
-                                            args_dict = {}
-                                    elif isinstance(args, dict):
-                                        args_dict = args
-                                    else:
-                                        args_dict = {}
-
-                                    call_id = call.get("id")
-                                    if call_id and name:
-                                        tool_name_by_id_hist[call_id] = name
-
-                                    parts.append(
-                                        types.Part(
-                                            function_call=types.FunctionCall(
-                                                name=name or "", args=args_dict
-                                            )
-                                        )
-                                    )
-
-                            history.append(
-                                types.Content(role="model", parts=parts or [types.Part(text="")])
-                            )
-
-                        elif msg.role == "tool":
-                            # Map tool outputs into function_response on the user role
-                            if isinstance(msg.content, str):
-                                try:
-                                    response_obj = json.loads(msg.content)
-                                    # Ensure response_obj is a dict (it might be a list or primitive)
-                                    if not isinstance(response_obj, dict):
-                                        response_obj = {"result": response_obj}
-                                except json.JSONDecodeError:
-                                    # If it's not valid JSON, wrap it as a result
-                                    response_obj = {"result": msg.content}
-                            elif isinstance(msg.content, dict):
-                                response_obj = msg.content
-                            else:
-                                # For any other type, convert to string and wrap
-                                response_obj = {"result": str(msg.content)}
-
-                            call_id = getattr(msg, "tool_call_id", None)
-                            func_name = tool_name_by_id_hist.get(call_id or "", "")
-                            history.append(
-                                types.Content(
-                                    role="user",
-                                    parts=[
-                                        types.Part(
-                                            function_response=types.FunctionResponse(
-                                                name=func_name or "",
-                                                response=response_obj,
-                                            )
-                                        )
-                                    ],
-                                )
-                            )
-
-                    # Create chat with history and send the current message
-                    def _run_chat():
-                        chat = self.client.chats.create(
-                            model=api_model, config=config, history=history
-                        )
-                        # Send current message. If it's a tool response, send function_response parts
-                        if current_message.role == "tool":
-                            # Reconstruct function_response part for current message
-                            if isinstance(current_message.content, str):
-                                try:
-                                    resp_obj = json.loads(current_message.content)
-                                except json.JSONDecodeError:
-                                    resp_obj = {"result": current_message.content}
-                            elif isinstance(current_message.content, dict):
-                                resp_obj = current_message.content
-                            else:
-                                resp_obj = {"result": str(current_message.content)}
-
-                            call_id_cur = getattr(current_message, "tool_call_id", None)
-                            # Try to find function name from previously seen calls
-                            func_name_cur = ""
-                            try:
-                                func_name_cur = tool_name_by_id_hist.get(call_id_cur or "", "")
-                            except Exception:
-                                func_name_cur = ""
-
-                            parts = [
-                                types.Part(
-                                    function_response=types.FunctionResponse(
-                                        name=func_name_cur or "",
-                                        response=resp_obj,
-                                    )
-                                )
-                            ]
-                            return chat.send_message(parts)
+                # Convert history to google-genai format (include tool calls and responses)
+                tool_name_by_id_hist: Dict[str, str] = {}
+                for msg in history_messages:
+                    if msg.role == "user":
+                        converted_content = self._convert_content_to_google_format(msg.content)
+                        if isinstance(converted_content, str):
+                            parts = [types.Part(text=converted_content)]
                         else:
-                            converted_content = self._convert_content_to_google_format(
-                                current_message.content
+                            parts = converted_content
+                        history.append(types.Content(role="user", parts=parts))
+                    elif msg.role == "assistant":
+                        parts: List[types.Part] = []
+                        if isinstance(msg.content, str) and msg.content:
+                            parts.append(types.Part(text=msg.content))
+                        elif isinstance(msg.content, list):
+                            for item in msg.content:
+                                if isinstance(item, str):
+                                    parts.append(types.Part(text=item))
+                                elif isinstance(item, dict) and item.get("type") == "text":
+                                    parts.append(types.Part(text=item.get("text", "")))
+
+                        # Add function_call parts if present
+                        if getattr(msg, "tool_calls", None):
+                            for call in msg.tool_calls or []:
+                                name = call.get("function", {}).get("name")
+                                args = call.get("function", {}).get("arguments")
+                                if isinstance(args, str):
+                                    try:
+                                        args_dict = json.loads(args)
+                                    except json.JSONDecodeError:
+                                        args_dict = {}
+                                elif isinstance(args, dict):
+                                    args_dict = args
+                                else:
+                                    args_dict = {}
+
+                                call_id = call.get("id")
+                                if call_id and name:
+                                    tool_name_by_id_hist[call_id] = name
+
+                                parts.append(
+                                    types.Part(
+                                        function_call=types.FunctionCall(
+                                            name=name or "", args=args_dict
+                                        )
+                                    )
+                                )
+
+                        history.append(
+                            types.Content(role="model", parts=parts or [types.Part(text="")])
+                        )
+
+                    elif msg.role == "tool":
+                        # Map tool outputs into function_response on the user role
+                        response_obj = self._parse_tool_response(msg.content)
+
+                        call_id = getattr(msg, "tool_call_id", None)
+                        func_name = tool_name_by_id_hist.get(call_id or "", "")
+                        history.append(
+                            types.Content(
+                                role="user",
+                                parts=[
+                                    types.Part(
+                                        function_response=types.FunctionResponse(
+                                            name=func_name or "",
+                                            response=response_obj,
+                                        )
+                                    )
+                                ],
                             )
-                            return chat.send_message(converted_content)
-
-                    # Run the chat in thread pool
-                    total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
-
-                    async def _do_chat():
-                        return await asyncio.wait_for(
-                            loop.run_in_executor(None, _run_chat), timeout=total_timeout
                         )
 
-                    key = f"google:{api_model}"
-                    if not await self._breaker.allow(key):
-                        raise CircuitBreakerError(
-                            "Google circuit breaker is open - too many recent failures",
-                            provider="google",
+                # Create chat with history and send the current message
+                def _run_chat():
+                    chat = self.client.chats.create(model=api_model, config=config, history=history)
+                    # Send current message. If it's a tool response, send function_response parts
+                    if current_message.role == "tool":
+                        # Reconstruct function_response part for current message
+                        resp_obj = self._parse_tool_response(current_message.content)
+
+                        call_id_cur = getattr(current_message, "tool_call_id", None)
+                        # Try to find function name from previously seen calls
+                        func_name_cur = ""
+                        try:
+                            func_name_cur = tool_name_by_id_hist.get(call_id_cur or "", "")
+                        except Exception:
+                            func_name_cur = ""
+
+                        parts = [
+                            types.Part(
+                                function_response=types.FunctionResponse(
+                                    name=func_name_cur or "",
+                                    response=resp_obj,
+                                )
+                            )
+                        ]
+                        return chat.send_message(parts)
+                    else:
+                        converted_content = self._convert_content_to_google_format(
+                            current_message.content
                         )
-                    response = await retry_async(_do_chat)
-                    await self._breaker.record_success(key)
-                else:
-                    # No messages? This shouldn't happen but handle gracefully
-                    raise ProviderResponseError("No messages provided for chat", provider="google")
+                        return chat.send_message(converted_content)
+
+                # Run the chat in thread pool
+                total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+
+                async def _do_chat():
+                    return await asyncio.wait_for(
+                        loop.run_in_executor(None, _run_chat), timeout=total_timeout
+                    )
+
+                key = f"google:{api_model}"
+                if not await self._breaker.allow(key):
+                    raise CircuitBreakerError(
+                        "Google circuit breaker is open - too many recent failures",
+                        provider="google",
+                    )
+                response = await retry_async(_do_chat)
+                await self._breaker.record_success(key)
         except Exception as e:
             # Already wrapped? Just re-raise
             from llmring.exceptions import LLMRingError

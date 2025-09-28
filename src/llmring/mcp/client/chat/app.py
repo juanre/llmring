@@ -152,6 +152,7 @@ class MCPChatApp:
         self.session_id = session_id or str(uuid.uuid4())
         self.conversation: list[Message] = []
         self.available_tools: dict[str, Any] = {}
+        self.resolved_model_shown = False  # Track if we've shown the resolved model
 
         # Persistent storage paths
         self.data_dir = Path.home() / ".llmring" / "mcp_chat"
@@ -372,6 +373,11 @@ class MCPChatApp:
                     # Get response from LLM
                     with self.console.status("[info]Thinking...[/info]"):
                         response = await self.llmring.chat(request)
+
+                    # Show the resolved model on first response
+                    if not self.resolved_model_shown and response.model:
+                        self.console.print(f"[dim]Using model: {response.model}[/dim]\n")
+                        self.resolved_model_shown = True
 
                     # Process response for potential tool calls
                     await self.process_response(response)
@@ -895,6 +901,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
         session = matching[0]
         self.session_id = session["session_id"]
         self._load_conversation()
+        self.resolved_model_shown = False  # Reset flag when loading a session
         self.console.print(
             f"[success]Loaded session with {len(self.conversation)} messages[/success]"
         )
@@ -907,6 +914,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
             args: Command arguments (unused)
         """
         self.conversation = []
+        self.resolved_model_shown = False  # Reset flag when clearing conversation
         # Save the empty conversation
         self._save_conversation()
         self.console.print("[success]Conversation cleared[/success]")
@@ -928,6 +936,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
             # Validate model exists
             self.llmring.get_model_info(new_model)
             self.model = new_model
+            self.resolved_model_shown = False  # Reset flag so new model is shown
             self.console.print(f"[success]Model changed to {new_model}[/success]")
         except Exception as e:
             self.console.print(f"[error]Error changing model:[/error] {e!s}")

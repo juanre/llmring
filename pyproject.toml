@@ -111,6 +111,8 @@ markers = [
     "slow: marks tests as slow",
     "google: marks tests as Google-specific",
     "ollama: marks tests as Ollama-specific",
+    "openai: marks tests as OpenAI-specific",
+    "anthropic: marks tests as Anthropic-specific",
 ]
 filterwarnings = [
     "ignore:websockets.legacy is deprecated:DeprecationWarning",

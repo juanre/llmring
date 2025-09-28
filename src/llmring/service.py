@@ -49,6 +49,8 @@ class LLMRing:
         self._model_cache: Dict[str, Dict[str, Any]] = {}
         self.registry = RegistryClient(registry_url=registry_url)
         self._registry_models: Dict[str, List[RegistryModel]] = {}
+        # O(1) alias lookup: provider -> alias -> concrete model name
+        self._alias_to_model: Dict[str, Dict[str, str]] = {}
 
         # Alias resolution cache
         self._alias_cache: Dict[tuple[str, Optional[str]], tuple[str, float]] = {}
@@ -1127,28 +1129,101 @@ class LLMRing:
         """
         Get model information from the registry.
 
+        This method resolves aliases to concrete model names and returns the registry
+        information for the concrete model.
+
         Args:
             provider: Provider name
-            model_name: Model name
+            model_name: Model name (can be an alias or concrete name)
 
         Returns:
             Registry model information or None if not found
         """
-        # Fetch from registry if not cached
+        # Fetch from registry and build alias lookup if not cached
         if provider not in self._registry_models:
             try:
                 models = await self.registry.fetch_current_models(provider)
                 self._registry_models[provider] = models
+
+                # Build O(1) alias lookup for this provider
+                self._build_alias_lookup(provider, models)
             except Exception as e:
                 logger.warning(f"Failed to fetch registry for {provider}: {e}")
                 return None
 
-        # Find the model
+        # First check if this is an alias (O(1) lookup)
+        if provider in self._alias_to_model and model_name in self._alias_to_model[provider]:
+            # Resolve alias to concrete model name
+            concrete_name = self._alias_to_model[provider][model_name]
+            logger.debug(f"Resolved alias '{model_name}' to concrete model '{concrete_name}'")
+            model_name = concrete_name
+
+        # Now find the concrete model
         for model in self._registry_models.get(provider, []):
             if model.model_name == model_name:
                 return model
 
         return None
+
+    def _build_alias_lookup(self, provider: str, models: List[RegistryModel]) -> None:
+        """
+        Build O(1) alias lookup dictionary for a provider.
+
+        When multiple models have the same alias, the most recent (lexicographically
+        largest) model name is chosen.
+
+        Args:
+            provider: Provider name
+            models: List of registry models
+        """
+        # Only rebuild if not already cached
+        if provider in self._alias_to_model:
+            logger.debug(f"Alias lookup already cached for {provider}")
+            return
+
+        self._alias_to_model[provider] = {}
+        alias_map = self._alias_to_model[provider]
+
+        for model in models:
+            if not model.is_active:
+                continue
+
+            # Process aliases if they exist
+            if hasattr(model, "model_aliases") and model.model_aliases:
+                aliases = model.model_aliases
+                if not isinstance(aliases, list):
+                    aliases = [aliases]
+
+                for alias in aliases:
+                    if alias:  # Skip empty aliases
+                        # If alias already exists, keep the more recent (larger) model name
+                        if alias in alias_map:
+                            existing = alias_map[alias]
+                            # Choose lexicographically larger (more recent) model
+                            if model.model_name > existing:
+                                logger.debug(
+                                    f"Alias '{alias}' conflict: choosing '{model.model_name}' "
+                                    f"over '{existing}' (more recent)"
+                                )
+                                alias_map[alias] = model.model_name
+                        else:
+                            alias_map[alias] = model.model_name
+                            logger.debug(f"Mapped alias '{alias}' -> '{model.model_name}'")
+
+    def clear_alias_cache(self, provider: Optional[str] = None) -> None:
+        """
+        Clear the alias cache for a provider or all providers.
+
+        Args:
+            provider: Provider name to clear, or None to clear all
+        """
+        if provider:
+            if provider in self._alias_to_model:
+                del self._alias_to_model[provider]
+                logger.info(f"Cleared alias cache for {provider}")
+        else:
+            self._alias_to_model.clear()
+            logger.info("Cleared all alias caches")
 
     async def validate_context_limit(self, request: LLMRequest) -> Optional[str]:
         """

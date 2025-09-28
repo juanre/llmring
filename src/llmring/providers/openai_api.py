@@ -5,6 +5,7 @@ OpenAI API provider implementation using the official SDK.
 import asyncio
 import base64
 import copy
+import logging
 import os
 import tempfile
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
@@ -364,6 +365,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             # temperature and max tokens support may vary; pass only if provided
             if temperature is not None:
                 request_params["temperature"] = temperature
+            # Only pass max_tokens if provided
             if max_tokens is not None:
                 request_params["max_output_tokens"] = max_tokens
 
@@ -454,12 +456,13 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         if model.lower().startswith("openai:"):
             model = model.split(":", 1)[1]
 
-        # Log warning if model not in registry (but don't block)
+        # Log warning if model not found in registry (but don't block)
+        # Note: Alias resolution happens at service layer, not here
         try:
             models = await self._registry_client.fetch_current_models("openai")
-            if not any(m.model_name == model and m.is_active for m in models):
-                import logging
+            model_found = any(m.model_name == model and m.is_active for m in models)
 
+            if not model_found:
                 logging.getLogger(__name__).warning(
                     f"Model '{model}' not found in registry, proceeding anyway"
                 )
@@ -859,12 +862,13 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         if model.lower().startswith("openai:"):
             model = model.split(":", 1)[1]
 
-        # Log warning if model not in registry (but don't block)
+        # Log warning if model not found in registry (but don't block)
+        # Note: Alias resolution happens at service layer, not here
         try:
             models = await self._registry_client.fetch_current_models("openai")
-            if not any(m.model_name == model and m.is_active for m in models):
-                import logging
+            model_found = any(m.model_name == model and m.is_active for m in models)
 
+            if not model_found:
                 logging.getLogger(__name__).warning(
                     f"Model '{model}' not found in registry, proceeding anyway"
                 )
