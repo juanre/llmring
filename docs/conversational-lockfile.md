@@ -176,5 +176,6 @@ This creates a seamless experience for managing your LLM configuration through n
 
 ## See Also
 
-- [MCP Chat Client Documentation](../docs/mcp-chat-client.md) - Complete guide to the generic MCP chat client
-- [MCP Integration Guide](../docs/mcp-integration.md) - Overview of MCP capabilities in LLMRing
+- [MCP Integration](mcp.md) - Complete guide to MCP and chat client
+- [Lockfile Documentation](lockfile.md) - Complete guide to lockfiles and aliases
+- [CLI Reference](cli-reference.md) - All CLI commands

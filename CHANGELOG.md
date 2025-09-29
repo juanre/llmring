@@ -2,7 +2,7 @@
 
 All notable changes to LLMRing will be documented in this file.
 
-## [Unreleased]
+## [1.1.0] - 2025-09-29
 
 ### 📚 Documentation
 

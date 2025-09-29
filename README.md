@@ -497,6 +497,7 @@ response = await llm.chat([
 ## 📚 Documentation
 
 - **[Lockfile Documentation](docs/lockfile.md)** - Complete guide to lockfiles, aliases, and profiles
+- **[Conversational Lockfile](docs/conversational-lockfile.md)** - Natural language lockfile management
 - **[MCP Integration](docs/mcp.md)** - Model Context Protocol and chat client
 - **[API Reference](docs/api-reference.md)** - Core API documentation
 - **[Provider Guide](docs/providers.md)** - Provider-specific features
@@ -508,7 +509,6 @@ response = await llm.chat([
   - [Quick Start](examples/quick_start.py) - Basic usage patterns
   - [MCP Chat](examples/mcp_chat_example.py) - MCP integration
   - [Streaming](examples/mcp_streaming_example.py) - Streaming with tools
-  - [Conversational Lockfile](examples/conversational_lockfile.md) - Lockfile setup guide
 
 ## 🧪 Development
 
