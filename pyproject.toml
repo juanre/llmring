@@ -71,7 +71,6 @@ dev = [
     "black>=25.1.0",
     "claude-code-sdk>=0.0.10",
     "isort>=6.0.1",
-    "llmring-server",
     "mypy>=1.17.1",
     "pillow>=11.2.1",
     "pytest>=8.3.5",
@@ -83,6 +82,7 @@ dev = [
     "types-toml>=0.10.8.20240310",
     "twine>=6.2.0",
     "pre-commit>=4.3.0",
+    "llmring-server>=0.1.1",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -138,6 +138,3 @@ ensure_newline_before_comments = true
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-
-[tool.uv.sources]
-llmring-server = { path = "../llmring-server" }
