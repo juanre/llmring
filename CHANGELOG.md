@@ -2,6 +2,85 @@
 
 All notable changes to LLMRing will be documented in this file.
 
+## [Unreleased]
+
+### 📚 Documentation
+
+#### Comprehensive Documentation Overhaul (2025-09-29)
+- **NEW**: `docs/file-utilities.md` - Complete guide to vision/multimodal file handling (10 functions)
+- **NEW**: `docs/cli-reference.md` - Comprehensive CLI command reference (15+ commands)
+- **NEW**: `docs/receipts.md` - Cost tracking and receipt system documentation
+- **NEW**: `docs/lockfile.md` - Complete lockfile configuration guide with JSON format
+- **NEW**: `docs/mcp.md` - MCP integration guide (replaces mcp-integration.md and mcp-chat-client.md)
+- **RENAMED**: `docs/provider-usage.md` → `docs/providers.md` with use-case explanations
+- **ENHANCED**: README.md - Fixed MCP import paths, improved examples, standardized terminology
+- **ENHANCED**: `docs/api-reference.md` - Added LLMRingExtended, ConversationManager, alias cache docs
+- **FIXED**: Import path: `from llmring.mcp.client import create_enhanced_llm` (was .enhanced_llm)
+- **IMPROVED**: All code examples verified against source code for accuracy
+- **IMPROVED**: Standardized terminology: Alias, Model Reference, Raw SDK Access
+- **IMPROVED**: Added cross-references throughout all documentation
+
+### 🚀 Features
+
+#### Fallback Models (2025-09-20)
+- **NEW**: Aliases can specify multiple models for automatic failover
+- **Example**: `models = ["anthropic:claude-3-5-sonnet", "openai:gpt-4o", "google:gemini-1.5-pro"]`
+- **Behavior**: If primary model fails (rate limit, availability), automatically tries fallbacks
+- **Breaking**: Removed backward compatibility with old single-model alias format
+
+#### MCP Conversational Lockfile Management (2025-09-18)
+- **NEW**: `llmring lock chat` - Natural language lockfile configuration
+- **NEW**: AI-powered recommendations based on live registry analysis
+- **NEW**: Persistent chat history in `~/.llmring/mcp_chat/`
+- **NEW**: Complete tool execution loop with native function calling
+- **NEW**: Session management with save/load capabilities
+- **Enhanced**: MCP tools explain fallback models and provide better guidance
+
+#### Lockfile Packaging (2025-09-17)
+- **NEW**: Package lockfiles with your library distribution
+- **NEW**: Bundled fallback lockfile with `advisor` alias
+- **NEW**: Project root discovery for optimal lockfile placement
+- **IMPROVED**: Lockfile resolution order documented and consistent
+- **FIXED**: Lockfile placement uses package directory for distribution
+
+### 🔧 Improvements
+
+#### Provider Enhancements
+- **FIXED**: Temperature parameter filtering for models that don't support it (2025-09-29)
+- **IMPROVED**: Google tool-calling loop and error handling (2025-09-21)
+- **FIXED**: Google FunctionResponse formatting for tool errors (2025-09-21)
+- **IMPROVED**: Code quality and performance across all providers (2025-09-27)
+
+#### CLI & Tools
+- **REMOVED**: Hardcoded model IDs and obsolete CLI commands (2025-09-19)
+- **IMPROVED**: MCP tool parameter naming for better clarity
+- **IMPROVED**: MCP advisor understanding of configuration concepts
+
+#### Testing
+- **REPLACED**: All mocks with real integration tests
+- **FIXED**: Test failures after fallback models implementation
+- **IMPROVED**: Test fixtures and alias usage
+
+### 🐛 Bug Fixes
+- **FIXED**: Google provider parts parsing (use parts not response.text)
+- **FIXED**: Function call/response parts in conversation history
+- **FIXED**: MCP client initialization and tool discovery
+- **FIXED**: Lockfile manager class structure
+- **FIXED**: Conversational lockfile tests
+
+### 📦 Maintenance
+- **MOVED**: `demo_mcp_lockfile.py` to examples/ directory (2025-09-29)
+- **REMOVED**: Obsolete `replicate_google_loop.py` test file
+- **IMPROVED**: Pre-commit hooks and code formatting
+- **REFACTORED**: Eliminated technical debt across codebase
+
+### ⚠️ Breaking Changes
+- **Fallback Models**: Old single-model alias format no longer supported
+- **Lockfile Format**: Now requires `models` array instead of single `model` string
+- **Migration**: Update lockfiles to use `models = ["provider:model"]` array format
+
+---
+
 ## [1.0.0] - 2025-09-13
 
 **🎉 First Stable Release!**
