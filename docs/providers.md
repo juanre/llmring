@@ -1,4 +1,4 @@
-# Provider Usage Guide
+# Provider Guide
 
 ## Model Aliases vs Direct Models
 
@@ -23,17 +23,31 @@ async with LLMRing() as service:
         model="fast",
         messages=[Message(role="user", content="Hello")],
         extra_params={
-            "logprobs": True,
-            "top_logprobs": 5,
-            "presence_penalty": 0.1,
-            "frequency_penalty": 0.1,
-            "seed": 12345,
-            "top_p": 0.9
+            # For analyzing model confidence and alternative predictions
+            "logprobs": True,              # Get log probabilities for tokens
+            "top_logprobs": 5,             # Show top 5 alternative tokens at each position
+
+            # For controlling output diversity
+            "presence_penalty": 0.1,       # Penalize tokens that have appeared (encourages new topics)
+            "frequency_penalty": 0.1,      # Penalize tokens based on frequency (reduces repetition)
+
+            # For reproducibility
+            "seed": 12345,                 # Make outputs deterministic for same inputs
+
+            # For nucleus sampling
+            "top_p": 0.9                   # Only sample from top 90% probability mass
         }
     )
 
     response = await service.chat(request)
 ```
+
+**Use Cases:**
+- `logprobs`: Analyze model confidence, debug outputs, measure uncertainty
+- `presence_penalty`: Generate diverse content, avoid repetition of topics
+- `frequency_penalty`: Reduce word repetition, vary vocabulary
+- `seed`: Reproducible outputs for testing, A/B testing, debugging
+- `top_p`: Balance creativity vs coherence
 
 ### Anthropic Extra Params
 
@@ -42,11 +56,15 @@ request = LLMRequest(
     model="balanced",
     messages=[Message(role="user", content="Hello")],
     extra_params={
-        "top_p": 0.9,
-        "top_k": 40
+        "top_p": 0.9,      # Nucleus sampling - sample from top 90% probability
+        "top_k": 40        # Consider only top 40 tokens at each step
     }
 )
 ```
+
+**Use Cases:**
+- `top_p`: Control randomness while maintaining quality (0.9-0.95 recommended)
+- `top_k`: Limit token candidates to prevent unlikely choices
 
 ### Google Gemini Extra Params
 
@@ -55,22 +73,32 @@ request = LLMRequest(
     model="balanced",
     messages=[Message(role="user", content="Hello")],
     extra_params={
-        "top_p": 0.8,
-        "top_k": 30,
-        "candidate_count": 1,
+        # Sampling parameters
+        "top_p": 0.8,                      # Nucleus sampling threshold
+        "top_k": 30,                       # Top-k sampling limit
+        "candidate_count": 1,              # Number of response candidates to generate
+
+        # Safety controls (important for production)
         "safety_settings": [
             {
                 "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"  # Block medium+ harmful content
             }
         ],
+
+        # Generation controls
         "generation_config": {
-            "stop_sequences": ["END"],
-            "max_output_tokens": 1000
+            "stop_sequences": ["END"],     # Stop generation at these sequences
+            "max_output_tokens": 1000      # Limit output length
         }
     }
 )
 ```
+
+**Use Cases:**
+- `safety_settings`: Production applications requiring content moderation
+- `stop_sequences`: Control output format, implement custom terminators
+- `candidate_count`: Generate multiple options for selection (increases cost)
 
 ### Ollama Extra Params
 
@@ -80,31 +108,46 @@ request = LLMRequest(
     messages=[Message(role="user", content="Hello")],
     extra_params={
         "options": {
-            "mirostat": 1,
-            "mirostat_tau": 0.8,
-            "mirostat_eta": 0.1,
-            "num_ctx": 4096,
-            "repeat_penalty": 1.1,
-            "seed": 42,
-            "temperature": 0.8,
-            "tfs_z": 1.0,
-            "num_predict": 100,
-            "top_k": 40,
-            "top_p": 0.9
+            # Mirostat sampling (adaptive sampling for better quality)
+            "mirostat": 1,                 # Enable Mirostat sampling (0=off, 1=v1, 2=v2)
+            "mirostat_tau": 0.8,           # Target entropy (lower = more focused)
+            "mirostat_eta": 0.1,           # Learning rate for adaptation
+
+            # Context and generation
+            "num_ctx": 4096,               # Context window size
+            "num_predict": 100,            # Maximum tokens to generate
+
+            # Quality controls
+            "repeat_penalty": 1.1,         # Penalize repetition (1.0 = no penalty)
+            "temperature": 0.8,            # Randomness (lower = more deterministic)
+
+            # Sampling parameters
+            "top_k": 40,                   # Top-k sampling
+            "top_p": 0.9,                  # Nucleus sampling
+            "tfs_z": 1.0,                  # Tail free sampling
+
+            # Reproducibility
+            "seed": 42                     # Random seed for deterministic outputs
         }
     }
 )
 
-# Alternative flat format (same effect):
+# Alternative flat format (simpler for common params):
 request = LLMRequest(
     model="local",
     messages=[Message(role="user", content="Hello")],
     extra_params={
-        "seed": 42,
-        "num_predict": 100
+        "seed": 42,              # For reproducibility
+        "num_predict": 100       # Limit output length
     }
 )
 ```
+
+**Use Cases:**
+- `mirostat`: Improve output quality for local models (recommended for Llama)
+- `num_ctx`: Adjust context size for memory/quality tradeoff
+- `repeat_penalty`: Reduce repetition in longer outputs
+- `seed`: Reproducible testing with local models
 
 ## Raw Client Access (Escape Hatch)
 

@@ -8,10 +8,11 @@ A comprehensive Python library for LLM integration with unified interface, advan
 - **⚡ Streaming Support**: Real streaming for all providers (not simulated)
 - **🛠️ Native Tool Calling**: Provider-native function calling with consistent interface
 - **📋 Unified Structured Output**: JSON schema works across all providers with automatic adaptation
-- **🧠 Intelligent Configuration**: AI-powered lockfile creation with registry analysis
+- **🧠 Conversational Configuration**: MCP chat interface for natural language lockfile setup
 - **📋 Smart Aliases**: Always-current semantic aliases (`deep`, `fast`, `balanced`) via intelligent recommendations
 - **💰 Cost Tracking**: Automatic cost calculation and receipt generation
 - **🎯 Registry Integration**: Centralized model capabilities and pricing
+- **🔄 Fallback Models**: Automatic failover to alternative models for resilience
 - **🔧 Advanced Features**:
   - OpenAI: JSON schema, o1 models, PDF processing
   - Anthropic: Prompt caching (90% cost savings)
@@ -77,8 +78,16 @@ async with LLMRing() as service:
         stream=True
     )
 
+    accumulated_usage = None
     async for chunk in await service.chat(request):
         print(chunk.delta, end="", flush=True)
+        # Capture final usage stats
+        if chunk.usage:
+            accumulated_usage = chunk.usage
+
+    print()  # Newline after streaming
+    if accumulated_usage:
+        print(f"Tokens used: {accumulated_usage.get('total_tokens', 0)}")
 ```
 
 ### Tool Calling
@@ -116,8 +125,14 @@ async with LLMRing() as service:
 ### Context Manager (Recommended)
 
 ```python
+from llmring import LLMRing, LLMRequest, Message
+
 # Automatic resource cleanup with context manager
 async with LLMRing() as service:
+    request = LLMRequest(
+        model="fast",
+        messages=[Message(role="user", content="Hello!")]
+    )
     response = await service.chat(request)
     # Resources are automatically cleaned up when exiting the context
 ```
@@ -195,60 +210,61 @@ request = LLMRequest(
 )
 ```
 
-### 🧠 Intelligent Model Aliases
+### 🧠 Model Aliases and Lockfiles
 
-LLMRing automatically creates lockfiles at your project root and provides intelligent alias management:
+LLMRing uses lockfiles to map semantic aliases to models, with support for fallback models and environment-specific profiles:
 
 ```bash
-# Initialize lockfile at project root (finds pyproject.toml, setup.py, or .git)
+# Initialize lockfile (explicit creation at current directory)
 llmring lock init
 
-# Interactive lockfile management with AI advisor
-llmring lock chat  # Uses built-in advisor for natural language configuration
+# Conversational configuration with AI advisor (recommended)
+llmring lock chat  # Natural language interface for lockfile management
 
 # Analyze your configuration
 llmring lock analyze
 
-# Optimize existing lockfile
-llmring lock optimize
+# View current aliases
+llmring aliases
 ```
 
 **Lockfile Resolution Order:**
 1. Explicit path via `lockfile_path` parameter (file must exist)
 2. `LLMRING_LOCKFILE_PATH` environment variable (file must exist)
 3. `./llmring.lock` in current directory (if exists)
-4. Bundled lockfile at `src/llmring/llmring.lock` (fallback)
+4. Bundled lockfile at `src/llmring/llmring.lock` (minimal fallback with advisor alias)
 
 **Packaging Your Own Lockfile:**
-Libraries using LLMRing can ship with their own lockfiles. See [Lockfile Packaging Guide](docs/lockfile-packaging.md) for details on:
+Libraries using LLMRing can ship with their own lockfiles. See [Lockfile Documentation](docs/lockfile.md) for details on:
 - Including lockfiles in your package distribution
-- Project root discovery for optimal lockfile placement
-- Testing with explicit lockfile creation
-- Environment-specific configuration
+- Lockfile resolution order and precedence
+- Creating lockfiles with fallback models
+- Environment-specific profiles and configuration
 
-**Interactive Mode** prompts you for:
-- **Use cases**: What you'll primarily use LLMs for (coding, writing, analysis, etc.)
-- **Budget preference**: Low cost, balanced, or maximum performance
-- **Capabilities**: Vision, function calling, or auto-detect from registry
-- **Usage volume**: Expected monthly request volume
-- **Custom aliases**: Specific aliases you want (fast, deep, coder, writer, vision, etc.)
+**Conversational Configuration** via `llmring lock chat`:
+- Describe your requirements in natural language
+- Get AI-powered recommendations based on registry analysis
+- Configure aliases with multiple fallback models
+- Understand cost implications and tradeoffs
+- Set up environment-specific profiles
 
 ```python
-# Use semantic aliases (always current, registry-based)
+# Use semantic aliases (always current, with fallbacks)
 request = LLMRequest(
     model="deep",      # → most capable reasoning model
-    model="fast",      # → cost-effective quick responses
-    model="balanced",  # → optimal all-around model
-    model="advisor",   # → Claude Opus 4.1 - powers intelligent lockfile creation
     messages=[Message(role="user", content="Hello")]
 )
+# Or use other aliases:
+# model="fast"      → cost-effective quick responses
+# model="balanced"  → optimal all-around model
+# model="advisor"   → Claude Opus 4.1 - powers conversational config
 ```
 
 **Key Benefits:**
-- **Always current**: Aliases point to latest registry models, not outdated hardcoded ones
-- **Intelligent selection**: AI advisor analyzes registry and recommends optimal configuration
+- **Always current**: Registry-based recommendations, no hardcoded models
+- **Resilient**: Fallback models provide automatic failover
 - **Cost-aware**: Transparent cost analysis and recommendations
-- **Self-hosted**: Uses LLMRing's own API to power intelligent lockfile creation
+- **Environment-specific**: Different configurations for dev/staging/prod
 
 ### 🎭 Profiles: Environment-Specific Configurations
 
@@ -318,25 +334,47 @@ llmring chat "Hello"  # Now uses dev profile
 - **Production**: Use highest quality models for best user experience
 - **A/B Testing**: Test different models for the same alias
 
-### 🚪 Advanced: Direct Model Access
+### 🏯 Fallback Models
 
-While aliases are recommended, you can still use direct provider:model format when needed:
+Aliases can specify multiple models for automatic failover:
+
+```toml
+# In llmring.lock
+[[bindings]]
+alias = "assistant"
+models = [
+    "anthropic:claude-3-5-sonnet",  # Primary
+    "openai:gpt-4o",                 # First fallback
+    "google:gemini-1.5-pro"          # Second fallback
+]
+```
+
+If the primary model fails (rate limit, availability, etc.), LLMRing automatically tries the fallbacks.
+
+### 🚪 Advanced: Direct Model References
+
+While aliases are recommended, you can still use direct `provider:model` references when needed:
 
 ```python
-# Direct model specification (escape hatch)
+# Direct model reference (escape hatch)
 request = LLMRequest(
-    model="anthropic:claude-3-5-sonnet",  # Direct provider:model format
+    model="anthropic:claude-3-5-sonnet",  # Direct provider:model reference
     messages=[Message(role="user", content="Hello")]
 )
 
-# Or mix aliases with direct models
+# Or specify exact model versions
 request = LLMRequest(
-    model="openai:gpt-4o",  # Specific model when needed
+    model="openai:gpt-4o",  # Specific model version when needed
     messages=[Message(role="user", content="Hello")]
 )
 ```
 
-**Recommendation**: Use aliases for maintainability and cost optimization. Use direct model strings only when you need a specific model version or provider-specific features.
+**Terminology:**
+- **Alias**: Semantic name like `fast`, `balanced`, `deep` (recommended)
+- **Model Reference**: Full `provider:model` format like `openai:gpt-4o` (escape hatch)
+- **Raw SDK Access**: Bypassing LLMRing entirely using provider clients directly (see [Provider Guide](docs/providers.md))
+
+**Recommendation**: Use aliases for maintainability and cost optimization. Use direct model references only when you need a specific model version or provider-specific features.
 
 ### 🚪 Raw SDK Access (Escape Hatch)
 
@@ -419,14 +457,14 @@ GOOGLE_GEMINI_API_KEY=AIza...
 OLLAMA_BASE_URL=http://localhost:11434  # Default
 ```
 
-### Intelligent Setup
+### Conversational Setup
 
 ```bash
 # Create optimized configuration with AI advisor
-llmring lock init --interactive
+llmring lock chat
 
-# The advisor analyzes the current registry and your API keys
-# to recommend optimal model aliases for your workflow
+# This opens an interactive chat where you can describe your needs
+# and get personalized recommendations based on the registry
 ```
 
 ### Dependencies
@@ -442,7 +480,7 @@ pip install ollama>=0.4     # Ollama
 ## 🔗 MCP Integration
 
 ```python
-from llmring.mcp.client.enhanced_llm import create_enhanced_llm
+from llmring.mcp.client import create_enhanced_llm
 
 # Create MCP-enabled LLM with tool ecosystem
 llm = await create_enhanced_llm(
@@ -458,14 +496,19 @@ response = await llm.chat([
 
 ## 📚 Documentation
 
-- **[Provider Usage Guide](docs/provider-usage.md)** - Provider-specific features and examples
-- **[API Reference](docs/api-reference.md)** - Detailed API documentation
-- **[Lockfile Packaging Guide](docs/lockfile-packaging.md)** - How to package and distribute lockfiles
-- **[Structured Output](docs/structured-output.md)** - Unified JSON schema across all providers
-- **[MCP Integration](docs/mcp-integration.md)** - Model Context Protocol guide
-- **[MCP Chat Client](docs/mcp-chat-client.md)** - Generic MCP chat client with persistent history
-- **[Conversational Lockfile](examples/conversational_lockfile.md)** - Natural language lockfile management
-- **[Examples](examples/)** - Working code examples
+- **[Lockfile Documentation](docs/lockfile.md)** - Complete guide to lockfiles, aliases, and profiles
+- **[MCP Integration](docs/mcp.md)** - Model Context Protocol and chat client
+- **[API Reference](docs/api-reference.md)** - Core API documentation
+- **[Provider Guide](docs/providers.md)** - Provider-specific features
+- **[Structured Output](docs/structured-output.md)** - Unified JSON schema support
+- **[File Utilities](docs/file-utilities.md)** - Vision and multimodal file handling
+- **[CLI Reference](docs/cli-reference.md)** - Command-line interface guide
+- **[Receipts & Cost Tracking](docs/receipts.md)** - Cost tracking and receipt system
+- **[Examples](examples/)** - Working code examples:
+  - [Quick Start](examples/quick_start.py) - Basic usage patterns
+  - [MCP Chat](examples/mcp_chat_example.py) - MCP integration
+  - [Streaming](examples/mcp_streaming_example.py) - Streaming with tools
+  - [Conversational Lockfile](examples/conversational_lockfile.md) - Lockfile setup guide
 
 ## 🧪 Development
 
