@@ -367,7 +367,7 @@ VERY IMPORTANT: you need to understand the use they want to give to the models a
 async def cmd_list_models(args):
     """List available models."""
     async with LLMRing() as ring:
-        models = ring.get_available_models()
+        models = await ring.get_available_models()
 
         if args.provider:
             # Filter by provider

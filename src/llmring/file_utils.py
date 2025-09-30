@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
+from llmring.validation import InputValidator
+
 
 def get_file_mime_type(file_path: str) -> str:
     """
@@ -43,7 +45,7 @@ def get_file_mime_type(file_path: str) -> str:
 
 def encode_file_to_base64(file_path: str) -> str:
     """
-    Encode a file to base64 string.
+    Encode a file to base64 string with size validation.
 
     Args:
         file_path: Path to the file to encode
@@ -54,13 +56,22 @@ def encode_file_to_base64(file_path: str) -> str:
     Raises:
         FileNotFoundError: If file doesn't exist
         IOError: If file cannot be read
+        ValueError: If file is too large
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
     try:
         with open(file_path, "rb") as file:
-            return base64.b64encode(file.read()).decode("utf-8")
+            file_data = file.read()
+
+        # Validate file size before encoding
+        InputValidator.validate_decoded_size(file_data, context="file")
+
+        return base64.b64encode(file_data).decode("utf-8")
+    except ValueError:
+        # Re-raise validation errors
+        raise
     except Exception as e:
         raise IOError(f"Failed to read file {file_path}: {e}")
 
@@ -232,6 +243,10 @@ def create_file_content(
         header, data = file_path_url_or_base64.split(",", 1)
         detected_mime_type = header.split(":")[1].split(";")[0]
 
+        # Validate base64 size
+        context = "image" if detected_mime_type.startswith("image/") else "document"
+        InputValidator.validate_base64_size(data, context)
+
         if detected_mime_type.startswith("image/"):
             # Image content
             content_parts.append(
@@ -270,6 +285,10 @@ def create_file_content(
         # It's base64 data - need mime_type to determine format
         if not mime_type:
             raise ValueError("mime_type is required for base64 data")
+
+        # Validate base64 size
+        context = "image" if mime_type.startswith("image/") else "document"
+        InputValidator.validate_base64_size(file_path_url_or_base64, context)
 
         if mime_type.startswith("image/"):
             # Image content
@@ -355,7 +374,10 @@ def create_image_content(
 
     # Determine input type and handle accordingly
     if file_path_url_or_base64.startswith("data:"):
-        # It's already a data URL - use directly
+        # It's already a data URL - validate base64 size if present
+        if ";base64," in file_path_url_or_base64:
+            base64_data = file_path_url_or_base64.split(";base64,", 1)[1]
+            InputValidator.validate_base64_size(base64_data, "image")
         url = file_path_url_or_base64
     elif file_path_url_or_base64.startswith(("http://", "https://")):
         import os as _os
@@ -372,7 +394,8 @@ def create_image_content(
         # Pass through the URL (no fetching here)
         url = file_path_url_or_base64
     elif _is_base64_string(file_path_url_or_base64):
-        # It's base64 data - create data URL
+        # It's base64 data - validate and create data URL
+        InputValidator.validate_base64_size(file_path_url_or_base64, "image")
         url = f"data:{mime_type};base64,{file_path_url_or_base64}"
     else:
         # Assume it's a file path - validate and convert to data URL

@@ -8,10 +8,13 @@ Falls back to tiktoken for OpenAI-compatible models and character-based estimati
 import logging
 from typing import Any, Dict, List
 
+from cachetools import TTLCache
+
 logger = logging.getLogger(__name__)
 
 # Cache for tokenizers to avoid repeated initialization
-_tokenizer_cache: Dict[str, Any] = {}
+# TTL of 1 hour (tokenizers are stable but this prevents indefinite memory growth)
+_tokenizer_cache: TTLCache = TTLCache(maxsize=10, ttl=3600)
 
 
 def count_tokens_openai(messages: List[Dict[str, Any]], model: str) -> int:

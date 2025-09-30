@@ -55,7 +55,6 @@ class TestBaseInterfaceCompliance:
             "tool_choice",
             "json_response",
             "cache",
-            "stream",
             "extra_params",
         ]
 

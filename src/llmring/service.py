@@ -19,6 +19,13 @@ from llmring.providers.openai_api import OpenAIProvider
 from llmring.receipts import Receipt, ReceiptGenerator
 from llmring.registry import RegistryClient, RegistryModel
 from llmring.schemas import LLMRequest, LLMResponse, StreamChunk
+from llmring.services.alias_resolver import AliasResolver
+from llmring.services.cost_calculator import CostCalculator
+from llmring.services.receipt_manager import ReceiptManager
+from llmring.services.schema_adapter import SchemaAdapter
+from llmring.services.validation_service import ValidationService
+from llmring.utils import parse_model_string
+from llmring.validation import InputValidator
 
 logger = logging.getLogger(__name__)
 
@@ -52,14 +59,22 @@ class LLMRing:
         # O(1) alias lookup: provider -> alias -> concrete model name
         self._alias_to_model: Dict[str, Dict[str, str]] = {}
 
-        # Alias resolution cache
-        self._alias_cache: Dict[tuple[str, Optional[str]], tuple[str, float]] = {}
+        # Alias resolution service (will be initialized after providers)
+        self._alias_resolver: Optional[AliasResolver] = None
         self._alias_cache_size = alias_cache_size
         self._alias_cache_ttl = alias_cache_ttl
 
-        # Initialize receipt generator (no signer for local mode)
-        self.receipt_generator: Optional[ReceiptGenerator] = None
-        self.receipts: List[Receipt] = []  # Store receipts locally for now
+        # Schema adapter service
+        self._schema_adapter = SchemaAdapter()
+
+        # Cost calculator service
+        self._cost_calculator = CostCalculator(self.registry)
+
+        # Receipt manager service (will be initialized with lockfile)
+        self._receipt_manager: Optional[ReceiptManager] = None
+
+        # Validation service
+        self._validation_service = ValidationService(self.registry)
 
         # Load lockfile with explicit resolution strategy
         self.lockfile: Optional[Lockfile] = None
@@ -96,6 +111,9 @@ class LLMRing:
             except Exception as e:
                 logger.warning(f"Could not load any lockfile: {e}")
                 # Continue without lockfile - some operations may fail
+
+        # Initialize receipt manager with lockfile
+        self._receipt_manager = ReceiptManager(self.lockfile)
 
         self._initialize_providers()
 
@@ -143,6 +161,14 @@ class LLMRing:
 
         logger.info(f"Initialized {len(self.providers)} providers: {list(self.providers.keys())}")
 
+        # Initialize alias resolver with available providers
+        self._alias_resolver = AliasResolver(
+            lockfile=self.lockfile,
+            available_providers=set(self.providers.keys()),
+            cache_size=self._alias_cache_size,
+            cache_ttl=self._alias_cache_ttl,
+        )
+
     def register_provider(self, provider_type: str, **kwargs):
         """
         Register a provider instance.
@@ -169,32 +195,27 @@ class LLMRing:
 
         self.providers[provider_type] = provider
 
-    def get_available_models(self) -> Dict[str, List[str]]:
+        # Update alias resolver with new provider set
+        if self._alias_resolver:
+            self._alias_resolver.update_available_providers(set(self.providers.keys()))
+
+    async def get_available_models(self) -> Dict[str, List[str]]:
         """
         Get all available models from configured providers via the registry.
 
         Returns:
             Dictionary mapping provider names to lists of model names
+
+        Example:
+            >>> models = await ring.get_available_models()
+            >>> print(models["anthropic"])
+            ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', ...]
         """
         models = {}
         for provider_name in self.providers.keys():
             try:
                 # Fetch models from registry for this provider
-                import asyncio
-
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # If we're in an async context, create a task
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(
-                            asyncio.run, self.registry.fetch_current_models(provider_name)
-                        )
-                        registry_models = future.result(timeout=5)
-                else:
-                    # If no loop is running, we can run directly
-                    registry_models = asyncio.run(self.registry.fetch_current_models(provider_name))
+                registry_models = await self.registry.fetch_current_models(provider_name)
 
                 # Extract model names from registry models
                 models[provider_name] = [
@@ -226,6 +247,11 @@ class LLMRing:
             )
         return self.providers[provider_type]
 
+    @property
+    def receipts(self) -> List[Receipt]:
+        """Get all stored receipts (for backward compatibility)."""
+        return self._receipt_manager.receipts if self._receipt_manager else []
+
     def _parse_model_string(self, model: str) -> tuple[str, str]:
         """
         Parse a model string into provider and model name.
@@ -239,15 +265,7 @@ class LLMRing:
         Raises:
             ValueError: If model string is not in provider:model format
         """
-        if ":" not in model:
-            raise ValueError(
-                f"Invalid model format: '{model}'. "
-                f"Models must be specified as 'provider:model' (e.g., 'openai:gpt-4'). "
-                f"If you meant to use an alias, ensure it's defined in your lockfile."
-            )
-
-        provider_type, model_name = model.split(":", 1)
-        return provider_type, model_name
+        return parse_model_string(model)
 
     def resolve_alias(self, alias_or_model: str, profile: Optional[str] = None) -> str:
         """
@@ -260,92 +278,16 @@ class LLMRing:
         Returns:
             Resolved model string (provider:model) - first available from fallback list
         """
-        # If it looks like a model reference (contains colon), return as-is
-        if ":" in alias_or_model:
-            return alias_or_model
-
-        # Check cache first
-        cache_key = (alias_or_model, profile)
-        if cache_key in self._alias_cache:
-            cached_value, cached_time = self._alias_cache[cache_key]
-            import time
-
-            if time.time() - cached_time < self._alias_cache_ttl:
-                logger.debug(
-                    f"Using cached resolution for alias '{alias_or_model}': '{cached_value}'"
-                )
-                return cached_value
-            else:
-                # Cache entry expired, remove it
-                del self._alias_cache[cache_key]
-
-        # Try to resolve as alias from lockfile
-        if self.lockfile:
-            profile_name = profile or os.getenv("LLMRING_PROFILE")
-            model_refs = self.lockfile.resolve_alias(alias_or_model, profile_name)
-
-            if model_refs:
-                # Try each model in order until we find one with an available provider
-                unavailable_models = []
-                for model_ref in model_refs:
-                    try:
-                        provider_type, _ = self._parse_model_string(model_ref)
-                        if provider_type in self.providers:
-                            logger.debug(
-                                f"Resolved alias '{alias_or_model}' to '{model_ref}' (provider available)"
-                            )
-                            # Add to cache
-                            self._add_to_alias_cache(cache_key, model_ref)
-                            return model_ref
-                        else:
-                            unavailable_models.append(f"{model_ref} (no {provider_type} API key)")
-                            logger.debug(
-                                f"Skipping '{model_ref}' - provider '{provider_type}' not available"
-                            )
-                    except ValueError:
-                        # Invalid model reference format
-                        logger.warning(
-                            f"Invalid model reference in alias '{alias_or_model}': {model_ref}"
-                        )
-                        continue
-
-                # No available providers found
-                if unavailable_models:
-                    raise ValueError(
-                        f"No available providers for alias '{alias_or_model}'. "
-                        f"Tried models: {', '.join(unavailable_models)}. "
-                        f"Please configure the required API keys."
-                    )
-
-        # If no lockfile or alias not found, this is an error
-        # We require explicit provider:model format or valid aliases
-        raise ValueError(
-            f"Invalid model format: '{alias_or_model}'. "
-            f"Models must be specified as 'provider:model' (e.g., 'openai:gpt-4'). "
-            f"If you meant to use an alias, ensure it's defined in your lockfile."
-        )
-
-    def _add_to_alias_cache(self, cache_key: tuple[str, Optional[str]], value: str):
-        """Add an entry to the alias cache, respecting size limits."""
-        import time
-
-        # If cache is at capacity, remove oldest entry
-        if len(self._alias_cache) >= self._alias_cache_size:
-            # Find and remove the oldest entry
-            oldest_key = min(self._alias_cache.keys(), key=lambda k: self._alias_cache[k][1])
-            del self._alias_cache[oldest_key]
-
-        # Add new entry
-        self._alias_cache[cache_key] = (value, time.time())
+        if not self._alias_resolver:
+            raise RuntimeError("Alias resolver not initialized")
+        return self._alias_resolver.resolve(alias_or_model, profile)
 
     def clear_alias_cache(self):
         """Clear the alias resolution cache."""
-        self._alias_cache.clear()
-        logger.debug("Alias cache cleared")
+        if self._alias_resolver:
+            self._alias_resolver.clear_cache()
 
-    async def chat(
-        self, request: LLMRequest, profile: Optional[str] = None
-    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
+    async def chat(self, request: LLMRequest, profile: Optional[str] = None) -> LLMResponse:
         """
         Send a chat request to the appropriate provider.
 
@@ -354,8 +296,20 @@ class LLMRing:
             profile: Optional profile name for alias resolution
 
         Returns:
-            LLM response or async iterator of stream chunks if streaming
+            LLM response with complete generated content
+
+        Raises:
+            ValueError: If message content is invalid or too large
+
+        Note:
+            For streaming responses, use chat_stream() instead.
         """
+        # Validate message content
+        messages_dict = [
+            msg.model_dump() if hasattr(msg, "model_dump") else msg for msg in request.messages
+        ]
+        InputValidator.validate_message_content(messages_dict)
+
         # Store original alias for receipt
         original_alias = request.model or ""
 
@@ -418,18 +372,6 @@ class LLMRing:
 
             # Could add more capability checks here in the future (streaming, etc.)
 
-        # Check if streaming is requested
-        if adapted_request.stream:
-            # For streaming, we need to wrap the stream to handle receipts
-            return self._create_streaming_wrapper(
-                provider=provider,
-                model_name=model_name,
-                request=adapted_request,
-                provider_type=provider_type,
-                original_alias=original_alias,
-                profile=profile,
-            )
-
         # Send non-streaming request to provider
         response = await provider.chat(
             messages=adapted_request.messages,
@@ -441,12 +383,11 @@ class LLMRing:
             tool_choice=adapted_request.tool_choice,
             json_response=adapted_request.json_response,
             cache=adapted_request.cache,
-            stream=False,
             extra_params=adapted_request.extra_params,
         )
 
         # Post-process structured output if adapter was used
-        response = await self._post_process_structured_output(
+        response = await self._schema_adapter.post_process_structured_output(
             response, adapted_request, provider_type
         )
 
@@ -455,95 +396,128 @@ class LLMRing:
             response.model = f"{provider_type}:{response.model}"
 
         # Calculate and add cost information if available
+        cost_info = None
         if response.usage:
             cost_info = await self.calculate_cost(response)
             if cost_info:
-                # Add cost to usage dict
-                response.usage["cost"] = cost_info["total_cost"]
-                response.usage["cost_breakdown"] = {
-                    "input": cost_info["input_cost"],
-                    "output": cost_info["output_cost"],
-                }
+                self._cost_calculator.add_cost_to_response(response, cost_info)
                 logger.debug(
                     f"Calculated cost for {provider_type}:{model_name}: ${cost_info['total_cost']:.6f}"
                 )
 
         # Generate receipt if we have usage information
-        if response.usage and self.lockfile:
-            try:
-                # Initialize receipt generator if not already done
-                if not self.receipt_generator:
-                    self.receipt_generator = ReceiptGenerator()
-
-                # Calculate lockfile digest
-                lock_digest = self.lockfile.calculate_digest()
-
-                # Determine profile used
-                profile_name = (
-                    profile or os.getenv("LLMRING_PROFILE") or self.lockfile.default_profile
-                )
-
-                # Generate receipt
-                receipt = self.receipt_generator.generate_receipt(
-                    alias=(original_alias if ":" not in original_alias else "direct_model"),
-                    profile=profile_name,
-                    lock_digest=lock_digest,
-                    provider=provider_type,
-                    model=model_name,
-                    usage=response.usage,
-                    costs=(
-                        cost_info
-                        if cost_info
-                        else {"input_cost": 0.0, "output_cost": 0.0, "total_cost": 0.0}
-                    ),
-                )
-
-                # Store receipt locally
-                self.receipts.append(receipt)
-                logger.debug(
-                    f"Generated receipt {receipt.receipt_id} for {provider_type}:{model_name}"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to generate receipt: {e}")
+        if self._receipt_manager:
+            self._receipt_manager.generate_receipt(
+                response=response,
+                original_alias=original_alias,
+                provider_type=provider_type,
+                model_name=model_name,
+                cost_info=cost_info,
+                profile=profile,
+            )
 
         return response
 
-    async def _create_streaming_wrapper(
-        self,
-        provider: BaseLLMProvider,
-        model_name: str,
-        request: LLMRequest,
-        provider_type: str,
-        original_alias: str,
-        profile: Optional[str] = None,
+    async def chat_stream(
+        self, request: LLMRequest, profile: Optional[str] = None
     ) -> AsyncIterator[StreamChunk]:
         """
-        Create a streaming wrapper that handles receipts and cost calculation.
+        Send a streaming chat request to the appropriate provider.
 
         Args:
-            provider: The provider instance
-            model_name: The model name
-            request: The original request
-            provider_type: Type of provider (openai, anthropic, etc.)
-            original_alias: Original alias used in request
-            profile: Optional profile name
+            request: LLM request with messages and parameters
+            profile: Optional profile name for alias resolution
 
         Yields:
-            Stream chunks from the provider with receipt handling
+            Stream chunks from the provider
+
+        Raises:
+            ValueError: If message content is invalid or too large
+
+        Example:
+            >>> async for chunk in llmring.chat_stream(request):
+            ...     print(chunk.delta, end="", flush=True)
         """
+        # Validate message content
+        messages_dict = [
+            msg.model_dump() if hasattr(msg, "model_dump") else msg for msg in request.messages
+        ]
+        InputValidator.validate_message_content(messages_dict)
+
+        # Store original alias for receipt
+        original_alias = request.model or ""
+
+        # Resolve alias if needed
+        resolved_model = self.resolve_alias(request.model or "", profile)
+
+        # Parse model to get provider
+        provider_type, model_name = self._parse_model_string(resolved_model)
+
+        # Get provider
+        provider = self.get_provider(provider_type)
+
+        # Check if we should use pinned registry version
+        if self.lockfile and profile:
+            profile_config = self.lockfile.get_profile(profile)
+            if provider_type in profile_config.registry_versions:
+                pinned_version = profile_config.registry_versions[provider_type]
+                # Set the pinned version on the provider's registry client
+                if hasattr(provider, "_registry_client") and provider._registry_client:
+                    # Store the pinned version for this validation
+                    provider._registry_client._pinned_version = pinned_version
+
+        # Get model info from registry (cached)
+        registry_model = None
+        try:
+            registry_model = await self.get_model_from_registry(provider_type, model_name)
+            if not registry_model:
+                logger.warning(
+                    f"Model '{provider_type}:{model_name}' not found in registry. "
+                    f"Cost tracking and token limits unavailable."
+                )
+        except Exception as e:
+            logger.debug(f"Could not check registry for model {provider_type}:{model_name}: {e}")
+
+        # If no model specified, use provider's default
+        if not model_name and hasattr(provider, "get_default_model"):
+            model_name = await provider.get_default_model()
+
+        # Validate context limits if possible
+        # Create a temporary request with the resolved model for validation
+        validation_request = request.model_copy()
+        validation_request.model = f"{provider_type}:{model_name}"
+        validation_error = await self.validate_context_limit(validation_request)
+        if validation_error:
+            logger.warning(f"Context validation warning: {validation_error}")
+            # We log but don't block - let the provider handle it
+
+        # Apply structured output adapter for non-OpenAI providers
+        adapted_request = await self._apply_structured_output_adapter(
+            request, provider_type, provider
+        )
+
+        # Filter out unsupported parameters based on model capabilities
+        if registry_model:
+            if not registry_model.supports_temperature and adapted_request.temperature is not None:
+                logger.debug(
+                    f"Model {provider_type}:{model_name} doesn't support temperature, removing parameter"
+                )
+                adapted_request.temperature = None
+
+            # Could add more capability checks here in the future
+
         # Get the stream from provider
-        stream = await provider.chat(
-            messages=request.messages,
+        stream = await provider.chat_stream(
+            messages=adapted_request.messages,
             model=model_name,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            response_format=request.response_format,
-            tools=request.tools,
-            tool_choice=request.tool_choice,
-            json_response=request.json_response,
-            cache=request.cache,
-            stream=True,
-            extra_params=request.extra_params,
+            temperature=adapted_request.temperature,
+            max_tokens=adapted_request.max_tokens,
+            response_format=adapted_request.response_format,
+            tools=adapted_request.tools,
+            tool_choice=adapted_request.tool_choice,
+            json_response=adapted_request.json_response,
+            cache=adapted_request.cache,
+            extra_params=adapted_request.extra_params,
         )
 
         # Track usage for receipt generation
@@ -555,58 +529,36 @@ class LLMRing:
             if chunk.usage:
                 accumulated_usage = chunk.usage
 
+            # Ensure chunk has the full provider:model format
+            if chunk.model and ":" not in chunk.model:
+                chunk.model = f"{provider_type}:{chunk.model}"
+
             # Yield the chunk to client
             yield chunk
 
         # After streaming completes, generate receipt if we have usage
-        if accumulated_usage and self.lockfile:
-            try:
-                # Calculate cost if possible
-                cost_info = None
-                if accumulated_usage:
-                    # Create a temporary response object for cost calculation
-                    temp_response = LLMResponse(
-                        content="",
-                        model=f"{provider_type}:{model_name}",
-                        usage=accumulated_usage,
-                        finish_reason="stop",
-                    )
-                    cost_info = await self.calculate_cost(temp_response)
-
-                # Initialize receipt generator if needed
-                if not self.receipt_generator:
-                    self.receipt_generator = ReceiptGenerator()
-
-                # Calculate lockfile digest
-                lock_digest = self.lockfile.calculate_digest()
-
-                # Determine profile used
-                profile_name = (
-                    profile or os.getenv("LLMRING_PROFILE") or self.lockfile.default_profile
-                )
-
-                # Generate receipt
-                receipt = self.receipt_generator.generate_receipt(
-                    alias=(original_alias if ":" not in original_alias else "direct_model"),
-                    profile=profile_name,
-                    lock_digest=lock_digest,
-                    provider=provider_type,
-                    model=model_name,
+        if accumulated_usage and self._receipt_manager:
+            # Calculate cost if possible
+            cost_info = None
+            if accumulated_usage:
+                # Create a temporary response object for cost calculation
+                temp_response = LLMResponse(
+                    content="",
+                    model=f"{provider_type}:{model_name}",
                     usage=accumulated_usage,
-                    costs=(
-                        cost_info
-                        if cost_info
-                        else {"input_cost": 0.0, "output_cost": 0.0, "total_cost": 0.0}
-                    ),
+                    finish_reason="stop",
                 )
+                cost_info = await self.calculate_cost(temp_response)
 
-                # Store receipt locally
-                self.receipts.append(receipt)
-                logger.debug(
-                    f"Generated receipt {receipt.receipt_id} for streaming {provider_type}:{model_name}"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to generate receipt for streaming: {e}")
+            # Generate streaming receipt
+            self._receipt_manager.generate_streaming_receipt(
+                usage=accumulated_usage,
+                original_alias=original_alias,
+                provider_type=provider_type,
+                model_name=model_name,
+                cost_info=cost_info,
+                profile=profile,
+            )
 
     async def chat_with_alias(
         self,
@@ -644,11 +596,13 @@ class LLMRing:
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
-            stream=stream,
             **kwargs,
         )
 
-        return await self.chat(request, profile=profile)
+        if stream:
+            return self.chat_stream(request, profile=profile)
+        else:
+            return await self.chat(request, profile=profile)
 
     # Lockfile management methods
 
@@ -779,360 +733,11 @@ class LLMRing:
         """
         Apply structured output adapter for non-OpenAI providers.
 
-        Converts json_schema requests to tool-based approaches for Anthropic/Google.
+        Delegates to SchemaAdapter service.
         """
-        # Only adapt if we have a json_schema request and no existing tools
-        if (
-            not request.response_format
-            or request.response_format.get("type") != "json_schema"
-            or request.tools
-        ):
-            return request
-
-        schema = request.response_format.get("json_schema", {}).get("schema", {})
-        if not schema:
-            return request
-
-        # Create a copy of the request to modify
-        from copy import deepcopy
-
-        adapted_request = deepcopy(request)
-
-        # Import Message for use in adapter
-        from llmring.schemas import Message
-
-        if provider_type == "anthropic":
-            # Anthropic: Use tool injection approach
-            respond_tool = {
-                "type": "function",
-                "function": {
-                    "name": "respond_with_structure",
-                    "description": "Respond with structured data matching the required schema",
-                    "parameters": schema,
-                },
-            }
-            adapted_request.tools = [respond_tool]
-            adapted_request.tool_choice = {"type": "any"}  # Force tool use
-
-        elif provider_type == "google":
-            # Google: Use function declaration approach with JSON Schema normalization
-            normalized_schema, notes = self._normalize_json_schema_for_google(schema)
-
-            if notes:
-                try:
-                    logger.warning(
-                        "Normalized JSON Schema for Google; potential downgrades: %s",
-                        "; ".join(notes),
-                    )
-                except Exception:
-                    # Avoid failing on logging issues
-                    pass
-
-            respond_tool = {
-                "type": "function",
-                "function": {
-                    "name": "respond_with_structure",
-                    "description": "Respond with structured data matching the required schema",
-                    "parameters": normalized_schema,
-                },
-            }
-            adapted_request.tools = [respond_tool]
-            adapted_request.tool_choice = "any"  # Force function calling
-            adapted_request.metadata = adapted_request.metadata or {}
-            if notes:
-                adapted_request.metadata["_schema_normalization_notes"] = notes
-
-        elif provider_type == "ollama":
-            # Ollama: Best effort with format and schema hinting
-            adapted_request.json_response = True
-
-            # Add schema as system instruction
-            schema_instruction = f"\n\nIMPORTANT: Respond with valid JSON matching this schema:\n{json.dumps(schema, indent=2)}"
-
-            # Add to system message or create one
-            messages = list(adapted_request.messages)
-            if messages and messages[0].role == "system":
-                messages[0] = Message(
-                    role="system",
-                    content=messages[0].content + schema_instruction,
-                    metadata=messages[0].metadata,
-                )
-            else:
-                messages.insert(
-                    0,
-                    Message(
-                        role="system",
-                        content=f"You are a helpful assistant.{schema_instruction}",
-                    ),
-                )
-            adapted_request.messages = messages
-
-        # Mark request as adapted for post-processing
-        adapted_request.metadata = adapted_request.metadata or {}
-        adapted_request.metadata["_structured_output_adapted"] = True
-        adapted_request.metadata["_original_schema"] = schema
-
-        return adapted_request
-
-    def _normalize_json_schema_for_google(
-        self, schema: Dict[str, Any]
-    ) -> Tuple[Dict[str, Any], List[str]]:
-        """
-        Normalize a JSON Schema into a form acceptable by Google Gemini function
-        declarations. Removes/adjusts unsupported features.
-
-        - Converts union types like ["boolean", "null"] to a single type, removing
-          "null" and recording a note. If multiple non-null types are present,
-          falls back to "string" and records a note.
-        - Removes unsupported keywords such as additionalProperties, anyOf, oneOf,
-          allOf, not, patternProperties, if/then/else, pattern, format (records notes).
-        - Recursively normalizes properties and items.
-
-        Returns a tuple of (normalized_schema, notes).
-        """
-
-        notes: List[str] = []
-
-        def normalize(node: Any, path: str) -> Any:
-            # Primitives or non-dict structures are returned as-is
-            if not isinstance(node, dict):
-                return node
-
-            result: Dict[str, Any] = {}
-
-            # Handle type normalization first
-            node_type = node.get("type")
-            if isinstance(node_type, list):
-                # Remove null if present, pick a remaining type
-                non_null_types = [t for t in node_type if t != "null"]
-                if len(non_null_types) == 1:
-                    result["type"] = non_null_types[0]
-                    notes.append(f"{path or '<root>'}: removed 'null' from union type {node_type}")
-                elif len(non_null_types) == 0:
-                    # Only null provided; fallback to string
-                    result["type"] = "string"
-                    notes.append(
-                        f"{path or '<root>'}: union type {node_type} normalized to 'string'"
-                    )
-                else:
-                    # Multiple non-null types unsupported; fallback to string
-                    result["type"] = "string"
-                    notes.append(
-                        f"{path or '<root>'}: multi-type union {node_type} normalized to 'string'"
-                    )
-            elif isinstance(node_type, str):
-                result["type"] = node_type
-
-            # Copy supported basic fields cautiously
-            # Preserve description/title/default/enum when present
-            for key in [
-                "title",
-                "description",
-                "default",
-                "enum",
-                "const",
-                "minimum",
-                "maximum",
-                "minLength",
-                "maxLength",
-                "minItems",
-                "maxItems",
-            ]:
-                if key in node:
-                    result[key] = node[key]
-
-            # Remove/ignore unsupported or risky keywords
-            removed_keywords = []
-            for key in [
-                "additionalProperties",
-                "anyOf",
-                "oneOf",
-                "allOf",
-                "not",
-                "patternProperties",
-                "if",
-                "then",
-                "else",
-                "pattern",
-                "format",
-                "dependencies",
-            ]:
-                if key in node:
-                    removed_keywords.append(key)
-            if removed_keywords:
-                notes.append(f"{path or '<root>'}: removed unsupported keywords {removed_keywords}")
-
-            # Object handling
-            effective_type = result.get("type") or node.get("type")
-            if effective_type == "object":
-                # Normalize properties
-                properties = node.get("properties", {})
-                if isinstance(properties, dict):
-                    norm_props: Dict[str, Any] = {}
-                    for prop_name, prop_schema in properties.items():
-                        norm_props[prop_name] = normalize(
-                            prop_schema,
-                            f"{path + '.' if path else ''}properties.{prop_name}",
-                        )
-                    result["properties"] = norm_props
-
-                # Keep required list as-is
-                if "required" in node and isinstance(node["required"], list):
-                    result["required"] = [str(x) for x in node["required"]]
-
-            # Array handling
-            if effective_type == "array":
-                items = node.get("items")
-                if isinstance(items, list) and items:
-                    # Tuple typing not supported; choose first
-                    result["items"] = normalize(items[0], f"{path or '<root>'}.items[0]")
-                    notes.append(
-                        f"{path or '<root>'}: tuple-typed 'items' normalized to first schema"
-                    )
-                elif isinstance(items, dict):
-                    result["items"] = normalize(items, f"{path or '<root>'}.items")
-
-            return result
-
-        normalized = normalize(schema, "")
-        return normalized, notes
-
-    async def _post_process_structured_output(
-        self, response: LLMResponse, request: LLMRequest, provider_type: str
-    ) -> LLMResponse:
-        """
-        Post-process response from structured output adapter.
-
-        Extracts JSON from tool calls and validates against schema.
-        """
-        import json
-
-        # Only process if request was adapted
-        if not request.metadata or not request.metadata.get("_structured_output_adapted"):
-            return response
-
-        original_schema = request.metadata.get("_original_schema", {})
-
-        try:
-            if provider_type == "openai":
-                # OpenAI native: Parse JSON from content
-                try:
-                    parsed_data = json.loads(response.content)
-                    response.parsed = parsed_data
-
-                    # Validate against schema if strict mode
-                    if request.response_format and request.response_format.get("strict"):
-                        self._validate_json_schema(parsed_data, original_schema)
-
-                except json.JSONDecodeError:
-                    logger.warning("Failed to parse JSON from OpenAI response")
-
-            elif provider_type in ["anthropic", "google"] and response.tool_calls:
-                # Extract JSON from tool call arguments
-                for tool_call in response.tool_calls:
-                    if tool_call["function"]["name"] == "respond_with_structure":
-                        # Parse the arguments as our structured response
-                        tool_args = tool_call["function"]["arguments"]
-                        if isinstance(tool_args, str):
-                            parsed_data = json.loads(tool_args)
-                        else:
-                            parsed_data = tool_args
-
-                        # Set content to JSON string and parsed to dict
-                        response.content = json.dumps(parsed_data, indent=2)
-                        response.parsed = parsed_data
-
-                        # Validate against schema if strict mode
-                        if request.response_format and request.response_format.get("strict"):
-                            self._validate_json_schema(parsed_data, original_schema)
-
-                        break
-
-            elif provider_type == "ollama":
-                # Try to parse JSON from content
-                try:
-                    parsed_data = json.loads(response.content)
-                    response.parsed = parsed_data
-
-                    # Validate against schema if strict mode
-                    if request.response_format and request.response_format.get("strict"):
-                        self._validate_json_schema(parsed_data, original_schema)
-
-                except json.JSONDecodeError:
-                    # If JSON parsing fails and strict mode, try one repair attempt
-                    if (
-                        request.response_format
-                        and request.response_format.get("strict")
-                        and request.extra_params.get("retry_on_json_failure", True)
-                    ):
-                        logger.info(f"JSON parsing failed for {provider_type}, attempting repair")
-
-                        # Single retry with repair prompt
-                        from copy import deepcopy
-
-                        from llmring.schemas import Message
-
-                        repair_request = deepcopy(request)
-                        repair_prompt = f"The previous response was not valid JSON. Please provide ONLY valid JSON matching this schema:\n{json.dumps(original_schema, indent=2)}\n\nOriginal content to fix:\n{response.content}"
-
-                        repair_request.messages = [Message(role="user", content=repair_prompt)]
-                        repair_request.metadata["_retry_attempt"] = True
-
-                        try:
-                            # Get provider and retry (avoid infinite recursion)
-                            if not request.metadata.get("_retry_attempt"):
-                                provider = self.get_provider(provider_type)
-                                repair_response = await provider.chat(
-                                    messages=repair_request.messages,
-                                    model=(
-                                        repair_request.model.split(":", 1)[1]
-                                        if ":" in repair_request.model
-                                        else repair_request.model
-                                    ),
-                                    temperature=0.1,  # Lower temperature for better JSON
-                                    max_tokens=repair_request.max_tokens,
-                                    json_response=True,
-                                    extra_params=repair_request.extra_params,
-                                )
-
-                                # Try parsing the repaired response
-                                repaired_data = json.loads(repair_response.content)
-                                response.content = repair_response.content
-                                response.parsed = repaired_data
-                                self._validate_json_schema(repaired_data, original_schema)
-                                logger.info(f"JSON repair successful for {provider_type}")
-
-                        except Exception as repair_error:
-                            logger.warning(f"JSON repair attempt failed: {repair_error}")
-                    else:
-                        logger.warning(f"Failed to parse JSON from {provider_type} response")
-
-        except Exception as e:
-            logger.warning(f"Structured output post-processing failed: {e}")
-
-        return response
-
-    def _validate_json_schema(self, data: Dict[str, Any], schema: Dict[str, Any]) -> None:
-        """
-        Validate data against JSON schema.
-
-        Raises ValidationError if data doesn't match schema.
-        """
-        try:
-            import jsonschema
-
-            jsonschema.validate(instance=data, schema=schema)
-        except ImportError:
-            # If jsonschema not available, skip validation
-            logger.warning("jsonschema not installed, skipping schema validation")
-        except jsonschema.ValidationError as e:
-            from llmring.exceptions import ValidationError
-
-            raise ValidationError(
-                f"Response does not match required schema: {e.message}",
-                field=e.absolute_path[-1] if e.absolute_path else None,
-                value=e.instance,
-            )
+        return await self._schema_adapter.apply_structured_output_adapter(
+            request, provider_type, provider
+        )
 
     async def get_model_from_registry(
         self, provider: str, model_name: str
@@ -1246,64 +851,14 @@ class LLMRing:
         Returns:
             Error message if validation fails, None if ok
         """
-        if not request.model:
-            return None
-        provider_type, model_name = self._parse_model_string(request.model)
-
-        # Get model info from registry
-        registry_model = await self.get_model_from_registry(provider_type, model_name)
-        if not registry_model or not registry_model.max_input_tokens:
-            # Can't validate without limits
-            return None
-
-        # Calculate token count for input using proper tokenization
-        # First do a quick character-based check to avoid expensive tokenization for obviously too-large inputs
-        total_chars = sum(
-            (
-                len(message.content)
-                if isinstance(message.content, str)
-                else len(str(message.content))
-            )
-            for message in request.messages
-        )
-
-        # If we have way more characters than could possibly fit (assuming worst case 1 char = 1 token)
-        # Skip expensive tokenization
-        if total_chars > registry_model.max_input_tokens * 2:
-            estimated_input_tokens = total_chars  # Use char count as rough estimate
+        # Get registry model for better performance (avoid double fetch)
+        if request.model and ":" in request.model:
+            provider_type, model_name = parse_model_string(request.model)
+            registry_model = await self.get_model_from_registry(provider_type, model_name)
         else:
-            from llmring.token_counter import count_tokens
+            registry_model = None
 
-            # Convert messages to dict format for token counting
-            message_dicts = []
-            for message in request.messages:
-                msg_dict = {"role": message.role}
-                if isinstance(message.content, str):
-                    msg_dict["content"] = message.content
-                elif isinstance(message.content, list):
-                    msg_dict["content"] = message.content
-                else:
-                    msg_dict["content"] = str(message.content)
-                message_dicts.append(msg_dict)
-
-            estimated_input_tokens = count_tokens(message_dicts, provider_type, model_name)
-
-        # Check input limit
-        if estimated_input_tokens > registry_model.max_input_tokens:
-            return (
-                f"Estimated input tokens ({estimated_input_tokens}) exceeds "
-                f"model input limit ({registry_model.max_input_tokens})"
-            )
-
-        # Check output limit if specified
-        if request.max_tokens and registry_model.max_output_tokens:
-            if request.max_tokens > registry_model.max_output_tokens:
-                return (
-                    f"Requested max tokens ({request.max_tokens}) exceeds "
-                    f"model output limit ({registry_model.max_output_tokens})"
-                )
-
-        return None
+        return await self._validation_service.validate_context_limit(request, registry_model)
 
     async def calculate_cost(self, response: "LLMResponse") -> Optional[Dict[str, float]]:
         """
@@ -1320,37 +875,14 @@ class LLMRing:
             cost = await ring.calculate_cost(response)
             print(f"Total cost: ${cost['total_cost']:.4f}")
         """
-        if not response.usage:
-            return None
+        # Get registry model for better performance (avoid double fetch)
+        if ":" in response.model:
+            provider, model_name = parse_model_string(response.model)
+            registry_model = await self.get_model_from_registry(provider, model_name)
+        else:
+            registry_model = None
 
-        provider, model_name = self._parse_model_string(response.model)
-        usage = response.usage
-        registry_model = await self.get_model_from_registry(provider, model_name)
-        if not registry_model:
-            return None
-
-        if (
-            registry_model.dollars_per_million_tokens_input is None
-            or registry_model.dollars_per_million_tokens_output is None
-        ):
-            return None
-
-        prompt_tokens = usage.get("prompt_tokens", 0)
-        completion_tokens = usage.get("completion_tokens", 0)
-
-        input_cost = (prompt_tokens / 1_000_000) * registry_model.dollars_per_million_tokens_input
-        output_cost = (
-            completion_tokens / 1_000_000
-        ) * registry_model.dollars_per_million_tokens_output
-        total_cost = input_cost + output_cost
-
-        return {
-            "input_cost": input_cost,
-            "output_cost": output_cost,
-            "total_cost": total_cost,
-            "cost_per_million_input": registry_model.dollars_per_million_tokens_input,
-            "cost_per_million_output": registry_model.dollars_per_million_tokens_output,
-        }
+        return await self._cost_calculator.calculate_cost(response, registry_model)
 
     async def get_enhanced_model_info(self, model: str) -> Dict[str, Any]:
         """

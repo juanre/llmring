@@ -207,7 +207,7 @@ class TestOpenAIProviderIntegration:
         """Test error handling with invalid model."""
         messages = [Message(role="user", content="Hello")]
 
-        with pytest.raises(ModelNotFoundError, match="Model.*not found"):
+        with pytest.raises(ModelNotFoundError, match="Model.*not (found|available)"):
             await provider.chat(messages=messages, model="invalid-model-name")
 
     @pytest.mark.asyncio

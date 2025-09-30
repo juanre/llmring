@@ -49,11 +49,10 @@ class TestProviderEnhancements:
             ],
             max_tokens=50,
             temperature=0.7,
-            stream=True,
         )
 
         chunks = []
-        async for chunk in await service.chat(request):
+        async for chunk in service.chat_stream(request):
             chunks.append(chunk)
 
         # Real streaming should produce multiple chunks

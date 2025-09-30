@@ -43,9 +43,8 @@ class BaseLLMProvider(ABC):
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        stream: Optional[bool] = False,
         extra_params: Optional[Dict[str, Any]] = None,
-    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
+    ) -> LLMResponse:
         """
         Send a chat request to the LLM provider.
 
@@ -59,11 +58,48 @@ class BaseLLMProvider(ABC):
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
-            stream: Whether to stream the response
             extra_params: Provider-specific parameters to pass through
 
         Returns:
-            LLM response or async iterator of stream chunks if streaming
+            LLM response with complete generated content
+        """
+        pass
+
+    @abstractmethod
+    async def chat_stream(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """
+        Send a streaming chat request to the LLM provider.
+
+        Args:
+            messages: List of messages in the conversation
+            model: Model identifier to use
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            response_format: Optional response format specification
+            tools: Optional list of tools/functions available
+            tool_choice: Optional tool choice parameter
+            json_response: Optional flag to request JSON response
+            cache: Optional cache configuration
+            extra_params: Provider-specific parameters to pass through
+
+        Returns:
+            Async iterator of stream chunks
+
+        Example:
+            >>> async for chunk in provider.chat_stream(messages, model="gpt-4"):
+            ...     print(chunk.content, end="", flush=True)
         """
         pass
 

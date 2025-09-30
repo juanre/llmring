@@ -31,7 +31,6 @@ class LLMRequest(BaseModel):
     cache: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
     json_response: Optional[bool] = None
-    stream: Optional[bool] = False  # Support for streaming responses
     extra_params: Dict[str, Any] = Field(default_factory=dict)  # Provider-specific parameters
 
 

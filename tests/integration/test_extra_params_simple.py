@@ -151,8 +151,10 @@ class TestExtraParamsSimple:
             service_source = f.read()
 
         # Check that extra_params is passed in provider.chat calls
+        # Note: uses adapted_request after applying structured output adapter
         assert (
-            "extra_params=request.extra_params" in service_source
-        ), "service.py should pass extra_params=request.extra_params to providers"
+            "extra_params=adapted_request.extra_params" in service_source
+            or "extra_params=request.extra_params" in service_source
+        ), "service.py should pass extra_params to providers"
 
         print("✓ Service.py properly configured to pass extra_params")

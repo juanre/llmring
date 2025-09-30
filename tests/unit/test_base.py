@@ -48,6 +48,15 @@ class TestBaseLLMProvider:
                     usage={"prompt_tokens": 10, "completion_tokens": 5},
                 )
 
+            async def chat_stream(self, messages, model, **kwargs):
+                from llmring.schemas import StreamChunk
+
+                async def _gen():
+                    yield StreamChunk(delta="Test ", model=model)
+                    yield StreamChunk(delta="response", model=model, finish_reason="stop")
+
+                return _gen()
+
             def get_token_count(self, text):
                 return len(text.split())
 
@@ -84,6 +93,14 @@ class TestBaseLLMProvider:
             async def chat(self, messages, model, **kwargs):
                 return LLMResponse(content="test", model=model)
 
+            async def chat_stream(self, messages, model, **kwargs):
+                from llmring.schemas import StreamChunk
+
+                async def _gen():
+                    yield StreamChunk(delta="test", model=model, finish_reason="stop")
+
+                return _gen()
+
             def get_token_count(self, text):
                 return len(text.split())
 
@@ -118,6 +135,14 @@ class TestBaseLLMProvider:
 
             async def chat(self, messages, model, **kwargs):
                 return LLMResponse(content="test", model=model)
+
+            async def chat_stream(self, messages, model, **kwargs):
+                from llmring.schemas import StreamChunk
+
+                async def _gen():
+                    yield StreamChunk(delta="test", model=model, finish_reason="stop")
+
+                return _gen()
 
             def get_token_count(self, text):
                 return len(text.split())

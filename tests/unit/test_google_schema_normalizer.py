@@ -1,17 +1,14 @@
-from pathlib import Path
-
 import pytest
 
-from llmring.service import LLMRing
+from llmring.services.schema_adapter import SchemaAdapter
 
 
 class TestGoogleSchemaNormalizer:
     @pytest.fixture
-    def ring(self):
-        test_lockfile = Path(__file__).parent.parent / "llmring.lock.json"
-        return LLMRing(lockfile_path=str(test_lockfile))
+    def adapter(self):
+        return SchemaAdapter()
 
-    def test_boolean_null_union_normalizes_to_boolean(self, ring):
+    def test_boolean_null_union_normalizes_to_boolean(self, adapter):
         schema = {
             "type": "object",
             "properties": {
@@ -20,14 +17,14 @@ class TestGoogleSchemaNormalizer:
             "required": ["active"],
         }
 
-        normalized, notes = ring._normalize_json_schema_for_google(schema)
+        normalized, notes = adapter.normalize_google_schema(schema)
 
         assert normalized["type"] == "object"
         assert "properties" in normalized
         assert normalized["properties"]["active"]["type"] == "boolean"
         assert any("removed 'null'" in n for n in notes)
 
-    def test_multi_type_union_falls_back_to_string(self, ring):
+    def test_multi_type_union_falls_back_to_string(self, adapter):
         schema = {
             "type": "object",
             "properties": {
@@ -35,12 +32,12 @@ class TestGoogleSchemaNormalizer:
             },
         }
 
-        normalized, notes = ring._normalize_json_schema_for_google(schema)
+        normalized, notes = adapter.normalize_google_schema(schema)
 
         assert normalized["properties"]["value"]["type"] == "string"
         assert any("multi-type union" in n for n in notes)
 
-    def test_removes_unsupported_keywords(self, ring):
+    def test_removes_unsupported_keywords(self, adapter):
         schema = {
             "type": "object",
             "properties": {
@@ -53,7 +50,7 @@ class TestGoogleSchemaNormalizer:
             },
         }
 
-        normalized, notes = ring._normalize_json_schema_for_google(schema)
+        normalized, notes = adapter.normalize_google_schema(schema)
 
         item_schema = normalized["properties"]["item"]
         assert item_schema["type"] == "object"

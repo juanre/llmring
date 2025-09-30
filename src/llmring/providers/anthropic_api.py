@@ -12,19 +12,14 @@ from anthropic import AsyncAnthropic
 from anthropic.types import Message as AnthropicMessage
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
-from llmring.exceptions import (
-    CircuitBreakerError,
-    ModelNotFoundError,
-    ProviderAuthenticationError,
-    ProviderRateLimitError,
-    ProviderResponseError,
-    ProviderTimeoutError,
-)
+from llmring.exceptions import CircuitBreakerError, ProviderAuthenticationError
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
+from llmring.providers.error_handler import ProviderErrorHandler
 from llmring.registry import RegistryClient
 from llmring.schemas import LLMResponse, Message, StreamChunk
+from llmring.utils import strip_provider_prefix
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
 
@@ -84,6 +79,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         )
         self._cached_models = None  # Will be populated from registry
         self._breaker = CircuitBreaker()
+        self._error_handler = ProviderErrorHandler("anthropic", self._breaker)
 
     async def get_default_model(self) -> str:
         """
@@ -177,9 +173,8 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        stream: Optional[bool] = False,
         extra_params: Optional[Dict[str, Any]] = None,
-    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
+    ) -> LLMResponse:
         """
         Send a chat request to the Anthropic Claude API using the official SDK.
 
@@ -193,26 +188,60 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
-            stream: Whether to stream the response
+            extra_params: Provider-specific parameters
 
         Returns:
-            LLM response or async iterator of stream chunks if streaming
+            LLM response with complete generated content
         """
-        if stream:
-            return self._stream_chat(
-                messages=messages,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format=response_format,
-                tools=tools,
-                tool_choice=tool_choice,
-                json_response=json_response,
-                cache=cache,
-                extra_params=extra_params,
-            )
-
         return await self._chat_non_streaming(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
+            json_response=json_response,
+            cache=cache,
+            extra_params=extra_params,
+        )
+
+    async def chat_stream(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """
+        Send a streaming chat request to the Anthropic Claude API.
+
+        Args:
+            messages: List of messages
+            model: Model to use (e.g., "claude-3-opus-20240229")
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            response_format: Optional response format
+            tools: Optional list of tools
+            tool_choice: Optional tool choice parameter
+            json_response: Optional flag to request JSON response
+            cache: Optional cache configuration
+            extra_params: Provider-specific parameters
+
+        Returns:
+            Async iterator of stream chunks
+
+        Example:
+            >>> async for chunk in provider.chat_stream(messages, model="claude-3-opus"):
+            ...     print(chunk.content, end="", flush=True)
+        """
+        return self._stream_chat(
             messages=messages,
             model=model,
             temperature=temperature,
@@ -240,8 +269,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
     ) -> AsyncIterator[StreamChunk]:
         """Stream a chat response from Anthropic."""
         # Process model name
-        if model.lower().startswith("anthropic:"):
-            model = model.split(":", 1)[1]
+        model = strip_provider_prefix(model, "anthropic")
 
         # Note: Model name normalization removed - use exact model names from registry
 
@@ -563,8 +591,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
         # Process model name
-        if model.lower().startswith("anthropic:"):
-            model = model.split(":", 1)[1]
+        model = strip_provider_prefix(model, "anthropic")
 
         # Note: Model name normalization removed - use exact model names from registry
 
@@ -644,119 +671,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             response: AnthropicMessage = await retry_async(_do_call)
             await self._breaker.record_success(breaker_key)
         except Exception as e:
-            # Already wrapped? Just re-raise
-            from llmring.exceptions import LLMRingError
-
-            if isinstance(e, LLMRingError):
-                raise
-
-            # Record failure (non-blocking)
-            try:
-                await self._breaker.record_failure(f"anthropic:{model}")
-            except Exception:
-                pass
-
-            # Handle Anthropic SDK specific exceptions
-            from anthropic import (
-                AuthenticationError,
-                BadRequestError,
-                NotFoundError,
-                RateLimitError,
-            )
-
-            from llmring.net.retry import RetryError
-
-            # Check for RetryError wrapper first
-            if isinstance(e, RetryError):
-                root = e.__cause__ if hasattr(e, "__cause__") else e
-
-                # Timeout after retries
-                if isinstance(root, asyncio.TimeoutError):
-                    raise ProviderTimeoutError(
-                        f"Request timed out after {getattr(e, 'attempts', 0)} attempts",
-                        provider="anthropic",
-                        original=e,
-                    ) from e
-
-                # Anthropic SDK errors after retries
-                if isinstance(root, NotFoundError):
-                    raise ModelNotFoundError(
-                        f"Model '{model}' not found",
-                        provider="anthropic",
-                        model_name=model,
-                        original=e,
-                    ) from e
-                elif isinstance(root, AuthenticationError):
-                    raise ProviderAuthenticationError(
-                        "Authentication failed",
-                        provider="anthropic",
-                        original=e,
-                    ) from e
-                elif isinstance(root, RateLimitError):
-                    raise ProviderRateLimitError(
-                        "Rate limit exceeded",
-                        provider="anthropic",
-                        retry_after=getattr(root, "retry_after", None),
-                        original=e,
-                    ) from e
-
-                # Generic retry exhaustion
-                raise ProviderResponseError(
-                    f"Request failed after {getattr(e, 'attempts', 0)} attempts",
-                    provider="anthropic",
-                    original=e,
-                ) from e
-
-            # Direct Anthropic SDK exceptions (no retry wrapper)
-            if isinstance(e, NotFoundError):
-                raise ModelNotFoundError(
-                    f"Model '{model}' not found",
-                    provider="anthropic",
-                    model_name=model,
-                    original=e,
-                ) from e
-            elif isinstance(e, AuthenticationError):
-                raise ProviderAuthenticationError(
-                    "Authentication failed",
-                    provider="anthropic",
-                    original=e,
-                ) from e
-            elif isinstance(e, RateLimitError):
-                raise ProviderRateLimitError(
-                    "Rate limit exceeded",
-                    provider="anthropic",
-                    retry_after=getattr(e, "retry_after", None),
-                    original=e,
-                ) from e
-            elif isinstance(e, BadRequestError):
-                # BadRequest often means model issue for Anthropic
-                if "model" in str(e).lower():
-                    raise ModelNotFoundError(
-                        f"Model '{model}' not available",
-                        provider="anthropic",
-                        model_name=model,
-                        original=e,
-                    ) from e
-                raise ProviderResponseError(
-                    "Bad request",
-                    provider="anthropic",
-                    original=e,
-                ) from e
-
-            # Direct timeout (no retry)
-            if isinstance(e, asyncio.TimeoutError):
-                raise ProviderTimeoutError(
-                    "Request timed out",
-                    provider="anthropic",
-                    original=e,
-                ) from e
-
-            # Unknown error - wrap minimally
-            raise ProviderResponseError(
-                "Unexpected error",
-                provider="anthropic",
-                original=e,
-            ) from e
+            await self._error_handler.handle_error(e, model)
 
         # Extract the content from the response
         content = ""

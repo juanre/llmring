@@ -13,18 +13,14 @@ from google import genai
 from google.genai import types
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
-from llmring.exceptions import (
-    CircuitBreakerError,
-    ProviderAuthenticationError,
-    ProviderRateLimitError,
-    ProviderResponseError,
-    ProviderTimeoutError,
-)
+from llmring.exceptions import CircuitBreakerError, ProviderAuthenticationError
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
+from llmring.providers.error_handler import ProviderErrorHandler
 from llmring.registry import RegistryClient
 from llmring.schemas import LLMResponse, Message, StreamChunk
+from llmring.utils import strip_provider_prefix
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
 
@@ -91,6 +87,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Note: Model name mapping removed - rely on registry for model availability
         self._breaker = CircuitBreaker()
+        self._error_handler = ProviderErrorHandler("google", self._breaker)
 
     def _convert_content_to_google_format(
         self, content: Union[str, List[Dict[str, Any]]]
@@ -331,9 +328,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        stream: Optional[bool] = False,
         extra_params: Optional[Dict[str, Any]] = None,
-    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
+    ) -> LLMResponse:
         """
         Send a chat request to the Google Gemini API using the official SDK.
 
@@ -343,31 +339,64 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             temperature: Sampling temperature (0.0 to 1.0)
             max_tokens: Maximum tokens to generate
             response_format: Optional response format
-            tools: Optional list of tools (not fully supported by Gemini yet)
-            tool_choice: Optional tool choice parameter (not fully supported by Gemini yet)
+            tools: Optional list of tools
+            tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
-            stream: Whether to stream the response
+            extra_params: Provider-specific parameters
 
         Returns:
-            LLM response or async iterator of stream chunks if streaming
+            LLM response with complete generated content
         """
-        # Implement real streaming using Google SDK
-        if stream:
-            return self._stream_chat(
-                messages=messages,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format=response_format,
-                tools=tools,
-                tool_choice=tool_choice,
-                json_response=json_response,
-                cache=cache,
-                extra_params=extra_params,
-            )
-
         return await self._chat_non_streaming(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
+            json_response=json_response,
+            cache=cache,
+            extra_params=extra_params,
+        )
+
+    async def chat_stream(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """
+        Send a streaming chat request to the Google Gemini API.
+
+        Args:
+            messages: List of messages
+            model: Model to use (e.g., "gemini-2.5-pro")
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            response_format: Optional response format
+            tools: Optional list of tools
+            tool_choice: Optional tool choice parameter
+            json_response: Optional flag to request JSON response
+            cache: Optional cache configuration
+            extra_params: Provider-specific parameters
+
+        Returns:
+            Async iterator of stream chunks
+
+        Example:
+            >>> async for chunk in provider.chat_stream(messages, model="gemini-2.5-pro"):
+            ...     print(chunk.content, end="", flush=True)
+        """
+        return self._stream_chat(
             messages=messages,
             model=model,
             temperature=temperature,
@@ -395,8 +424,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
     ) -> AsyncIterator[StreamChunk]:
         """Real streaming implementation using Google SDK."""
         # Process model name (remove provider prefix)
-        if model.lower().startswith("google:") or model.lower().startswith("gemini:"):
-            model = model.split(":", 1)[1]
+        model = strip_provider_prefix(model, "google")
+        model = strip_provider_prefix(model, "gemini")
 
         # Note: Model name normalization removed - use exact model names from registry
 
@@ -805,8 +834,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
         # Strip provider prefix if present
-        if model.lower().startswith("google:"):
-            model = model.split(":", 1)[1]
+        model = strip_provider_prefix(model, "google")
+        model = strip_provider_prefix(model, "gemini")
 
         # Log warning if model not in registry (but don't block)
         try:
@@ -1074,79 +1103,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 response = await retry_async(_do_chat)
                 await self._breaker.record_success(key)
         except Exception as e:
-            # Already wrapped? Just re-raise
-            from llmring.exceptions import LLMRingError
-
-            if isinstance(e, LLMRingError):
-                raise
-
-            # Record failure (non-blocking)
-            try:
-                await self._breaker.record_failure(f"google:{model}")
-            except Exception:
-                pass
-
-            # Handle RetryError
-            from llmring.net.retry import RetryError
-
-            if isinstance(e, RetryError):
-                root = e.__cause__ if hasattr(e, "__cause__") else e
-
-                # Timeout after retries
-                if isinstance(root, asyncio.TimeoutError):
-                    raise ProviderTimeoutError(
-                        f"Request timed out after {getattr(e, 'attempts', 0)} attempts",
-                        provider="google",
-                        original=e,
-                    ) from e
-
-                # Generic retry exhaustion
-                raise ProviderResponseError(
-                    f"Request failed after {getattr(e, 'attempts', 0)} attempts",
-                    provider="google",
-                    original=e,
-                ) from e
-
-            # Direct timeout (no retry)
-            if isinstance(e, asyncio.TimeoutError):
-                raise ProviderTimeoutError(
-                    "Request timed out",
-                    provider="google",
-                    original=e,
-                ) from e
-
-            # Parse error message for categorization
-            error_msg = self._extract_error_message(e)
-            if "model" in error_msg.lower() and (
-                "not found" in error_msg.lower() or "not supported" in error_msg.lower()
-            ):
-                from llmring.exceptions import ModelNotFoundError
-
-                raise ModelNotFoundError(
-                    f"Model '{model}' not available",
-                    provider="google",
-                    model_name=model,
-                    original=e,
-                ) from e
-            elif "rate limit" in error_msg.lower() or "quota" in error_msg.lower():
-                raise ProviderRateLimitError(
-                    "Rate limit exceeded",
-                    provider="google",
-                    original=e,
-                ) from e
-            elif "api key" in error_msg.lower() or "unauthorized" in error_msg.lower():
-                raise ProviderAuthenticationError(
-                    "Authentication failed",
-                    provider="google",
-                    original=e,
-                ) from e
-
-            # Unknown error - wrap minimally
-            raise ProviderResponseError(
-                "Unexpected error",
-                provider="google",
-                original=e,
-            ) from e
+            await self._error_handler.handle_error(e, model)
 
         # Parse for native function calls from Google response
         tool_calls = None

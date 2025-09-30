@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 import httpx
+from cachetools import TTLCache
 from pydantic import BaseModel, Field, field_validator
+
+from llmring.validation import InputValidator
 
 
 class RegistryModel(BaseModel):
@@ -87,13 +90,21 @@ class RegistryClient:
         Args:
             registry_url: Base URL for the registry (defaults to GitHub Pages)
             cache_dir: Directory for caching registry data
+
+        Raises:
+            ValueError: If registry URL is invalid or potentially unsafe
         """
         self.registry_url = registry_url or self.DEFAULT_REGISTRY_URL
+
+        # Validate registry URL for security
+        InputValidator.validate_registry_url(self.registry_url)
+
         self.cache_dir = cache_dir or self.CACHE_DIR
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # In-memory cache
-        self._cache: Dict[str, Any] = {}
+        # In-memory cache with TTL (24 hours)
+        cache_ttl = self.CACHE_DURATION_HOURS * 3600  # Convert to seconds
+        self._cache: TTLCache = TTLCache(maxsize=100, ttl=cache_ttl)
 
     async def fetch_models(
         self, provider: str, version: Optional[int] = None

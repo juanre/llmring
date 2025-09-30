@@ -16,11 +16,8 @@ from openai.types.chat import ChatCompletion
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
 from llmring.exceptions import (
     CircuitBreakerError,
-    ModelNotFoundError,
     ProviderAuthenticationError,
-    ProviderRateLimitError,
     ProviderResponseError,
-    ProviderTimeoutError,
 )
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
@@ -29,8 +26,11 @@ from llmring.net.retry import retry_async
 from llmring.net.safe_fetcher import SafeFetchError
 from llmring.net.safe_fetcher import fetch_bytes as safe_fetch_bytes
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
+from llmring.providers.error_handler import ProviderErrorHandler
 from llmring.registry import RegistryClient
 from llmring.schemas import LLMResponse, Message, StreamChunk
+from llmring.utils import strip_provider_prefix
+from llmring.validation import InputValidator
 
 
 class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggingMixin):
@@ -80,6 +80,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Simple circuit breaker per model
         self._breaker = CircuitBreaker()
+        self._error_handler = ProviderErrorHandler("openai", self._breaker)
 
     async def get_default_model(self) -> str:
         """
@@ -205,7 +206,11 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                 source.get("type") == "base64"
                                 and source.get("media_type") == "application/pdf"
                             ):
-                                pdf_data = base64.b64decode(source.get("data", ""))
+                                # Safely decode base64 with size validation
+                                base64_data = source.get("data", "")
+                                pdf_data = InputValidator.safe_decode_base64(
+                                    base64_data, "PDF document"
+                                )
                                 pdf_data_list.append(pdf_data)
                         elif isinstance(part, str):
                             text_parts.append(part)
@@ -238,15 +243,20 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         try:
             # Upload PDFs
             for i, pdf_data in enumerate(pdf_data_list):
-                with tempfile.NamedTemporaryFile(
-                    suffix=f"_document_{i}.pdf", delete=False
-                ) as tmp_file:
+                # Write to temp file and keep it open to avoid race condition
+                tmp_file = tempfile.NamedTemporaryFile(
+                    suffix=f"_document_{i}.pdf", delete=False, mode="wb"
+                )
+                try:
                     tmp_file.write(pdf_data)
                     tmp_file.flush()
-                    with open(tmp_file.name, "rb") as f:
-                        # PDFs must use 'assistants' purpose for Responses input_file
-                        file_obj = await self.client.files.create(file=f, purpose="assistants")
-                        uploaded_files.append({"file_id": file_obj.id, "temp_path": tmp_file.name})
+                    # Seek to beginning for reading
+                    tmp_file.seek(0)
+                    # PDFs must use 'assistants' purpose for Responses input_file
+                    file_obj = await self.client.files.create(file=tmp_file, purpose="assistants")
+                    uploaded_files.append({"file_id": file_obj.id, "temp_path": tmp_file.name})
+                finally:
+                    tmp_file.close()
 
             # Build Responses API input using input_file items (direct file processing)
             content_items: List[Dict[str, Any]] = []
@@ -453,8 +463,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             Stream chunks from the response
         """
         # Strip provider prefix if present
-        if model.lower().startswith("openai:"):
-            model = model.split(":", 1)[1]
+        model = strip_provider_prefix(model, "openai")
 
         # Log warning if model not found in registry (but don't block)
         # Note: Alias resolution happens at service layer, not here
@@ -787,9 +796,8 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        stream: Optional[bool] = False,
         extra_params: Optional[Dict[str, Any]] = None,
-    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
+    ) -> LLMResponse:
         """
         Send a chat request to the OpenAI API using the official SDK.
 
@@ -803,35 +811,69 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
-            stream: Whether to stream the response
+            extra_params: Provider-specific parameters
 
         Returns:
-            LLM response or async iterator of stream chunks if streaming
+            LLM response with complete generated content
         """
-        if stream:
-            return self._stream_chat(
-                messages=messages,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format=response_format,
-                tools=tools,
-                tool_choice=tool_choice,
-                extra_params=extra_params,
-            )
-        else:
-            return await self._chat_non_streaming(
-                messages=messages,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format=response_format,
-                tools=tools,
-                tool_choice=tool_choice,
-                json_response=json_response,
-                cache=cache,
-                extra_params=extra_params,
-            )
+        return await self._chat_non_streaming(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
+            json_response=json_response,
+            cache=cache,
+            extra_params=extra_params,
+        )
+
+    async def chat_stream(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """
+        Send a streaming chat request to the OpenAI API.
+
+        Args:
+            messages: List of messages
+            model: Model to use (e.g., "gpt-4o")
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            response_format: Optional response format
+            tools: Optional list of tools
+            tool_choice: Optional tool choice parameter
+            json_response: Optional flag to request JSON response
+            cache: Optional cache configuration
+            extra_params: Provider-specific parameters
+
+        Returns:
+            Async iterator of stream chunks
+
+        Example:
+            >>> async for chunk in provider.chat_stream(messages, model="gpt-4o"):
+            ...     print(chunk.content, end="", flush=True)
+        """
+        return self._stream_chat(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
+            extra_params=extra_params,
+        )
 
     async def _chat_non_streaming(
         self,
@@ -862,8 +904,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             LLM response
         """
         # Strip provider prefix if present
-        if model.lower().startswith("openai:"):
-            model = model.split(":", 1)[1]
+        model = strip_provider_prefix(model, "openai")
 
         # Log warning if model not found in registry (but don't block)
         # Note: Alias resolution happens at service layer, not here
@@ -1012,97 +1053,4 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             return llm_response
 
         except Exception as e:
-            # Already wrapped? Just re-raise
-            from llmring.exceptions import LLMRingError
-
-            if isinstance(e, LLMRingError):
-                raise
-
-            # Record failure (non-blocking)
-            try:
-                await self._breaker.record_failure(f"openai:{model}")
-            except Exception:
-                pass
-
-            # Handle OpenAI SDK specific exceptions
-            from openai import AuthenticationError, NotFoundError, RateLimitError
-
-            from llmring.net.retry import RetryError
-
-            # Check for RetryError wrapper first
-            if isinstance(e, RetryError):
-                root = e.__cause__ if hasattr(e, "__cause__") else e
-
-                # Timeout after retries
-                if isinstance(root, asyncio.TimeoutError):
-                    raise ProviderTimeoutError(
-                        f"Request timed out after {getattr(e, 'attempts', 0)} attempts",
-                        provider="openai",
-                        original=e,
-                    ) from e
-
-                # OpenAI SDK errors after retries - check the root cause
-                if isinstance(root, NotFoundError):
-                    raise ModelNotFoundError(
-                        f"Model '{model}' not found",
-                        provider="openai",
-                        model_name=model,
-                        original=e,
-                    ) from e
-                elif isinstance(root, AuthenticationError):
-                    raise ProviderAuthenticationError(
-                        "Authentication failed",
-                        provider="openai",
-                        original=e,
-                    ) from e
-                elif isinstance(root, RateLimitError):
-                    raise ProviderRateLimitError(
-                        "Rate limit exceeded",
-                        provider="openai",
-                        retry_after=getattr(root, "retry_after", None),
-                        original=e,
-                    ) from e
-
-                # Generic retry exhaustion
-                raise ProviderResponseError(
-                    f"Request failed after {getattr(e, 'attempts', 0)} attempts",
-                    provider="openai",
-                    original=e,
-                ) from e
-
-            # Direct OpenAI SDK exceptions (no retry wrapper)
-            if isinstance(e, NotFoundError):
-                raise ModelNotFoundError(
-                    f"Model '{model}' not found",
-                    provider="openai",
-                    model_name=model,
-                    original=e,
-                ) from e
-            elif isinstance(e, AuthenticationError):
-                raise ProviderAuthenticationError(
-                    "Authentication failed",
-                    provider="openai",
-                    original=e,
-                ) from e
-            elif isinstance(e, RateLimitError):
-                raise ProviderRateLimitError(
-                    "Rate limit exceeded",
-                    provider="openai",
-                    retry_after=getattr(e, "retry_after", None),
-                    original=e,
-                ) from e
-
-            # Direct timeout (no retry)
-            if isinstance(e, asyncio.TimeoutError):
-                raise ProviderTimeoutError(
-                    "Request timed out",
-                    provider="openai",
-                    original=e,
-                ) from e
-
-            # Unknown error - wrap minimally
-            raise ProviderResponseError(
-                "Unexpected error",
-                provider="openai",
-                original=e,
-            ) from e
+            await self._error_handler.handle_error(e, model)

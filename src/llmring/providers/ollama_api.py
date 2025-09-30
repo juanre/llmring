@@ -10,12 +10,14 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from ollama import AsyncClient, ResponseError
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
-from llmring.exceptions import CircuitBreakerError, ProviderResponseError, ProviderTimeoutError
+from llmring.exceptions import CircuitBreakerError
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
+from llmring.providers.error_handler import ProviderErrorHandler
 from llmring.registry import RegistryClient
 from llmring.schemas import LLMResponse, Message, StreamChunk
+from llmring.utils import strip_provider_prefix
 
 
 class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggingMixin):
@@ -64,6 +66,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         # Registry client already initialized before mixins
 
         self._breaker = CircuitBreaker()
+        self._error_handler = ProviderErrorHandler("ollama", self._breaker)
 
     async def get_default_model(self) -> str:
         """
@@ -211,9 +214,8 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        stream: Optional[bool] = False,
         extra_params: Optional[Dict[str, Any]] = None,
-    ) -> Union[LLMResponse, AsyncIterator[StreamChunk]]:
+    ) -> LLMResponse:
         """
         Send a chat request to the Ollama API using the official SDK.
 
@@ -225,26 +227,62 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             response_format: Optional response format
             tools: Optional list of tools (implemented through prompt engineering)
             tool_choice: Optional tool choice parameter (implemented through prompt engineering)
+            json_response: Optional flag to request JSON response
+            cache: Optional cache configuration
+            extra_params: Provider-specific parameters
 
         Returns:
-            LLM response or async iterator of stream chunks if streaming
+            LLM response with complete generated content
         """
-        # Implement real streaming using Ollama SDK
-        if stream:
-            return self._stream_chat(
-                messages=messages,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format=response_format,
-                tools=tools,
-                tool_choice=tool_choice,
-                json_response=json_response,
-                cache=cache,
-                extra_params=extra_params,
-            )
-
         return await self._chat_non_streaming(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
+            json_response=json_response,
+            cache=cache,
+            extra_params=extra_params,
+        )
+
+    async def chat_stream(
+        self,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        json_response: Optional[bool] = None,
+        cache: Optional[Dict[str, Any]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """
+        Send a streaming chat request to the Ollama API.
+
+        Args:
+            messages: List of messages
+            model: Model to use (e.g., "llama3.3")
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate
+            response_format: Optional response format
+            tools: Optional list of tools (implemented through prompt engineering)
+            tool_choice: Optional tool choice parameter (implemented through prompt engineering)
+            json_response: Optional flag to request JSON response
+            cache: Optional cache configuration
+            extra_params: Provider-specific parameters
+
+        Returns:
+            Async iterator of stream chunks
+
+        Example:
+            >>> async for chunk in provider.chat_stream(messages, model="llama3.3"):
+            ...     print(chunk.content, end="", flush=True)
+        """
+        return self._stream_chat(
             messages=messages,
             model=model,
             temperature=temperature,
@@ -272,8 +310,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
     ) -> AsyncIterator[StreamChunk]:
         """Real streaming implementation using Ollama SDK."""
         # Strip provider prefix if present
-        if model.lower().startswith("ollama:"):
-            model = model.split(":", 1)[1]
+        model = strip_provider_prefix(model, "ollama")
 
         # Validate model (warn but don't fail if not in registry)
         # For Ollama, just check if model is available locally
@@ -421,8 +458,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
         # Strip provider prefix if present
-        if model.lower().startswith("ollama:"):
-            model = model.split(":", 1)[1]
+        model = strip_provider_prefix(model, "ollama")
 
         # Note: We're more lenient with model validation for Ollama
         # since models are user-installed locally
@@ -625,71 +661,4 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 original=e,
             ) from e
         except Exception as e:
-            # Already wrapped? Just re-raise
-            from llmring.exceptions import LLMRingError
-
-            if isinstance(e, LLMRingError):
-                raise
-
-            # Record failure (non-blocking)
-            try:
-                await self._breaker.record_failure(f"ollama:{model}")
-            except Exception:
-                pass
-
-            # Handle RetryError - check the root cause
-            from llmring.net.retry import RetryError
-
-            if isinstance(e, RetryError):
-                root = e.__cause__ if hasattr(e, "__cause__") else e
-
-                # Timeout after retries
-                if isinstance(root, asyncio.TimeoutError):
-                    raise ProviderTimeoutError(
-                        f"Request timed out after {getattr(e, 'attempts', 0)} attempts",
-                        provider="ollama",
-                        original=e,
-                    ) from e
-
-                # Ollama ResponseError after retries
-                if "ResponseError" in type(root).__name__:
-                    error_msg = str(getattr(root, "error", root))
-                    if "model" in error_msg.lower():
-                        from llmring.exceptions import ModelNotFoundError
-
-                        raise ModelNotFoundError(
-                            f"Model '{model}' not available",
-                            provider="ollama",
-                            model_name=model,
-                            original=e,
-                        ) from e
-
-                # Generic retry exhaustion
-                raise ProviderResponseError(
-                    f"Request failed after {getattr(e, 'attempts', 0)} attempts",
-                    provider="ollama",
-                    original=e,
-                ) from e
-
-            # Direct timeout (no retry)
-            if isinstance(e, asyncio.TimeoutError):
-                raise ProviderTimeoutError(
-                    "Request timed out",
-                    provider="ollama",
-                    original=e,
-                ) from e
-
-            # Connection errors
-            if isinstance(e, (ConnectionError, OSError)):
-                raise ProviderResponseError(
-                    f"Cannot connect to Ollama at {self.base_url}",
-                    provider="ollama",
-                    original=e,
-                ) from e
-
-            # Unknown error - wrap minimally
-            raise ProviderResponseError(
-                "Unexpected error",
-                provider="ollama",
-                original=e,
-            ) from e
+            await self._error_handler.handle_error(e, model)
