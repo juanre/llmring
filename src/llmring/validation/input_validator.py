@@ -130,10 +130,11 @@ class InputValidator:
             if not role:
                 raise ValueError(f"Message {i} missing required 'role' field")
 
-            if role not in ["user", "assistant", "system"]:
+            # Allow 'tool' role for tool-calling conversations
+            if role not in ["user", "assistant", "system", "tool"]:
                 raise ValueError(
                     f"Message {i} has invalid role: '{role}'. "
-                    f"Must be 'user', 'assistant', or 'system'"
+                    f"Must be 'user', 'assistant', 'system', or 'tool'"
                 )
 
             # Validate content

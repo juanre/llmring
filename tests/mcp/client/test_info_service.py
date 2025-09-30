@@ -38,27 +38,33 @@ class TestInfoServiceBasics:
 class TestProviderInformation:
     """Test provider information functionality."""
 
-    def test_get_available_providers_no_service(self):
+    @pytest.mark.asyncio
+    async def test_get_available_providers_no_service(self):
         """Test getting providers when no LLM service is available."""
         info_service = create_info_service()
-        providers = info_service.get_available_providers()
+        providers = await info_service.get_available_providers()
 
         assert isinstance(providers, list)
         assert len(providers) == 0
 
-    def test_get_available_providers_with_service(self):
+    @pytest.mark.asyncio
+    async def test_get_available_providers_with_service(self):
         """Test getting providers with LLM service."""
+        from unittest.mock import AsyncMock
+
         mock_llm_service = Mock()
-        mock_llm_service.get_available_models.return_value = {
-            "anthropic": ["claude-3-sonnet", "claude-3-haiku"],
-            "openai": ["gpt-4o", "gpt-4o-mini"],
-            "google": ["gemini-pro"],
-            "ollama": ["llama3.1"],
-        }
+        mock_llm_service.get_available_models = AsyncMock(
+            return_value={
+                "anthropic": ["claude-3-sonnet", "claude-3-haiku"],
+                "openai": ["gpt-4o", "gpt-4o-mini"],
+                "google": ["gemini-pro"],
+                "ollama": ["llama3.1"],
+            }
+        )
         mock_llm_service.providers = {"anthropic": True, "openai": True}
 
         info_service = create_info_service(llm_service=mock_llm_service)
-        providers = info_service.get_available_providers()
+        providers = await info_service.get_available_providers()
 
         assert isinstance(providers, list)
         assert len(providers) == 4
@@ -79,15 +85,18 @@ class TestProviderInformation:
 class TestModelInformation:
     """Test model information functionality."""
 
-    def test_get_models_for_provider_no_db(self):
+    @pytest.mark.asyncio
+    async def test_get_models_for_provider_no_db(self):
         """Test getting models when no database is available."""
+        from unittest.mock import AsyncMock
+
         mock_llm_service = Mock()
-        mock_llm_service.get_available_models.return_value = {
-            "anthropic": ["claude-3-sonnet", "claude-3-haiku"]
-        }
+        mock_llm_service.get_available_models = AsyncMock(
+            return_value={"anthropic": ["claude-3-sonnet", "claude-3-haiku"]}
+        )
 
         info_service = create_info_service(llm_service=mock_llm_service)
-        models = info_service.get_models_for_provider("anthropic")
+        models = await info_service.get_models_for_provider("anthropic")
 
         assert isinstance(models, list)
         assert len(models) == 2
@@ -99,7 +108,8 @@ class TestModelInformation:
         assert sonnet_model.cost_per_input_token is None
         assert sonnet_model.supports_function_calling is False
 
-    def test_get_models_for_provider_with_db(self):
+    @pytest.mark.asyncio
+    async def test_get_models_for_provider_with_db(self):
         """Test getting models with database information."""
         # Create mock database
         mock_db = Mock()
@@ -123,7 +133,7 @@ class TestModelInformation:
         info_service = create_info_service()
         info_service.llm_db = mock_db
 
-        models = info_service.get_models_for_provider("anthropic")
+        models = await info_service.get_models_for_provider("anthropic")
 
         assert len(models) == 1
         model = models[0]
@@ -136,7 +146,8 @@ class TestModelInformation:
         assert model.cost_per_1k_input_tokens == 0.003  # 0.000003 * 1000
         assert model.cost_per_1k_output_tokens == 0.015  # 0.000015 * 1000
 
-    def test_get_model_cost_info(self):
+    @pytest.mark.asyncio
+    async def test_get_model_cost_info(self):
         """Test getting cost information for a specific model."""
         mock_db = Mock()
         mock_model = Mock()
@@ -160,7 +171,7 @@ class TestModelInformation:
         info_service.llm_db = mock_db
 
         # Test with provider:model format
-        cost_info = info_service.get_model_cost_info("anthropic:claude-3-sonnet")
+        cost_info = await info_service.get_model_cost_info("anthropic:claude-3-sonnet")
 
         assert cost_info is not None
         assert cost_info["provider"] == "anthropic"
@@ -172,7 +183,7 @@ class TestModelInformation:
         assert cost_info["supports_function_calling"] is True
 
         # Test with unknown model
-        unknown_cost = info_service.get_model_cost_info("unknown:model")
+        unknown_cost = await info_service.get_model_cost_info("unknown:model")
         assert unknown_cost is None
 
 
@@ -276,7 +287,7 @@ class TestEnhancedLLMIntegration:
 
         try:
             # Test provider information
-            providers = enhanced_llm.get_available_providers()
+            providers = await enhanced_llm.get_available_providers()
             assert isinstance(providers, list)
 
             # Test data storage information

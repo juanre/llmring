@@ -247,16 +247,15 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 tmp_file = tempfile.NamedTemporaryFile(
                     suffix=f"_document_{i}.pdf", delete=False, mode="wb"
                 )
-                try:
-                    tmp_file.write(pdf_data)
-                    tmp_file.flush()
-                    # Seek to beginning for reading
-                    tmp_file.seek(0)
+                tmp_file.write(pdf_data)
+                tmp_file.flush()
+                tmp_file.close()
+
+                # Open in binary read mode for upload
+                with open(tmp_file.name, "rb") as f:
                     # PDFs must use 'assistants' purpose for Responses input_file
-                    file_obj = await self.client.files.create(file=tmp_file, purpose="assistants")
+                    file_obj = await self.client.files.create(file=f, purpose="assistants")
                     uploaded_files.append({"file_id": file_obj.id, "temp_path": tmp_file.name})
-                finally:
-                    tmp_file.close()
 
             # Build Responses API input using input_file items (direct file processing)
             content_items: List[Dict[str, Any]] = []

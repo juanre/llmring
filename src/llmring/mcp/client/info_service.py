@@ -277,7 +277,7 @@ class MCPClientInfoService:
 
         return models
 
-    def get_model_cost_info(self, model_identifier: str) -> dict[str, Any] | None:
+    async def get_model_cost_info(self, model_identifier: str) -> dict[str, Any] | None:
         """
         Get cost information for a specific model.
 
@@ -309,7 +309,7 @@ class MCPClientInfoService:
         if not provider:
             return None
 
-        models = self.get_models_for_provider(provider)
+        models = await self.get_models_for_provider(provider)
         for model in models:
             if model.model_name == model_name:
                 return {
