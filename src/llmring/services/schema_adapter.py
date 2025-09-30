@@ -10,9 +10,10 @@ Handles provider-specific schema adaptations, including:
 import json
 import logging
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from llmring.base import BaseLLMProvider
+from llmring.providers.google_schema_normalizer import GoogleSchemaNormalizer
 from llmring.schemas import LLMRequest, LLMResponse, Message
 
 logger = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ class SchemaAdapter:
 
     def _adapt_for_google(self, request: LLMRequest, schema: Dict[str, Any]) -> LLMRequest:
         """Adapt structured output for Google using function declaration with normalized schema."""
-        normalized_schema, notes = self.normalize_google_schema(schema)
+        normalized_schema, notes = GoogleSchemaNormalizer.normalize(schema)
 
         if notes:
             try:
@@ -151,132 +152,6 @@ class SchemaAdapter:
         request.messages = messages
 
         return request
-
-    def normalize_google_schema(self, schema: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
-        """
-        Normalize a JSON Schema for Google Gemini function declarations.
-
-        Google Gemini has specific requirements and limitations for schemas:
-        - No union types (except nullable)
-        - No complex composition (anyOf, oneOf, allOf, not)
-        - Limited keyword support
-
-        This method:
-        - Converts union types to single types (removes null, falls back to string)
-        - Removes unsupported keywords (additionalProperties, anyOf, oneOf, etc.)
-        - Recursively normalizes nested properties and items
-        - Records all modifications as notes
-
-        Args:
-            schema: Original JSON Schema
-
-        Returns:
-            Tuple of (normalized_schema, list_of_notes)
-        """
-        notes: List[str] = []
-
-        def normalize(node: Any, path: str) -> Any:
-            # Primitives or non-dict structures are returned as-is
-            if not isinstance(node, dict):
-                return node
-
-            result: Dict[str, Any] = {}
-
-            # Handle type normalization first
-            node_type = node.get("type")
-            if isinstance(node_type, list):
-                # Remove null if present, pick a remaining type
-                non_null_types = [t for t in node_type if t != "null"]
-                if len(non_null_types) == 1:
-                    result["type"] = non_null_types[0]
-                    notes.append(f"{path or '<root>'}: removed 'null' from union type {node_type}")
-                elif len(non_null_types) == 0:
-                    # Only null provided; fallback to string
-                    result["type"] = "string"
-                    notes.append(
-                        f"{path or '<root>'}: union type {node_type} normalized to 'string'"
-                    )
-                else:
-                    # Multiple non-null types unsupported; fallback to string
-                    result["type"] = "string"
-                    notes.append(
-                        f"{path or '<root>'}: multi-type union {node_type} normalized to 'string'"
-                    )
-            elif isinstance(node_type, str):
-                result["type"] = node_type
-
-            # Copy supported basic fields
-            for key in [
-                "title",
-                "description",
-                "default",
-                "enum",
-                "const",
-                "minimum",
-                "maximum",
-                "minLength",
-                "maxLength",
-                "minItems",
-                "maxItems",
-            ]:
-                if key in node:
-                    result[key] = node[key]
-
-            # Remove/ignore unsupported or risky keywords
-            removed_keywords = []
-            for key in [
-                "additionalProperties",
-                "anyOf",
-                "oneOf",
-                "allOf",
-                "not",
-                "patternProperties",
-                "if",
-                "then",
-                "else",
-                "pattern",
-                "format",
-                "dependencies",
-            ]:
-                if key in node:
-                    removed_keywords.append(key)
-            if removed_keywords:
-                notes.append(f"{path or '<root>'}: removed unsupported keywords {removed_keywords}")
-
-            # Object handling
-            effective_type = result.get("type") or node.get("type")
-            if effective_type == "object":
-                # Normalize properties
-                properties = node.get("properties", {})
-                if isinstance(properties, dict):
-                    norm_props: Dict[str, Any] = {}
-                    for prop_name, prop_schema in properties.items():
-                        norm_props[prop_name] = normalize(
-                            prop_schema,
-                            f"{path + '.' if path else ''}properties.{prop_name}",
-                        )
-                    result["properties"] = norm_props
-
-                # Keep required list as-is
-                if "required" in node and isinstance(node["required"], list):
-                    result["required"] = [str(x) for x in node["required"]]
-
-            # Array handling
-            if effective_type == "array":
-                items = node.get("items")
-                if isinstance(items, list) and items:
-                    # Tuple typing not supported; choose first
-                    result["items"] = normalize(items[0], f"{path or '<root>'}.items[0]")
-                    notes.append(
-                        f"{path or '<root>'}: tuple-typed 'items' normalized to first schema"
-                    )
-                elif isinstance(items, dict):
-                    result["items"] = normalize(items, f"{path or '<root>'}.items")
-
-            return result
-
-        normalized = normalize(schema, "")
-        return normalized, notes
 
     async def post_process_structured_output(
         self, response: LLMResponse, request: LLMRequest, provider_type: str

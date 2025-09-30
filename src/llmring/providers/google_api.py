@@ -631,7 +631,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     provider="google",
                 )
 
-            # Start Google SDK streaming (sync generator)
+            # Why: Google's SDK doesn't have native async support for streaming.
+            # The generate_content_stream() method returns a synchronous generator.
+            # We use threading to avoid blocking the event loop.
             stream_response = self.client.models.generate_content_stream(
                 model=model,
                 contents=google_messages,
@@ -639,8 +641,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             )
             await self._breaker.record_success(key)
 
-            # True streaming: iterate sync generator in a background thread and
-            # forward chunks through an asyncio queue
+            # Why: We run the sync generator in a thread pool and use a queue to
+            # forward chunks to the async iterator. This allows the event loop to
+            # remain responsive while consuming the sync stream.
             loop = asyncio.get_event_loop()
             import threading
 

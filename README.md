@@ -74,13 +74,12 @@ async with LLMRing() as service:
     # Real streaming for all providers
     request = LLMRequest(
         model="balanced",
-        messages=[Message(role="user", content="Count to 10")],
-        stream=True
+        messages=[Message(role="user", content="Count to 10")]
     )
 
     accumulated_usage = None
-    async for chunk in await service.chat(request):
-        print(chunk.delta, end="", flush=True)
+    async for chunk in service.chat_stream(request):
+        print(chunk.content, end="", flush=True)
         # Capture final usage stats
         if chunk.usage:
             accumulated_usage = chunk.usage

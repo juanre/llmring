@@ -205,13 +205,12 @@ request = LLMRequest(
 request = LLMRequest(
     model="balanced",
     messages=[Message(role="user", content="Generate multiple users")],
-    response_format={...},  # Same schema
-    stream=True
+    response_format={...}  # Same schema
 )
 
-async for chunk in await service.chat(request):
-    if chunk.delta:
-        print(chunk.delta, end="", flush=True)
+async for chunk in service.chat_stream(request):
+    if chunk.content:
+        print(chunk.content, end="", flush=True)
     if chunk.tool_calls:
         print(f"\nStructured data: {chunk.tool_calls}")
 ```

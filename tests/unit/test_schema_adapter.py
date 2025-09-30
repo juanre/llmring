@@ -153,6 +153,8 @@ class TestSchemaAdapter:
 
     def test_normalize_google_schema_union_types(self, adapter):
         """Should normalize union types for Google."""
+        from llmring.providers.google_schema_normalizer import GoogleSchemaNormalizer
+
         schema = {
             "type": "object",
             "properties": {
@@ -161,7 +163,7 @@ class TestSchemaAdapter:
             },
         }
 
-        normalized, notes = adapter.normalize_google_schema(schema)
+        normalized, notes = GoogleSchemaNormalizer.normalize(schema)
 
         # Should remove null from union
         assert normalized["properties"]["nullable_field"]["type"] == "string"
@@ -174,6 +176,8 @@ class TestSchemaAdapter:
 
     def test_normalize_google_schema_unsupported_keywords(self, adapter):
         """Should remove unsupported keywords."""
+        from llmring.providers.google_schema_normalizer import GoogleSchemaNormalizer
+
         schema = {
             "type": "object",
             "properties": {"name": {"type": "string"}},
@@ -182,7 +186,7 @@ class TestSchemaAdapter:
             "pattern": "^[a-z]+$",
         }
 
-        normalized, notes = adapter.normalize_google_schema(schema)
+        normalized, notes = GoogleSchemaNormalizer.normalize(schema)
 
         # Should remove unsupported keywords
         assert "additionalProperties" not in normalized
@@ -195,6 +199,8 @@ class TestSchemaAdapter:
 
     def test_normalize_google_schema_nested_objects(self, adapter):
         """Should recursively normalize nested objects."""
+        from llmring.providers.google_schema_normalizer import GoogleSchemaNormalizer
+
         schema = {
             "type": "object",
             "properties": {
@@ -207,7 +213,7 @@ class TestSchemaAdapter:
             },
         }
 
-        normalized, notes = adapter.normalize_google_schema(schema)
+        normalized, notes = GoogleSchemaNormalizer.normalize(schema)
 
         # Should normalize nested union type
         assert normalized["properties"]["user"]["properties"]["email"]["type"] == "string"
@@ -215,24 +221,28 @@ class TestSchemaAdapter:
 
     def test_normalize_google_schema_arrays(self, adapter):
         """Should normalize array schemas."""
+        from llmring.providers.google_schema_normalizer import GoogleSchemaNormalizer
+
         schema = {
             "type": "array",
             "items": {"type": ["string", "null"]},
         }
 
-        normalized, notes = adapter.normalize_google_schema(schema)
+        normalized, notes = GoogleSchemaNormalizer.normalize(schema)
 
         assert normalized["type"] == "array"
         assert normalized["items"]["type"] == "string"
 
     def test_normalize_google_schema_tuple_arrays(self, adapter):
         """Should normalize tuple-typed arrays to first schema."""
+        from llmring.providers.google_schema_normalizer import GoogleSchemaNormalizer
+
         schema = {
             "type": "array",
             "items": [{"type": "string"}, {"type": "number"}],
         }
 
-        normalized, notes = adapter.normalize_google_schema(schema)
+        normalized, notes = GoogleSchemaNormalizer.normalize(schema)
 
         assert normalized["type"] == "array"
         assert normalized["items"]["type"] == "string"
@@ -240,6 +250,8 @@ class TestSchemaAdapter:
 
     def test_normalize_google_schema_preserves_supported_fields(self, adapter):
         """Should preserve supported JSON Schema fields."""
+        from llmring.providers.google_schema_normalizer import GoogleSchemaNormalizer
+
         schema = {
             "type": "string",
             "title": "Name",
@@ -249,7 +261,7 @@ class TestSchemaAdapter:
             "default": "Anonymous",
         }
 
-        normalized, notes = adapter.normalize_google_schema(schema)
+        normalized, notes = GoogleSchemaNormalizer.normalize(schema)
 
         assert normalized["title"] == "Name"
         assert normalized["description"] == "User's name"

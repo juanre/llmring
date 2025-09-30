@@ -72,6 +72,9 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         # Initialize the client with the SDK
         # Include beta header for prompt caching (still needed as of 2025)
+        # Why: The anthropic-beta header is required to access prompt caching features.
+        # Anthropic uses beta headers to gate experimental features before they become
+        # generally available. This specific version (2024-07-31) enables prompt caching.
         self.client = AsyncAnthropic(
             api_key=api_key,
             base_url=base_url,

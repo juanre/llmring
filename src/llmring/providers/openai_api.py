@@ -243,13 +243,15 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         try:
             # Upload PDFs
             for i, pdf_data in enumerate(pdf_data_list):
-                # Write to temp file and keep it open to avoid race condition
+                # Why: The OpenAI SDK expects a file-like object (not bytes). We create a temp file,
+                # close it, then reopen in 'rb' mode to avoid race conditions. Using delete=False
+                # gives us control over cleanup - we manually unlink after upload succeeds.
                 tmp_file = tempfile.NamedTemporaryFile(
                     suffix=f"_document_{i}.pdf", delete=False, mode="wb"
                 )
                 tmp_file.write(pdf_data)
                 tmp_file.flush()
-                tmp_file.close()
+                tmp_file.close()  # Close before reopening to avoid Windows file locking issues
 
                 # Open in binary read mode for upload
                 with open(tmp_file.name, "rb") as f:
