@@ -77,8 +77,8 @@ class CommandCompleter(Completer):
                 # Get what's typed after the command
                 typed = text[7:].strip()
 
-                # Offer model suggestions
-                for model in self.chat_app.get_available_models():
+                # Offer model suggestions (using cached models)
+                for model in self.chat_app.get_available_models_sync():
                     if model["model_key"].startswith(typed) or model[
                         "display_name"
                     ].lower().startswith(typed.lower()):
@@ -168,6 +168,9 @@ class MCPChatApp:
 
         # Load previous conversation if it exists
         self._load_conversation()
+
+        # Cache for available models (populated async, used by sync completer)
+        self._available_models_cache: list[dict[str, Any]] = []
 
         # Command history and session
         self.history = FileHistory(str(self.history_file))
@@ -271,7 +274,7 @@ class MCPChatApp:
 
         return llm_tools
 
-    def get_available_models(self) -> list[dict[str, Any]]:
+    async def get_available_models(self) -> list[dict[str, Any]]:
         """
         Get list of available models.
 
@@ -279,7 +282,7 @@ class MCPChatApp:
             List of model information dictionaries
         """
         # Get models from llmring - returns dict of provider -> list of models
-        models_by_provider = self.llmring.get_available_models()
+        models_by_provider = await self.llmring.get_available_models()
 
         # Flatten into list of model info dicts
         models = []
@@ -296,7 +299,21 @@ class MCPChatApp:
                     }
                 )
 
+        # Update cache for sync access
+        self._available_models_cache = models
+
         return models
+
+    def get_available_models_sync(self) -> list[dict[str, Any]]:
+        """
+        Get list of available models (sync version for completer).
+
+        Returns cached models populated by async get_available_models().
+
+        Returns:
+            List of model information dictionaries
+        """
+        return self._available_models_cache
 
     def initialize(self) -> None:
         """Initialize the chat application."""
@@ -319,6 +336,12 @@ class MCPChatApp:
         """Initialize async resources."""
         # Create LLMRing instance
         self.llmring = LLMRing(origin="mcp-client-chat")
+
+        # Populate model cache for autocomplete
+        try:
+            await self.get_available_models()
+        except Exception as e:
+            logger.warning(f"Could not load available models: {e}")
 
     async def cleanup(self) -> None:
         """Clean up resources."""
@@ -949,7 +972,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
         Args:
             args: Command arguments (unused)
         """
-        models = self.get_available_models()
+        models = await self.get_available_models()
 
         if not models:
             self.console.print("[warning]No models available[/warning]")

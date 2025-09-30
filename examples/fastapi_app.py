@@ -123,7 +123,7 @@ async def chat_completion(request: ChatRequest, service: LLMRing = Depends(get_l
 async def list_models(provider: str = None, service: LLMRing = Depends(get_llmring)):
     """List available models."""
     try:
-        models = service.get_available_models()
+        models = await service.get_available_models()
 
         if provider:
             # Filter by provider
@@ -139,6 +139,7 @@ async def list_providers(service: LLMRing = Depends(get_llmring)):
     """List configured providers."""
     try:
         providers_info = []
+        available_models = await service.get_available_models()
 
         for provider_name in ["openai", "anthropic", "google", "ollama"]:
             try:
@@ -151,9 +152,7 @@ async def list_providers(service: LLMRing = Depends(get_llmring)):
                 {
                     "provider": provider_name,
                     "configured": configured,
-                    "models": (
-                        service.get_available_models().get(provider_name, []) if configured else []
-                    ),
+                    "models": (available_models.get(provider_name, []) if configured else []),
                 }
             )
 

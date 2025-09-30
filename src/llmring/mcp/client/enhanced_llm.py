@@ -745,7 +745,7 @@ class EnhancedLLM:
 
     # Information Service Methods
 
-    def get_available_providers(self) -> list[dict[str, Any]]:
+    async def get_available_providers(self) -> list[dict[str, Any]]:
         """
         Get information about all available LLM providers.
 
@@ -754,7 +754,7 @@ class EnhancedLLM:
         """
         # Use the info service to get provider information
         if self.info_service:
-            providers = self.info_service.get_available_providers()
+            providers = await self.info_service.get_available_providers()
             # Convert to dict format
             return [
                 {
@@ -804,7 +804,7 @@ class EnhancedLLM:
             "registered_tools": self.list_registered_tools(),
             "mcp_connected": self.mcp_client is not None,
             "current_conversation_id": self.current_conversation_id,
-            "available_providers": self.get_available_providers(),
+            "available_providers": await self.get_available_providers(),
             "usage_stats": await self.get_usage_stats(user_id),
             "enhanced_llm_config": {
                 "model": self.llm_model,

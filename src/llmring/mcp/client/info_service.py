@@ -133,7 +133,7 @@ class MCPClientInfoService:
                 api_key=api_key,
             )
 
-    def get_available_providers(self) -> list[ProviderInfo]:
+    async def get_available_providers(self) -> list[ProviderInfo]:
         """
         Get information about all available LLM providers.
 
@@ -144,7 +144,7 @@ class MCPClientInfoService:
 
         if self.llmring:
             # Get provider information from LLM service
-            available_models = self.llmring.get_available_models()
+            available_models = await self.llmring.get_available_models()
 
             for provider_name, models in available_models.items():
                 # Check if provider is actually available (has API key)
@@ -186,7 +186,7 @@ class MCPClientInfoService:
 
         return providers
 
-    def get_models_for_provider(self, provider: str) -> list[ModelInfo]:
+    async def get_models_for_provider(self, provider: str) -> list[ModelInfo]:
         """
         Get detailed information about models for a specific provider.
 
@@ -252,7 +252,7 @@ class MCPClientInfoService:
 
         # Fall back to LLM service if database not available
         if not models and self.llmring:
-            available_models = self.llmring.get_available_models()
+            available_models = await self.llmring.get_available_models()
             if provider in available_models:
                 for model_name in available_models[provider]:
                     models.append(
