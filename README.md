@@ -2,27 +2,22 @@
 
 A comprehensive Python library for LLM integration with unified interface, advanced features, and MCP support. Supports OpenAI, Anthropic, Google Gemini, and Ollama with consistent APIs.
 
-## ✨ Key Features
+## Key Features
 
-- **🔄 Unified Interface**: Single API for all major LLM providers
-- **⚡ Streaming Support**: Real streaming for all providers (not simulated)
-- **🛠️ Native Tool Calling**: Provider-native function calling with consistent interface
-- **📋 Unified Structured Output**: JSON schema works across all providers with automatic adaptation
-- **🧠 Conversational Configuration**: MCP chat interface for natural language lockfile setup
-- **📋 Smart Aliases**: Always-current semantic aliases (`deep`, `fast`, `balanced`) via intelligent recommendations
-- **💰 Cost Tracking**: Automatic cost calculation and receipt generation
-- **🎯 Registry Integration**: Centralized model capabilities and pricing
-- **🔄 Fallback Models**: Automatic failover to alternative models for resilience
-- **🔧 Advanced Features**:
-  - OpenAI: JSON schema, o1 models, PDF processing
-  - Anthropic: Prompt caching (90% cost savings)
-  - Google: Native function calling, multimodal, 2M+ context
-  - Ollama: Local models, streaming, custom options
-- **🔒 Type Safety**: Comprehensive typed exceptions and error handling
-- **🌐 MCP Integration**: Model Context Protocol support for tool ecosystems
-- **💬 MCP Chat Client**: Generic chat interface with persistent history for any MCP server
+- Unified Interface: Single API for all major LLM providers
+- Streaming Support: Real streaming for all providers (not simulated)
+- Native Tool Calling: Provider-native function calling with consistent interface
+- Unified Structured Output: JSON schema works across all providers with automatic adaptation
+- Conversational Configuration: MCP chat interface for natural language lockfile setup
+- Smart Aliases: Always-current semantic aliases (`deep`, `fast`, `balanced`) via intelligent recommendations
+- Cost Tracking: Automatic cost calculation and receipt generation
+- Registry Integration: Centralized model capabilities and pricing
+- Fallback Models: Automatic failover to alternative models for resilience
+- Type Safety: Comprehensive typed exceptions and error handling
+- MCP Integration: Model Context Protocol support for tool ecosystems
+- MCP Chat Client: Generic chat interface with persistent history for any MCP server
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
@@ -119,7 +114,7 @@ async with LLMRing() as service:
         print("Function called:", response.tool_calls[0]["function"]["name"])
 ```
 
-## 📚 Resource Management
+## Resource Management
 
 ### Context Manager (Recommended)
 
@@ -147,9 +142,9 @@ finally:
     await service.close()  # Ensure resources are cleaned up
 ```
 
-## 🔧 Advanced Features
+## Advanced Features
 
-### 🎯 Unified Structured Output (All Providers)
+### Unified Structured Output (All Providers)
 
 ```python
 # Same JSON schema API works across ALL providers!
@@ -209,7 +204,7 @@ request = LLMRequest(
 )
 ```
 
-### 🧠 Model Aliases and Lockfiles
+### Model Aliases and Lockfiles
 
 LLMRing uses lockfiles to map semantic aliases to models, with support for fallback models and environment-specific profiles:
 
@@ -265,7 +260,7 @@ request = LLMRequest(
 - **Cost-aware**: Transparent cost analysis and recommendations
 - **Environment-specific**: Different configurations for dev/staging/prod
 
-### 🎭 Profiles: Environment-Specific Configurations
+### Profiles: Environment-Specific Configurations
 
 LLMRing supports **profiles** to manage different model configurations for different environments (dev, staging, prod, etc.):
 
@@ -333,7 +328,7 @@ llmring chat "Hello"  # Now uses dev profile
 - **Production**: Use highest quality models for best user experience
 - **A/B Testing**: Test different models for the same alias
 
-### 🏯 Fallback Models
+### Fallback Models
 
 Aliases can specify multiple models for automatic failover:
 
@@ -350,7 +345,7 @@ models = [
 
 If the primary model fails (rate limit, availability, etc.), LLMRing automatically tries the fallbacks.
 
-### 🚪 Advanced: Direct Model References
+### Advanced: Direct Model References
 
 While aliases are recommended, you can still use direct `provider:model` references when needed:
 
@@ -375,7 +370,7 @@ request = LLMRequest(
 
 **Recommendation**: Use aliases for maintainability and cost optimization. Use direct model references only when you need a specific model version or provider-specific features.
 
-### 🚪 Raw SDK Access (Escape Hatch)
+### Raw SDK Access (Escape Hatch)
 
 When you need the full power of the underlying SDKs:
 
@@ -433,7 +428,7 @@ response = google_client.models.generate_content(
 - Complex configurations
 - Performance-critical applications
 
-## 🌐 Provider Support
+## Provider Support
 
 | Provider | Models | Streaming | Tools | Special Features |
 |----------|--------|-----------|-------|------------------|
@@ -442,7 +437,7 @@ response = google_client.models.generate_content(
 | **Google** | Gemini 1.5/2.0 Pro/Flash | ✅ Real | ✅ Native | Multimodal, 2M+ context |
 | **Ollama** | Llama, Mistral, etc. | ✅ Real | 🔧 Prompt | Local models, custom options |
 
-## 📦 Setup
+## Setup
 
 ### Environment Variables
 
@@ -476,7 +471,7 @@ pip install google-genai    # Google Gemini
 pip install ollama>=0.4     # Ollama
 ```
 
-## 🔗 MCP Integration
+## MCP Integration
 
 ```python
 from llmring.mcp.client import create_enhanced_llm
@@ -493,7 +488,7 @@ response = await llm.chat([
 ])
 ```
 
-## 📚 Documentation
+## Documentation
 
 - **[Lockfile Documentation](docs/lockfile.md)** - Complete guide to lockfiles, aliases, and profiles
 - **[Conversational Lockfile](docs/conversational-lockfile.md)** - Natural language lockfile management
@@ -509,7 +504,7 @@ response = await llm.chat([
   - [MCP Chat](examples/mcp_chat_example.py) - MCP integration
   - [Streaming](examples/mcp_streaming_example.py) - Streaming with tools
 
-## 🧪 Development
+## Development
 
 ```bash
 # Install for development
@@ -523,7 +518,7 @@ uv run ruff check src/
 uv run ruff format src/
 ```
 
-## 🛠️ Error Handling
+## Error Handling
 
 LLMRing uses typed exceptions for better error handling:
 
@@ -545,20 +540,20 @@ except ProviderRateLimitError as e:
     print(f"Rate limited, retry after {e.retry_after}s")
 ```
 
-## 🎯 Key Benefits
+## Key Benefits
 
-- **🔄 Unified Interface**: Switch providers without code changes
-- **⚡ Performance**: Real streaming, prompt caching, optimized requests
-- **🛡️ Reliability**: Circuit breakers, retries, typed error handling
-- **📊 Observability**: Cost tracking, usage analytics, receipt generation
-- **🔧 Flexibility**: Provider-specific features + raw SDK access
-- **📏 Standards**: Type-safe, well-tested, production-ready
+- Unified Interface: Switch providers without code changes
+- Performance: Real streaming, prompt caching, optimized requests
+- Reliability: Circuit breakers, retries, typed error handling
+- Observability: Cost tracking, usage analytics, receipt generation
+- Flexibility: Provider-specific features + raw SDK access
+- Standards: Type-safe, well-tested, production-ready
 
-## 📄 License
+## License
 
 MIT License - see LICENSE file for details.
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -566,7 +561,7 @@ MIT License - see LICENSE file for details.
 4. Ensure all tests pass: `uv run pytest`
 5. Submit a pull request
 
-## 🌟 Examples
+## Examples
 
 See the `examples/` directory for complete working examples:
 - Basic chat and streaming
@@ -574,7 +569,3 @@ See the `examples/` directory for complete working examples:
 - Provider-specific features
 - MCP integration
 - Cost tracking and receipts
-
----
-
-**LLMRing: The comprehensive LLM library for Python developers** 🚀
