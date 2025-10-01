@@ -66,6 +66,7 @@ class BaseHTTPClient:
             base_url=self.base_url,
             headers=self.headers,
             timeout=timeout,
+            follow_redirects=True,
         )
 
     async def close(self):

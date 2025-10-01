@@ -77,7 +77,7 @@ class LLMRingExtended(LLMRing):
 
         try:
             response = await self.server_client.post(
-                "/conversations",
+                "/api/v1/conversations",
                 json={
                     "title": title,
                     "system_prompt": system_prompt,
@@ -158,7 +158,7 @@ class LLMRingExtended(LLMRing):
 
                 # Send to server
                 await self.server_client.post(
-                    f"/conversations/{conversation_id}/messages/batch",
+                    f"/api/v1/conversations/{conversation_id}/messages/batch",
                     json={
                         "conversation_id": str(conversation_id),
                         "messages": messages_to_store,
