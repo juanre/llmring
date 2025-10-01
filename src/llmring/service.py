@@ -38,6 +38,8 @@ class LLMRing:
         origin: str = "llmring",
         registry_url: Optional[str] = None,
         lockfile_path: Optional[str] = None,
+        server_url: Optional[str] = None,
+        api_key: Optional[str] = None,
         alias_cache_size: int = 100,
         alias_cache_ttl: int = 3600,
     ):
@@ -48,6 +50,8 @@ class LLMRing:
             origin: Origin identifier for tracking
             registry_url: Optional custom registry URL
             lockfile_path: Optional path to lockfile
+            server_url: Optional llmring-server URL for usage logging and receipts
+            api_key: API key for llmring-server or llmring-api
             alias_cache_size: Maximum number of cached alias resolutions (default: 100)
             alias_cache_ttl: TTL for alias cache entries in seconds (default: 3600)
         """
@@ -75,6 +79,16 @@ class LLMRing:
 
         # Validation service
         self._validation_service = ValidationService(self.registry)
+
+        # Server client for usage logging and receipts (optional)
+        self.server_client: Optional[Any] = None
+        if server_url or api_key:
+            from llmring.server_client import ServerClient
+
+            self.server_client = ServerClient(
+                base_url=server_url or "https://api.llmring.ai", api_key=api_key
+            )
+            logger.info(f"Connected to llmring-server at {server_url or 'api.llmring.ai'}")
 
         # Load lockfile with explicit resolution strategy
         self.lockfile: Optional[Lockfile] = None
@@ -416,6 +430,17 @@ class LLMRing:
                 profile=profile,
             )
 
+        # Log usage to server if connected
+        if self.server_client and response.usage:
+            await self._log_usage_to_server(
+                response=response,
+                original_alias=original_alias,
+                provider_type=provider_type,
+                model_name=model_name,
+                cost_info=cost_info,
+                profile=profile,
+            )
+
         return response
 
     async def chat_stream(
@@ -559,6 +584,17 @@ class LLMRing:
                 cost_info=cost_info,
                 profile=profile,
             )
+
+            # Log usage to server if connected
+            if self.server_client:
+                await self._log_usage_to_server(
+                    response=temp_response,
+                    original_alias=original_alias,
+                    provider_type=provider_type,
+                    model_name=model_name,
+                    cost_info=cost_info,
+                    profile=profile,
+                )
 
     async def chat_with_alias(
         self,
@@ -919,6 +955,76 @@ class LLMRing:
             )
 
         return model_info
+
+    async def _log_usage_to_server(
+        self,
+        response: LLMResponse,
+        original_alias: str,
+        provider_type: str,
+        model_name: str,
+        cost_info: Optional[Dict[str, float]] = None,
+        profile: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+    ) -> None:
+        """
+        Send usage data to llmring-server logging endpoint.
+
+        Args:
+            response: LLM response with usage information
+            original_alias: Original alias or model string used
+            provider_type: Provider name (e.g., "openai")
+            model_name: Model name (e.g., "gpt-4o")
+            cost_info: Optional calculated cost information
+            profile: Optional profile name
+            conversation_id: Optional conversation ID for linking
+        """
+        if not self.server_client or not response.usage:
+            return
+
+        try:
+            # Prepare log entry matching UsageLogRequest schema
+            log_data = {
+                "model": model_name,
+                "provider": provider_type,
+                "input_tokens": response.usage.get("prompt_tokens", 0),
+                "output_tokens": response.usage.get("completion_tokens", 0),
+                "cached_input_tokens": response.usage.get("cached_tokens", 0),
+                "origin": self.origin,
+            }
+
+            # Add optional fields
+            if original_alias and ":" not in original_alias:
+                # It's an alias, not a direct model reference
+                log_data["alias"] = original_alias
+
+            if profile:
+                log_data["profile"] = profile
+
+            if cost_info and "total_cost" in cost_info:
+                log_data["cost"] = cost_info["total_cost"]
+
+            if conversation_id:
+                log_data["id_at_origin"] = conversation_id
+
+            # Add metadata
+            log_data["metadata"] = {
+                "model_alias": f"{provider_type}:{model_name}",
+                "finish_reason": response.finish_reason,
+            }
+
+            if conversation_id:
+                log_data["metadata"]["conversation_id"] = conversation_id
+
+            # Send to server
+            await self.server_client.post("/api/v1/log", json=log_data)
+            logger.debug(
+                f"Logged usage to server: {provider_type}:{model_name} "
+                f"({log_data['input_tokens']} in, {log_data['output_tokens']} out)"
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to log usage to server: {e}")
+            # Don't raise - logging failure shouldn't break the request
 
     async def close(self):
         """Clean up resources."""

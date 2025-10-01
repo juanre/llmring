@@ -38,18 +38,15 @@ class LLMRingExtended(LLMRing):
             enable_conversations: Whether to enable conversation tracking
             message_logging_level: Level of message logging (none, metadata, full)
         """
-        super().__init__(origin, registry_url, lockfile_path)
+        # Pass server_url and api_key to parent for usage logging
+        super().__init__(origin, registry_url, lockfile_path, server_url, api_key)
 
-        # Initialize server client if configured
-        self.server_client: Optional[ServerClient] = None
+        # Additional extended features
         self.enable_conversations = enable_conversations
         self.message_logging_level = message_logging_level
 
-        if server_url or api_key:
-            self.server_client = ServerClient(
-                base_url=server_url or "https://api.llmring.ai", api_key=api_key
-            )
-            logger.info(f"Connected to llmring-server at {server_url or 'api.llmring.ai'}")
+        # Note: server_client is now inherited from parent (LLMRing)
+        # No need to initialize separately
 
     async def create_conversation(
         self,
@@ -110,8 +107,41 @@ class LLMRingExtended(LLMRing):
         Returns:
             LLM response with cost information if available
         """
-        # Call parent chat method
+        # Store original model for later use
+        original_model = request.model
+
+        # Call parent chat method (this will log usage to server automatically)
         response = await super().chat(request, profile)
+
+        # If we have a conversation_id, log usage again with conversation linking
+        # (The parent already logged usage, but this second call links it to conversation)
+        if conversation_id and self.server_client and response.usage:
+            try:
+                from llmring.utils import parse_model_string
+
+                # Parse the response model to get provider and model name
+                if ":" in response.model:
+                    provider_type, model_name = parse_model_string(response.model)
+
+                    # Calculate cost if available
+                    cost_info = None
+                    if hasattr(response, "cost_info"):
+                        cost_info = response.cost_info
+                    else:
+                        cost_info = await self.calculate_cost(response)
+
+                    # Log with conversation_id for linking
+                    await self._log_usage_to_server(
+                        response=response,
+                        original_alias=original_model or "",
+                        provider_type=provider_type,
+                        model_name=model_name,
+                        cost_info=cost_info,
+                        profile=profile,
+                        conversation_id=str(conversation_id),
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to link usage to conversation: {e}")
 
         # Store messages if configured
         if (
