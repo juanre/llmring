@@ -145,16 +145,25 @@ class LLMRingSession(LLMRing):
                     else:
                         cost_info = await self.calculate_cost(response)
 
-                    # Log with conversation_id for linking
-                    await self._log_usage_to_server(
-                        response=response,
-                        original_alias=original_model or "",
-                        provider_type=provider_type,
-                        model_name=model_name,
-                        cost_info=cost_info,
-                        profile=profile,
-                        conversation_id=str(conversation_id),
-                    )
+                    # Log with conversation_id for linking (using new logging service)
+                    if self.logging_service:
+                        from llmring.schemas import LLMRequest
+
+                        # Create minimal request for logging
+                        request = LLMRequest(
+                            model=original_model or "",
+                            messages=[],  # Messages already in conversation
+                        )
+
+                        await self.logging_service.log_request_response(
+                            request=request,
+                            response=response,
+                            alias=original_model or "",
+                            provider=provider_type,
+                            model=model_name,
+                            cost_info=cost_info,
+                            profile=profile,
+                        )
             except Exception as e:
                 logger.warning(f"Failed to link usage to conversation: {e}")
 
@@ -282,13 +291,15 @@ class LLMRingExtended(LLMRingSession):
     This class is maintained for backward compatibility and will be removed
     in a future version. Please migrate to LLMRingSession.
     """
+
     def __init__(self, *args, **kwargs):
         import warnings
+
         warnings.warn(
             "LLMRingExtended is deprecated and will be removed in v2.0. "
             "Use LLMRingSession instead.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         super().__init__(*args, **kwargs)
 

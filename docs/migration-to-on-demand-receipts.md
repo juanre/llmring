@@ -514,6 +514,218 @@ llmring receipts uncertified
 
 If you don't need these, you don't need receipts.
 
+## Advanced Examples
+
+### Multi-Project Cost Allocation
+
+Track costs separately for different projects or clients:
+
+```python
+from llmring import LLMRing
+from llmring.server_client import ServerClient
+
+# Project A work
+ring_a = LLMRing(
+    server_url="http://localhost:8000",
+    api_key="project_a_key",  # Different API key per project
+    log_conversations=True
+)
+
+for task in project_a_tasks:
+    await ring_a.chat("balanced", messages=task)
+
+# Project B work
+ring_b = LLMRing(
+    server_url="http://localhost:8000",
+    api_key="project_b_key",  # Different API key
+    log_conversations=True
+)
+
+for task in project_b_tasks:
+    await ring_b.chat("balanced", messages=task)
+
+# Generate separate invoices for each project
+client_a = ServerClient("http://localhost:8000", "project_a_key")
+invoice_a = await client_a.generate_receipt(
+    start_date=month_start,
+    end_date=month_end,
+    description=f"Project A - {month_name}",
+    tags=["project-a", "invoice"]
+)
+
+client_b = ServerClient("http://localhost:8000", "project_b_key")
+invoice_b = await client_b.generate_receipt(
+    start_date=month_start,
+    end_date=month_end,
+    description=f"Project B - {month_name}",
+    tags=["project-b", "invoice"]
+)
+
+print(f"Project A: ${invoice_a['receipt']['total_cost']:.2f}")
+print(f"Project B: ${invoice_b['receipt']['total_cost']:.2f}")
+```
+
+### Automated Daily Batch Receipts with Cron
+
+Set up automated daily receipt generation:
+
+**Python script (`daily_receipts.py`):**
+```python
+#!/usr/bin/env python3
+import asyncio
+from datetime import datetime, timedelta
+from llmring.server_client import ServerClient
+
+async def generate_daily_receipt():
+    """Generate receipt for yesterday's usage."""
+    client = ServerClient(
+        server_url="http://localhost:8000",
+        api_key="your-api-key"
+    )
+
+    yesterday = datetime.now() - timedelta(days=1)
+    start_date = yesterday.replace(hour=0, minute=0, second=0)
+    end_date = yesterday.replace(hour=23, minute=59, second=59)
+
+    result = await client.generate_receipt(
+        start_date=start_date,
+        end_date=end_date,
+        description=f"Daily receipt - {yesterday.strftime('%Y-%m-%d')}",
+        tags=["automated", "daily"]
+    )
+
+    receipt = result["receipt"]
+    print(f"✅ Generated receipt {receipt['receipt_id']}")
+    print(f"   Certified: {result['certified_count']} logs")
+    print(f"   Total cost: ${receipt['total_cost']:.2f}")
+
+if __name__ == "__main__":
+    asyncio.run(generate_daily_receipt())
+```
+
+**Cron job:**
+```bash
+# Run daily at 1 AM
+0 1 * * * cd /path/to/project && /usr/bin/python3 daily_receipts.py >> /var/log/llmring_receipts.log 2>&1
+```
+
+### Cost Budget Monitoring with Alerts
+
+Monitor costs and alert when approaching budget:
+
+```python
+from llmring import LLMRing
+from llmring.server_client import ServerClient
+from datetime import datetime
+
+class CostMonitor:
+    def __init__(self, server_url, api_key, daily_budget=10.0):
+        self.client = ServerClient(server_url, api_key)
+        self.daily_budget = daily_budget
+
+    async def check_budget(self):
+        """Check if daily budget is exceeded."""
+        today_start = datetime.now().replace(hour=0, minute=0, second=0)
+
+        # Preview today's costs without generating receipt
+        preview = await self.client.preview_receipt(
+            start_date=today_start,
+            end_date=datetime.now()
+        )
+
+        total_cost = preview["total_cost"]
+        percentage = (total_cost / self.daily_budget) * 100
+
+        if percentage >= 90:
+            self.send_alert(
+                f"⚠️ Daily budget at {percentage:.1f}%! "
+                f"Spent ${total_cost:.2f} of ${self.daily_budget:.2f}"
+            )
+        elif percentage >= 75:
+            self.send_warning(
+                f"Daily budget at {percentage:.1f}%. "
+                f"Spent ${total_cost:.2f} of ${self.daily_budget:.2f}"
+            )
+
+        return total_cost, percentage
+
+    def send_alert(self, message):
+        # Send to Slack, email, PagerDuty, etc.
+        print(f"ALERT: {message}")
+
+    def send_warning(self, message):
+        print(f"WARNING: {message}")
+
+# Use in your application
+monitor = CostMonitor("http://localhost:8000", "your-api-key", daily_budget=10.0)
+
+# Before expensive operations
+current_cost, percentage = await monitor.check_budget()
+if percentage < 95:
+    # Safe to proceed
+    response = await ring.chat("deep", messages=complex_task)
+else:
+    # Use cheaper model
+    response = await ring.chat("fast", messages=complex_task)
+```
+
+### Exporting for Accounting Systems
+
+Generate receipts compatible with accounting software:
+
+```python
+import csv
+from datetime import datetime
+from llmring.server_client import ServerClient
+
+async def export_for_accounting(month, year):
+    """Export monthly receipt data for QuickBooks/Xero."""
+    client = ServerClient("http://localhost:8000", "your-api-key")
+
+    # Generate monthly receipt
+    start_date = datetime(year, month, 1)
+    if month == 12:
+        end_date = datetime(year + 1, 1, 1)
+    else:
+        end_date = datetime(year, month + 1, 1)
+
+    result = await client.generate_receipt(
+        start_date=start_date,
+        end_date=end_date,
+        description=f"LLM API Usage - {month}/{year}",
+        tags=["accounting", "monthly"]
+    )
+
+    receipt = result["receipt"]
+    summary = receipt["batch_summary"]
+
+    # Export to CSV for accounting
+    with open(f"llmring_invoice_{year}_{month:02d}.csv", "w") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Date", "Description", "Model", "Calls", "Tokens", "Cost"])
+
+        # Write breakdown by model
+        for model, stats in summary["by_model"].items():
+            writer.writerow([
+                f"{year}-{month:02d}",
+                f"LLM API - {model}",
+                model,
+                stats["calls"],
+                stats["tokens"],
+                f"${stats['cost']:.2f}"
+            ])
+
+        # Write total
+        writer.writerow([])
+        writer.writerow(["", "", "TOTAL", "", "", f"${receipt['total_cost']:.2f}"])
+
+    print(f"✅ Exported invoice to llmring_invoice_{year}_{month:02d}.csv")
+    print(f"   Receipt ID: {receipt['receipt_id']}")
+
+# Generate monthly invoice
+await export_for_accounting(month=10, year=2025)
+```
+
 ## Backward Compatibility
 
 The following still work as before:

@@ -18,7 +18,10 @@ class LoggingService:
 
     Supports two modes:
     - Metadata-only: logs usage data (tokens, cost, model, alias)
-    - Full conversations: logs messages + responses + metadata
+    - Full conversations: logs messages + responses + metadata (includes usage logs)
+
+    Note: log_conversations=True implies logging both conversation content AND usage metadata.
+    This ensures usage records exist for analytics, receipts, and cost tracking.
     """
 
     def __init__(
@@ -34,8 +37,10 @@ class LoggingService:
         Args:
             server_client: ServerClient instance for HTTP requests
             log_metadata: Whether to log usage metadata
-            log_conversations: Whether to log full conversations
+            log_conversations: Whether to log full conversations (also logs usage metadata)
             origin: Origin identifier for tracking
+
+        Note: If log_conversations=True, usage metadata will be logged regardless of log_metadata value.
         """
         self.server_client = server_client
         self.log_metadata = log_metadata
@@ -66,6 +71,7 @@ class LoggingService:
             profile: Profile name used
         """
         try:
+            # Log conversations if enabled
             if self.log_conversations:
                 await self._log_conversation(
                     request=request,
@@ -76,7 +82,18 @@ class LoggingService:
                     cost_info=cost_info,
                     profile=profile,
                 )
+                # Also log usage metadata when logging conversations
+                # This ensures usage records exist for analytics and receipts
+                await self._log_usage_only(
+                    response=response,
+                    alias=alias,
+                    provider=provider,
+                    model=model,
+                    cost_info=cost_info,
+                    profile=profile,
+                )
             elif self.log_metadata:
+                # Log usage metadata only (no conversation content)
                 await self._log_usage_only(
                     response=response,
                     alias=alias,
@@ -176,8 +193,7 @@ class LoggingService:
         """
         # Convert messages to dict format
         messages = [
-            msg.model_dump() if hasattr(msg, "model_dump") else msg
-            for msg in request.messages
+            msg.model_dump() if hasattr(msg, "model_dump") else msg for msg in request.messages
         ]
 
         # Prepare conversation log
@@ -215,7 +231,7 @@ class LoggingService:
         # Send to server (endpoint will be implemented in Phase 6)
         result = await self.server_client.post("/api/v1/conversations/log", json=conversation_data)
 
-        # Extract conversation ID and receipt from response
+        # Extract conversation ID from response
         if isinstance(result, dict):
             self._conversation_id = result.get("conversation_id")
             logger.debug(
@@ -223,10 +239,8 @@ class LoggingService:
                 f"(conversation_id={self._conversation_id})"
             )
 
-            # TODO: Store receipt when Phase 8 is implemented
-            # receipt_data = result.get("receipt")
-            # if receipt_data:
-            #     self.receipts.append(Receipt(**receipt_data))
+            # Phase 7.5: Receipts are now generated on-demand via POST /api/v1/receipts/generate
+            # No automatic receipt generation in conversation logging
 
     def clear_conversation_id(self):
         """Clear the current conversation ID."""

@@ -83,7 +83,7 @@ dev = [
     "types-toml>=0.10.8.20240310",
     "twine>=6.2.0",
     "pre-commit>=4.3.0",
-    "llmring-server>=0.1.1",
+    "llmring-server",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -139,3 +139,6 @@ ensure_newline_before_comments = true
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.uv.sources]
+llmring-server = { path = "../llmring-server", editable = true }

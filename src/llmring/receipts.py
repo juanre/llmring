@@ -10,7 +10,7 @@ For receipt generation and signing, see llmring-server/src/llmring_server/models
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,8 @@ class Receipt(BaseModel):
 
     Receipts are issued by llmring-server and signed with Ed25519 over JCS-canonicalized JSON.
     This class is used for deserializing receipts received from the server.
+
+    Phase 7.5: Supports both single and batch receipts.
     """
 
     # Identity
@@ -30,12 +32,18 @@ class Receipt(BaseModel):
         description="Receipt timestamp",
     )
 
-    # Request info
+    # Receipt type (Phase 7.5)
+    receipt_type: str = Field(
+        default="single",
+        description="Type: 'single' (one call) or 'batch' (multiple calls)",
+    )
+
+    # Request info (for single receipts)
     alias: str = Field(..., description="Alias used for the request")
     profile: str = Field(..., description="Profile used")
     lock_digest: str = Field(..., description="SHA256 digest of lockfile")
 
-    # Model info
+    # Model info (for single receipts)
     provider: str = Field(..., description="Provider used")
     model: str = Field(..., description="Model used")
 
@@ -48,6 +56,16 @@ class Receipt(BaseModel):
     input_cost: float = Field(..., description="Cost for input tokens (USD)")
     output_cost: float = Field(..., description="Cost for output tokens (USD)")
     total_cost: float = Field(..., description="Total cost (USD)")
+
+    # Batch receipt fields (Phase 7.5)
+    batch_summary: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Aggregated statistics for batch receipts",
+    )
+    description: Optional[str] = Field(
+        None, description="User-provided description for the receipt"
+    )
+    tags: Optional[List[str]] = Field(None, description="User-provided tags for categorization")
 
     # Signature (added by server)
     signature: Optional[str] = Field(None, description="Ed25519 signature (base64)")

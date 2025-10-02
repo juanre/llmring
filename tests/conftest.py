@@ -18,6 +18,9 @@ from llmring.service import LLMRing
 # Load environment variables from .env for test runs
 load_dotenv()
 
+# Register pgdbm fixtures plugin
+pytest_plugins = ["pgdbm.fixtures.conftest"]
+
 # -----------------------------------------------------------------------------
 # llmring-server test fixtures
 # -----------------------------------------------------------------------------

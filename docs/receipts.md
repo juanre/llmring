@@ -4,14 +4,17 @@
 
 LLMRing provides a comprehensive receipt system for tracking LLM API usage and costs. Receipts include detailed information about each API call, including token usage, costs, model selection, and cryptographic signatures for compliance.
 
+**Important:** Receipts are generated **on-demand** via llmring-server, not automatically with every API call. This gives you control over when to generate signed receipts for compliance, billing, or audit purposes.
+
 ## Key Features
 
+- **On-Demand Generation**: Generate receipts when you need them (single calls or batches)
 - **Automatic Cost Calculation**: Tracks tokens and calculates costs based on registry pricing
 - **Cryptographic Signatures**: Ed25519 signatures for receipt verification
 - **Canonical JSON**: JCS (JSON Canonicalization Scheme) for deterministic serialization
+- **Batch Receipts**: Certify multiple logs in a single receipt for efficiency
 - **Lockfile Integration**: Includes SHA256 digest of lockfile for reproducibility
 - **Profile Tracking**: Records which profile was used for each request
-- **Local and Server Modes**: Works locally or with LLMRing server integration
 
 ## Receipt Structure
 
@@ -38,40 +41,55 @@ Each receipt contains:
 
 ## Basic Usage
 
-### Automatic Receipt Generation
+### Logging with LLMRing
 
-Receipts are generated automatically for all LLM requests:
+LLMRing automatically logs usage metadata when connected to a server:
 
 ```python
 from llmring import LLMRing, LLMRequest, Message
 
-async with LLMRing() as service:
-    request = LLMRequest(
-        model="fast",
-        messages=[Message(role="user", content="Hello!")]
-    )
+# Log usage metadata and conversations to server
+service = LLMRing(
+    server_url="http://localhost:8000",
+    api_key="your_api_key",
+    log_metadata=True,          # Log tokens, costs, model usage
+    log_conversations=True,     # Log full conversations (implies log_metadata)
+)
 
-    response = await service.chat(request)
+request = LLMRequest(
+    model="fast",
+    messages=[Message(role="user", content="Hello!")]
+)
 
-    # Access cost information from response
-    print(f"Tokens used: {response.usage['total_tokens']}")
-    print(f"Cost: ${response.usage['cost']:.6f}")
+response = await service.chat(request)
+
+# Access cost information from response
+print(f"Tokens used: {response.usage['total_tokens']}")
+print(f"Cost: ${response.usage['cost']:.6f}")
+
+# Logs are stored on server, receipts generated on-demand
 ```
 
-### Accessing Receipts
+### Generating Receipts On-Demand
+
+Generate signed receipts when you need them:
 
 ```python
-from llmring import LLMRing
+from llmring.server_client import ServerClient
 
-service = LLMRing()
+# Connect to server
+client = ServerClient(
+    server_url="http://localhost:8000",
+    api_key="your_api_key"
+)
 
-# Make some requests
-# ...
+# Generate receipt for all logs since last receipt (recommended)
+result = await client.generate_receipt(since_last_receipt=True)
+receipt = result["receipt"]
+certified_count = result["certified_count"]
 
-# Access local receipts
-for receipt in service.receipts:
-    print(f"{receipt.timestamp}: {receipt.alias} → {receipt.provider}:{receipt.model}")
-    print(f"  Tokens: {receipt.total_tokens}, Cost: ${receipt.total_cost:.6f}")
+print(f"✅ Receipt {receipt['receipt_id']} certifies {certified_count} logs")
+print(f"Total cost: ${receipt['total_cost']:.6f}")
 ```
 
 ## Cost Calculation
