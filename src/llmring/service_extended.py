@@ -122,50 +122,18 @@ class LLMRingSession(LLMRing):
         Returns:
             LLM response with cost information if available
         """
-        # Store original model for later use
-        original_model = request.model
+        # Set conversation_id BEFORE calling parent to avoid duplicate logging
+        # The parent's logging service will include this ID in its logs
+        if conversation_id and self.logging_service:
+            self.logging_service.set_conversation_id(str(conversation_id))
 
-        # Call parent chat method (this will log usage to server automatically)
-        response = await super().chat(request, profile)
-
-        # If we have a conversation_id, log usage again with conversation linking
-        # (The parent already logged usage, but this second call links it to conversation)
-        if conversation_id and self.server_client and response.usage:
-            try:
-                from llmring.utils import parse_model_string
-
-                # Parse the response model to get provider and model name
-                if ":" in response.model:
-                    provider_type, model_name = parse_model_string(response.model)
-
-                    # Calculate cost if available
-                    cost_info = None
-                    if hasattr(response, "cost_info"):
-                        cost_info = response.cost_info
-                    else:
-                        cost_info = await self.calculate_cost(response)
-
-                    # Log with conversation_id for linking (using new logging service)
-                    if self.logging_service:
-                        from llmring.schemas import LLMRequest
-
-                        # Create minimal request for logging
-                        request = LLMRequest(
-                            model=original_model or "",
-                            messages=[],  # Messages already in conversation
-                        )
-
-                        await self.logging_service.log_request_response(
-                            request=request,
-                            response=response,
-                            alias=original_model or "",
-                            provider=provider_type,
-                            model=model_name,
-                            cost_info=cost_info,
-                            profile=profile,
-                        )
-            except Exception as e:
-                logger.warning(f"Failed to link usage to conversation: {e}")
+        try:
+            # Call parent chat method (this will log usage with conversation_id)
+            response = await super().chat(request, profile)
+        finally:
+            # Clear conversation_id after the call to avoid leaking to subsequent requests
+            if conversation_id and self.logging_service:
+                self.logging_service.clear_conversation_id()
 
         # Store messages if configured
         if (

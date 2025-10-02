@@ -69,9 +69,7 @@ class LLMRing:
         # Logging configuration
         # Validate: logging requires server_url
         if (log_metadata or log_conversations) and not server_url:
-            logger.warning(
-                "Logging enabled but no server_url provided. Logging will be disabled."
-            )
+            logger.warning("Logging enabled but no server_url provided. Logging will be disabled.")
             log_metadata = False
             log_conversations = False
 
@@ -304,6 +302,59 @@ class LLMRing:
         """
         return parse_model_string(model)
 
+    def _scoped_pinned_version(self, provider: Any, provider_type: str, profile: Optional[str]):
+        """
+        Set and save pinned registry version for scoped restoration.
+
+        Args:
+            provider: The provider instance
+            provider_type: Provider type name
+            profile: Profile name
+
+        Returns:
+            Tuple of (had_previous, previous_value) for cleanup in finally block
+        """
+        if not (self.lockfile and profile):
+            return (False, None)
+
+        profile_config = self.lockfile.get_profile(profile)
+        if provider_type not in profile_config.registry_versions:
+            return (False, None)
+
+        pinned_version = profile_config.registry_versions[provider_type]
+        if not (hasattr(provider, "_registry_client") and provider._registry_client):
+            return (False, None)
+
+        # Save previous value if exists
+        had_previous = hasattr(provider._registry_client, "_pinned_version")
+        previous_value = (
+            getattr(provider._registry_client, "_pinned_version", None) if had_previous else None
+        )
+
+        # Set pinned version for this request
+        provider._registry_client._pinned_version = pinned_version
+
+        return (had_previous, previous_value)
+
+    def _restore_pinned_version(self, provider: Any, had_previous: bool, previous_value: Any):
+        """
+        Restore previous pinned version state.
+
+        Args:
+            provider: The provider instance
+            had_previous: Whether there was a previous value
+            previous_value: The previous value to restore
+        """
+        if not (hasattr(provider, "_registry_client") and provider._registry_client):
+            return
+
+        if had_previous:
+            provider._registry_client._pinned_version = previous_value
+        else:
+            # Remove the attribute entirely
+            if hasattr(provider._registry_client, "_pinned_version"):
+                delattr(provider._registry_client, "_pinned_version")
+
     def resolve_alias(self, alias_or_model: str, profile: Optional[str] = None) -> str:
         """
         Resolve an alias to a model string, or return the input if it's already a model.
@@ -359,102 +410,105 @@ class LLMRing:
         # Get provider
         provider = self.get_provider(provider_type)
 
-        # Check if we should use pinned registry version
-        if self.lockfile and profile:
-            profile_config = self.lockfile.get_profile(profile)
-            if provider_type in profile_config.registry_versions:
-                pinned_version = profile_config.registry_versions[provider_type]
-                # Set the pinned version on the provider's registry client
-                if hasattr(provider, "_registry_client") and provider._registry_client:
-                    # Store the pinned version for this validation
-                    provider._registry_client._pinned_version = pinned_version
+        # Set pinned registry version (scoped to this request)
+        pinned_state = self._scoped_pinned_version(provider, provider_type, profile)
 
-        # Get model info from registry (cached)
-        registry_model = None
         try:
-            registry_model = await self.get_model_from_registry(provider_type, model_name)
-            if not registry_model:
-                logger.warning(
-                    f"Model '{provider_type}:{model_name}' not found in registry. "
-                    f"Cost tracking and token limits unavailable."
-                )
-        except Exception as e:
-            logger.debug(f"Could not check registry for model {provider_type}:{model_name}: {e}")
 
-        # If no model specified, use provider's default
-        if not model_name and hasattr(provider, "get_default_model"):
-            model_name = await provider.get_default_model()
-
-        # Validate context limits if possible
-        # Create a temporary request with the resolved model for validation
-        validation_request = request.model_copy()
-        validation_request.model = f"{provider_type}:{model_name}"
-        validation_error = await self.validate_context_limit(validation_request)
-        if validation_error:
-            logger.warning(f"Context validation warning: {validation_error}")
-            # We log but don't block - let the provider handle it
-
-        # Apply structured output adapter for non-OpenAI providers
-        adapted_request = await self._apply_structured_output_adapter(
-            request, provider_type, provider
-        )
-
-        # Filter out unsupported parameters based on model capabilities
-        if registry_model:
-            if not registry_model.supports_temperature and adapted_request.temperature is not None:
+            # Get model info from registry (cached)
+            registry_model = None
+            try:
+                registry_model = await self.get_model_from_registry(provider_type, model_name)
+                if not registry_model:
+                    logger.warning(
+                        f"Model '{provider_type}:{model_name}' not found in registry. "
+                        f"Cost tracking and token limits unavailable."
+                    )
+            except Exception as e:
                 logger.debug(
-                    f"Model {provider_type}:{model_name} doesn't support temperature, removing parameter"
-                )
-                adapted_request.temperature = None
-
-            # Could add more capability checks here in the future (streaming, etc.)
-
-        # Send non-streaming request to provider
-        response = await provider.chat(
-            messages=adapted_request.messages,
-            model=model_name,
-            temperature=adapted_request.temperature,
-            max_tokens=adapted_request.max_tokens,
-            response_format=adapted_request.response_format,
-            tools=adapted_request.tools,
-            tool_choice=adapted_request.tool_choice,
-            json_response=adapted_request.json_response,
-            cache=adapted_request.cache,
-            extra_params=adapted_request.extra_params,
-        )
-
-        # Post-process structured output if adapter was used
-        response = await self._schema_adapter.post_process_structured_output(
-            response, adapted_request, provider_type
-        )
-
-        # Ensure response has the full provider:model format
-        if response.model and ":" not in response.model:
-            response.model = f"{provider_type}:{response.model}"
-
-        # Calculate and add cost information if available
-        cost_info = None
-        if response.usage:
-            cost_info = await self.calculate_cost(response)
-            if cost_info:
-                self._cost_calculator.add_cost_to_response(response, cost_info)
-                logger.debug(
-                    f"Calculated cost for {provider_type}:{model_name}: ${cost_info['total_cost']:.6f}"
+                    f"Could not check registry for model {provider_type}:{model_name}: {e}"
                 )
 
-        # Log to server if logging is enabled
-        if self.logging_service:
-            await self.logging_service.log_request_response(
-                request=request,
-                response=response,
-                alias=original_alias,
-                provider=provider_type,
-                model=model_name,
-                cost_info=cost_info,
-                profile=profile,
+            # If no model specified, use provider's default
+            if not model_name and hasattr(provider, "get_default_model"):
+                model_name = await provider.get_default_model()
+
+            # Validate context limits if possible
+            # Create a temporary request with the resolved model for validation
+            validation_request = request.model_copy()
+            validation_request.model = f"{provider_type}:{model_name}"
+            validation_error = await self.validate_context_limit(validation_request)
+            if validation_error:
+                logger.warning(f"Context validation warning: {validation_error}")
+                # We log but don't block - let the provider handle it
+
+            # Apply structured output adapter for non-OpenAI providers
+            adapted_request = await self._apply_structured_output_adapter(
+                request, provider_type, provider
             )
 
-        return response
+            # Filter out unsupported parameters based on model capabilities
+            if registry_model:
+                if (
+                    not registry_model.supports_temperature
+                    and adapted_request.temperature is not None
+                ):
+                    logger.debug(
+                        f"Model {provider_type}:{model_name} doesn't support temperature, removing parameter"
+                    )
+                    adapted_request.temperature = None
+
+                # Could add more capability checks here in the future (streaming, etc.)
+
+            # Send non-streaming request to provider
+            response = await provider.chat(
+                messages=adapted_request.messages,
+                model=model_name,
+                temperature=adapted_request.temperature,
+                max_tokens=adapted_request.max_tokens,
+                response_format=adapted_request.response_format,
+                tools=adapted_request.tools,
+                tool_choice=adapted_request.tool_choice,
+                json_response=adapted_request.json_response,
+                cache=adapted_request.cache,
+                extra_params=adapted_request.extra_params,
+            )
+
+            # Post-process structured output if adapter was used
+            response = await self._schema_adapter.post_process_structured_output(
+                response, adapted_request, provider_type
+            )
+
+            # Ensure response has the full provider:model format
+            if response.model and ":" not in response.model:
+                response.model = f"{provider_type}:{response.model}"
+
+            # Calculate and add cost information if available
+            cost_info = None
+            if response.usage:
+                cost_info = await self.calculate_cost(response)
+                if cost_info:
+                    self._cost_calculator.add_cost_to_response(response, cost_info)
+                    logger.debug(
+                        f"Calculated cost for {provider_type}:{model_name}: ${cost_info['total_cost']:.6f}"
+                    )
+
+            # Log to server if logging is enabled
+            if self.logging_service:
+                await self.logging_service.log_request_response(
+                    request=request,
+                    response=response,
+                    alias=original_alias,
+                    provider=provider_type,
+                    model=model_name,
+                    cost_info=cost_info,
+                    profile=profile,
+                )
+
+            return response
+        finally:
+            # Restore pinned version state
+            self._restore_pinned_version(provider, *pinned_state)
 
     async def chat_stream(
         self, request: LLMRequest, profile: Optional[str] = None
@@ -494,109 +548,112 @@ class LLMRing:
         # Get provider
         provider = self.get_provider(provider_type)
 
-        # Check if we should use pinned registry version
-        if self.lockfile and profile:
-            profile_config = self.lockfile.get_profile(profile)
-            if provider_type in profile_config.registry_versions:
-                pinned_version = profile_config.registry_versions[provider_type]
-                # Set the pinned version on the provider's registry client
-                if hasattr(provider, "_registry_client") and provider._registry_client:
-                    # Store the pinned version for this validation
-                    provider._registry_client._pinned_version = pinned_version
+        # Set pinned registry version (scoped to this request)
+        pinned_state = self._scoped_pinned_version(provider, provider_type, profile)
 
-        # Get model info from registry (cached)
-        registry_model = None
         try:
-            registry_model = await self.get_model_from_registry(provider_type, model_name)
-            if not registry_model:
-                logger.warning(
-                    f"Model '{provider_type}:{model_name}' not found in registry. "
-                    f"Cost tracking and token limits unavailable."
-                )
-        except Exception as e:
-            logger.debug(f"Could not check registry for model {provider_type}:{model_name}: {e}")
-
-        # If no model specified, use provider's default
-        if not model_name and hasattr(provider, "get_default_model"):
-            model_name = await provider.get_default_model()
-
-        # Validate context limits if possible
-        # Create a temporary request with the resolved model for validation
-        validation_request = request.model_copy()
-        validation_request.model = f"{provider_type}:{model_name}"
-        validation_error = await self.validate_context_limit(validation_request)
-        if validation_error:
-            logger.warning(f"Context validation warning: {validation_error}")
-            # We log but don't block - let the provider handle it
-
-        # Apply structured output adapter for non-OpenAI providers
-        adapted_request = await self._apply_structured_output_adapter(
-            request, provider_type, provider
-        )
-
-        # Filter out unsupported parameters based on model capabilities
-        if registry_model:
-            if not registry_model.supports_temperature and adapted_request.temperature is not None:
+            # Get model info from registry (cached)
+            registry_model = None
+            try:
+                registry_model = await self.get_model_from_registry(provider_type, model_name)
+                if not registry_model:
+                    logger.warning(
+                        f"Model '{provider_type}:{model_name}' not found in registry. "
+                        f"Cost tracking and token limits unavailable."
+                    )
+            except Exception as e:
                 logger.debug(
-                    f"Model {provider_type}:{model_name} doesn't support temperature, removing parameter"
+                    f"Could not check registry for model {provider_type}:{model_name}: {e}"
                 )
-                adapted_request.temperature = None
 
-            # Could add more capability checks here in the future
+            # If no model specified, use provider's default
+            if not model_name and hasattr(provider, "get_default_model"):
+                model_name = await provider.get_default_model()
 
-        # Get the stream from provider
-        stream = await provider.chat_stream(
-            messages=adapted_request.messages,
-            model=model_name,
-            temperature=adapted_request.temperature,
-            max_tokens=adapted_request.max_tokens,
-            response_format=adapted_request.response_format,
-            tools=adapted_request.tools,
-            tool_choice=adapted_request.tool_choice,
-            json_response=adapted_request.json_response,
-            cache=adapted_request.cache,
-            extra_params=adapted_request.extra_params,
-        )
+            # Validate context limits if possible
+            # Create a temporary request with the resolved model for validation
+            validation_request = request.model_copy()
+            validation_request.model = f"{provider_type}:{model_name}"
+            validation_error = await self.validate_context_limit(validation_request)
+            if validation_error:
+                logger.warning(f"Context validation warning: {validation_error}")
+                # We log but don't block - let the provider handle it
 
-        # Track usage for receipt generation
-        accumulated_usage = None
-
-        # Stream chunks to client
-        async for chunk in stream:
-            # If this chunk has usage info, store it
-            if chunk.usage:
-                accumulated_usage = chunk.usage
-
-            # Ensure chunk has the full provider:model format
-            if chunk.model and ":" not in chunk.model:
-                chunk.model = f"{provider_type}:{chunk.model}"
-
-            # Yield the chunk to client
-            yield chunk
-
-        # After streaming completes, log usage to server if we have usage
-        if accumulated_usage and self.logging_service:
-            # Calculate cost if possible
-            cost_info = None
-            # Create a temporary response object for cost calculation and logging
-            temp_response = LLMResponse(
-                content="",
-                model=f"{provider_type}:{model_name}",
-                usage=accumulated_usage,
-                finish_reason="stop",
+            # Apply structured output adapter for non-OpenAI providers
+            adapted_request = await self._apply_structured_output_adapter(
+                request, provider_type, provider
             )
-            cost_info = await self.calculate_cost(temp_response)
 
-            # Log to server using LoggingService
-            await self.logging_service.log_request_response(
-                request=request,
-                response=temp_response,
-                alias=original_alias,
-                provider=provider_type,
+            # Filter out unsupported parameters based on model capabilities
+            if registry_model:
+                if (
+                    not registry_model.supports_temperature
+                    and adapted_request.temperature is not None
+                ):
+                    logger.debug(
+                        f"Model {provider_type}:{model_name} doesn't support temperature, removing parameter"
+                    )
+                    adapted_request.temperature = None
+
+                # Could add more capability checks here in the future
+
+            # Get the stream from provider
+            stream = await provider.chat_stream(
+                messages=adapted_request.messages,
                 model=model_name,
-                cost_info=cost_info,
-                profile=profile,
+                temperature=adapted_request.temperature,
+                max_tokens=adapted_request.max_tokens,
+                response_format=adapted_request.response_format,
+                tools=adapted_request.tools,
+                tool_choice=adapted_request.tool_choice,
+                json_response=adapted_request.json_response,
+                cache=adapted_request.cache,
+                extra_params=adapted_request.extra_params,
             )
+
+            # Track usage for receipt generation
+            accumulated_usage = None
+
+            # Stream chunks to client
+            async for chunk in stream:
+                # If this chunk has usage info, store it
+                if chunk.usage:
+                    accumulated_usage = chunk.usage
+
+                # Ensure chunk has the full provider:model format
+                if chunk.model and ":" not in chunk.model:
+                    chunk.model = f"{provider_type}:{chunk.model}"
+
+                # Yield the chunk to client
+                yield chunk
+
+            # After streaming completes, log usage to server if we have usage
+            if accumulated_usage and self.logging_service:
+                # Calculate cost if possible
+                cost_info = None
+                # Create a temporary response object for cost calculation and logging
+                temp_response = LLMResponse(
+                    content="",
+                    model=f"{provider_type}:{model_name}",
+                    usage=accumulated_usage,
+                    finish_reason="stop",
+                )
+                cost_info = await self.calculate_cost(temp_response)
+
+                # Log to server using LoggingService
+                await self.logging_service.log_request_response(
+                    request=request,
+                    response=temp_response,
+                    alias=original_alias,
+                    provider=provider_type,
+                    model=model_name,
+                    cost_info=cost_info,
+                    profile=profile,
+                )
+
+        finally:
+            # Restore pinned version state
+            self._restore_pinned_version(provider, *pinned_state)
 
     async def chat_with_alias(
         self,
