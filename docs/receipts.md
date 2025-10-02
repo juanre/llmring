@@ -158,111 +158,529 @@ with open("receipts.json", "w") as f:
     json.dump(export_data, f, indent=2)
 ```
 
-## Signed Receipts
+## On-Demand Receipts (Phase 7.5)
 
-### Signature System
+### Overview
 
-Receipts can be cryptographically signed using Ed25519 for compliance and verification:
+**Important**: As of Phase 7.5, receipt generation is **on-demand only**. Receipts are no longer automatically generated with conversation logging. Instead, you explicitly request receipt generation when needed. This gives you full control over:
+
+- When receipts are generated
+- What logs are certified (single conversation, date range, specific logs, or all uncertified)
+- Batch receipt generation for billing periods
+- Receipt descriptions and tags for categorization
+
+### How It Works
+
+When you use LLMRing with a server connection:
+
+1. **Logging happens without receipts**: Conversations and usage are logged to the server
+2. **Generate receipts on-demand**: Explicitly request receipts when needed for compliance, billing, or auditing
 
 ```python
-from llmring.receipts import Receipt, ReceiptSigner, ReceiptGenerator
+from llmring import LLMRing, LLMRequest, Message
+from datetime import datetime
 
-# Generate keypair
-private_key, public_key = ReceiptSigner.generate_keypair()
+# Connect to llmring-server with logging enabled
+async with LLMRing(
+    server_url="http://localhost:8000",
+    api_key="your-api-key",
+    log_conversations=True  # Logs conversations (no automatic receipts)
+) as service:
+    # 1. Use LLM as normal - logs are created but no receipts yet
+    request = LLMRequest(
+        model="balanced",
+        messages=[Message(role="user", content="Hello!")]
+    )
+    response = await service.chat(request)
 
-# Create signer
-signer = ReceiptSigner(private_key)
+    # 2. Generate a receipt on-demand when needed
+    if service.server_client:
+        result = await service.server_client.generate_receipt(
+            since_last_receipt=True,  # Certify all uncertified logs
+            description="Daily certification",
+            tags=["daily", "compliance"]
+        )
+        receipt = result["receipt"]
+        print(f"Generated receipt {receipt['receipt_id']}")
+        print(f"Certified {result['certified_count']} logs")
+```
 
-# Create generator with signer
-generator = ReceiptGenerator(signer)
+### Four Generation Modes
 
-# Generate signed receipt
-receipt = generator.generate_receipt(
-    alias="fast",
-    profile="default",
-    lock_digest="sha256:abc123...",
-    provider="openai",
-    model="gpt-4o-mini",
-    usage={
-        "prompt_tokens": 100,
-        "completion_tokens": 200,
-        "total_tokens": 300
-    },
-    costs={
-        "input_cost": 0.000015,
-        "output_cost": 0.000120,
-        "total_cost": 0.000135
-    }
+Phase 7.5 supports four modes for generating receipts:
+
+#### 1. Single Conversation Receipt
+
+Generate a receipt for one specific conversation:
+
+```python
+result = await service.server_client.generate_receipt(
+    conversation_id="550e8400-e29b-41d4-a716-446655440000",
+    description="Customer support conversation #123"
+)
+```
+
+**CLI:**
+```bash
+llmring receipts generate --conversation 550e8400-e29b-41d4-a716-446655440000
+```
+
+#### 2. Date Range Batch Receipt
+
+Generate a single batch receipt certifying all logs within a date range:
+
+```python
+from datetime import datetime
+
+result = await service.server_client.generate_receipt(
+    start_date=datetime(2025, 10, 1),
+    end_date=datetime(2025, 10, 31),
+    description="October 2025 billing",
+    tags=["billing", "monthly"]
 )
 
-print(f"Receipt signed: {receipt.signature}")
+receipt = result["receipt"]
+summary = receipt["batch_summary"]
+print(f"Certified {summary['total_calls']} calls")
+print(f"Total cost: ${receipt['total_cost']:.4f}")
+print(f"By model: {summary['by_model']}")
 ```
+
+**CLI:**
+```bash
+llmring receipts generate --start 2025-10-01 --end 2025-10-31 \
+  --description "October billing" --tags billing --tags monthly
+```
+
+#### 3. Specific Log IDs
+
+Generate a receipt for a specific set of log IDs:
+
+```python
+result = await service.server_client.generate_receipt(
+    log_ids=[
+        "log_id_1",
+        "log_id_2",
+        "log_id_3"
+    ],
+    description="Specific logs for audit"
+)
+```
+
+#### 4. Since Last Receipt
+
+Generate a receipt for all logs that haven't been certified yet:
+
+```python
+result = await service.server_client.generate_receipt(
+    since_last_receipt=True,
+    description="Weekly certification",
+    tags=["weekly", "compliance"]
+)
+```
+
+**CLI:**
+```bash
+llmring receipts generate --since-last --description "Weekly certification"
+```
+
+### Preview Before Generating
+
+You can preview what a receipt would certify without actually generating it:
+
+```python
+# Preview what would be certified
+preview = await service.server_client.preview_receipt(
+    start_date=datetime(2025, 10, 1),
+    end_date=datetime(2025, 10, 31)
+)
+
+print(f"Would certify {preview['total_logs']} logs")
+print(f"Total cost: ${preview['total_cost']:.4f}")
+print(f"By model: {preview['by_model']}")
+print(f"By alias: {preview['by_alias']}")
+
+# If satisfied, generate the receipt
+if preview['total_cost'] < 100:
+    result = await service.server_client.generate_receipt(
+        start_date=datetime(2025, 10, 1),
+        end_date=datetime(2025, 10, 31),
+        description="October billing"
+    )
+```
+
+**CLI:**
+```bash
+# Preview first
+llmring receipts preview --start 2025-10-01 --end 2025-10-31
+
+# Then generate if satisfied
+llmring receipts generate --start 2025-10-01 --end 2025-10-31
+```
+
+### Working with Uncertified Logs
+
+Check which logs don't have receipts yet:
+
+```python
+# Get uncertified logs
+uncert = await service.server_client.get_uncertified_logs(limit=10)
+print(f"Found {uncert['total']} uncertified logs")
+
+for log in uncert['logs']:
+    print(f"  - {log['id']} ({log['type']}): ${log.get('cost', 0):.4f}")
+```
+
+**CLI:**
+```bash
+llmring receipts uncertified --limit 20
+```
+
+### Managing Receipts
+
+List all receipts:
+
+```python
+# List receipts
+receipts = await service.server_client.list_receipts(limit=10)
+
+for receipt in receipts['receipts']:
+    print(f"{receipt['receipt_id']} ({receipt['receipt_type']}): ${receipt['total_cost']:.4f}")
+```
+
+**CLI:**
+```bash
+llmring receipts list --limit 20
+```
+
+Get a specific receipt:
+
+```python
+# Get receipt details
+receipt = await service.server_client.get_receipt("rcpt_abc123")
+print(f"Receipt type: {receipt['receipt_type']}")
+print(f"Total cost: ${receipt['total_cost']:.4f}")
+
+if receipt['receipt_type'] == 'batch':
+    summary = receipt['batch_summary']
+    print(f"Certified {summary['total_calls']} calls")
+```
+
+**CLI:**
+```bash
+llmring receipts get rcpt_abc123
+```
+
+Get logs certified by a receipt:
+
+```python
+# Get logs for a receipt
+logs = await service.server_client.get_receipt_logs("rcpt_abc123", limit=10)
+print(f"Receipt certified {logs['total']} logs")
+
+for log in logs['logs']:
+    print(f"  - {log['id']}: ${log.get('total_cost', 0):.4f}")
+```
+
+### Single vs Batch Receipts
+
+Phase 7.5 introduces two types of receipts:
+
+#### Single Receipt
+
+Traditional receipt for one conversation/call:
+
+```json
+{
+    "receipt_id": "rcpt_single_123",
+    "receipt_type": "single",
+    "timestamp": "2025-10-02T12:00:00",
+    "alias": "balanced",
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "prompt_tokens": 100,
+    "completion_tokens": 200,
+    "total_tokens": 300,
+    "input_cost": 0.000015,
+    "output_cost": 0.000120,
+    "total_cost": 0.000135,
+    "signature": "ed25519:ABC123xyz..."
+}
+```
+
+#### Batch Receipt
+
+Aggregated receipt certifying multiple logs:
+
+```json
+{
+    "receipt_id": "rcpt_batch_456",
+    "receipt_type": "batch",
+    "timestamp": "2025-10-31T23:59:59",
+    "total_cost": 12.5400,
+    "description": "October 2025 billing",
+    "tags": ["billing", "monthly"],
+    "batch_summary": {
+        "total_conversations": 45,
+        "total_calls": 127,
+        "total_tokens": 1250000,
+        "start_date": "2025-10-01T00:00:00",
+        "end_date": "2025-10-31T23:59:59",
+        "by_model": {
+            "gpt-4o-mini": {
+                "calls": 85,
+                "tokens": 850000,
+                "cost": 8.5000
+            },
+            "claude-3-5-haiku": {
+                "calls": 42,
+                "tokens": 400000,
+                "cost": 4.0400
+            }
+        },
+        "by_alias": {
+            "fast": {
+                "calls": 85,
+                "tokens": 850000,
+                "cost": 8.5000
+            },
+            "balanced": {
+                "calls": 42,
+                "tokens": 400000,
+                "cost": 4.0400
+            }
+        },
+        "conversation_ids": ["conv_1", "conv_2", "..."],
+        "log_ids": ["log_1", "log_2", "..."]
+    },
+    "signature": "ed25519:XYZ789abc..."
+}
+```
+
+**Benefits of batch receipts:**
+- Single signature for entire billing period
+- Aggregate statistics for reporting
+- Reduced storage overhead
+- Easy monthly/weekly certification
+- Breakdowns by model and alias
+
+### Receipt Signature
+
+All receipts (single and batch) are signed using **Ed25519** cryptography over **JCS (JSON Canonicalization Scheme)** for deterministic serialization:
+
+- **Algorithm**: Ed25519 elliptic curve signatures
+- **Canonicalization**: RFC 8785 JCS for consistent JSON encoding
+- **Format**: Signatures are prefixed with `ed25519:` followed by base64url-encoded bytes
 
 ### Verifying Receipts
 
+You can verify receipts using the server's public key:
+
 ```python
-from llmring.receipts import Receipt, ReceiptSigner
+import httpx
 
-# Load receipt (from JSON, database, etc.)
-receipt = Receipt(**receipt_data)
+# Get the server's public key
+async with httpx.AsyncClient() as client:
+    # Public key in JSON format
+    response = await client.get("http://localhost:8000/api/v1/receipts/public-keys.json")
+    keys_data = response.json()
 
-# Load public key
-public_key = ReceiptSigner.load_public_key(public_key_bytes)
+    print(f"Current key ID: {keys_data['current_key_id']}")
+    print(f"Public key: {keys_data['keys'][0]['public_key']}")
 
-# Verify signature
-is_valid = ReceiptSigner.verify_receipt(receipt, public_key)
-print(f"Receipt valid: {is_valid}")
+    # Or get PEM format
+    pem_response = await client.get("http://localhost:8000/api/v1/receipts/public-key.pem")
+    pem_key = pem_response.text
+    print(pem_key)
 ```
 
-### Canonical JSON
+### Verifying Receipt Signatures
 
-Receipts use JCS (JSON Canonicalization Scheme) for deterministic signing:
+Use the server's verification endpoint:
+
+```python
+import httpx
+
+async with httpx.AsyncClient() as client:
+    # Verify a receipt
+    response = await client.post(
+        "http://localhost:8000/api/v1/receipts/verify",
+        json={
+            "receipt_id": "rcpt_a1b2c3d4e5f6",
+            "timestamp": "2025-10-02T12:00:00",
+            "alias": "balanced",
+            "provider": "openai",
+            "model": "gpt-4",
+            # ... all other receipt fields ...
+            "signature": "ed25519:ABC123xyz..."
+        }
+    )
+
+    result = response.json()
+    print(f"Receipt valid: {result['valid']}")
+    print(f"Algorithm: {result['algorithm']}")
+```
+
+### Offline Verification
+
+For offline verification, use the client's `to_canonical_json()` method:
 
 ```python
 from llmring.receipts import Receipt
 
-receipt = Receipt(...)
+# Load receipt (from server response, database, etc.)
+receipt = Receipt(**receipt_data)
 
-# Get canonical JSON (for signing/verification)
+# Get canonical JSON (for manual verification)
 canonical = receipt.to_canonical_json()
 print(canonical)  # Deterministic, sorted JSON
 
 # Calculate digest
 digest = receipt.calculate_digest()
 print(f"Receipt digest: {digest}")
+
+# For full verification, you'd use the public key and a cryptography library
+# But it's recommended to use the server's /receipts/verify endpoint
+```
+
+## Server Setup for Receipt Generation
+
+### Configuring Receipt Signing Keys
+
+The llmring-server requires Ed25519 keys to sign receipts. You have two options:
+
+#### Option 1: Environment Variables
+
+```bash
+# Generate keys (will be printed to console)
+python -c "from llmring_server.config import load_or_generate_keypair; private, public = load_or_generate_keypair(); print(f'LLMRING_RECEIPTS_PRIVATE_KEY_B64={private}'); print(f'LLMRING_RECEIPTS_PUBLIC_KEY_B64={public}')"
+
+# Set environment variables
+export LLMRING_RECEIPTS_PRIVATE_KEY_B64="your_private_key_here"
+export LLMRING_RECEIPTS_PUBLIC_KEY_B64="your_public_key_here"
+
+# Start the server
+python -m llmring_server
+```
+
+#### Option 2: Key File
+
+```python
+from pathlib import Path
+from llmring_server.config import load_or_generate_keypair
+
+# Generate and save keys to file
+key_file = Path(".keys/receipt_signing_key")
+private_b64, public_b64 = load_or_generate_keypair(key_file)
+
+print(f"Keys saved to {key_file}")
+print(f"Private key: {private_b64}")
+print(f"Public key: {public_b64}")
+```
+
+Then use the keys in your server startup:
+
+```python
+from pathlib import Path
+from llmring_server.config import Settings, ensure_receipt_keys
+from llmring_server.main import create_app
+
+# Load settings and ensure keys
+settings = Settings()
+settings = ensure_receipt_keys(settings, Path(".keys/receipt_signing_key"))
+
+# Create app with receipt signing enabled
+app = create_app(settings=settings)
+```
+
+### Retrieving Receipts from the Server
+
+```python
+import httpx
+
+async with httpx.AsyncClient() as client:
+    # List all receipts (requires authentication)
+    response = await client.get(
+        "http://localhost:8000/api/v1/receipts/",
+        headers={"X-API-Key": "your-api-key"},
+        params={"limit": 10, "offset": 0}
+    )
+
+    data = response.json()
+    print(f"Total receipts: {data['total']}")
+
+    for receipt in data['receipts']:
+        print(f"Receipt {receipt['receipt_id']}: ${receipt['total_cost']:.6f}")
+
+    # Get specific receipt
+    receipt_id = data['receipts'][0]['receipt_id']
+    receipt_response = await client.get(
+        f"http://localhost:8000/api/v1/receipts/{receipt_id}",
+        headers={"X-API-Key": "your-api-key"}
+    )
+
+    receipt = receipt_response.json()
+    print(f"Detailed receipt: {receipt}")
 ```
 
 ## Server Integration
 
-### LLMRingExtended with Receipts
+### Using LLMRing with Conversation Logging
 
-When using `LLMRingExtended` with server integration, receipts are automatically managed:
+When using `LLMRing` with server integration and conversation logging enabled (Phase 7.5):
 
 ```python
-from llmring import LLMRingExtended, LLMRequest, Message
+from llmring import LLMRing, LLMRequest, Message
+from datetime import datetime, timedelta
 
-async with LLMRingExtended(
-    server_url="https://api.llmring.ai",
-    api_key="your-key",
-    enable_conversations=True
+async with LLMRing(
+    server_url="http://localhost:8000",  # or https://api.llmring.ai
+    api_key="your-api-key",
+    log_conversations=True  # Logs conversations (no automatic receipts)
 ) as service:
+    # 1. Use LLM - conversations are logged without receipts
     request = LLMRequest(
         model="balanced",
         messages=[Message(role="user", content="Hello!")]
     )
-
     response = await service.chat(request)
 
-    # Server automatically generates and stores signed receipts
-    # Receipts include signatures from LLMRing server
+    # Make more requests throughout the day/week/month...
+
+    # 2. Generate receipts on-demand when needed
+    if service.server_client:
+        # Weekly certification
+        result = await service.server_client.generate_receipt(
+            since_last_receipt=True,
+            description="Weekly certification",
+            tags=["weekly", "compliance"]
+        )
+        print(f"Certified {result['certified_count']} logs")
+
+        # Or monthly billing
+        start = datetime(2025, 10, 1)
+        end = datetime(2025, 10, 31)
+        result = await service.server_client.generate_receipt(
+            start_date=start,
+            end_date=end,
+            description="October billing",
+            tags=["billing", "monthly"]
+        )
+        receipt = result["receipt"]
+        print(f"Monthly cost: ${receipt['total_cost']:.2f}")
 ```
 
 **Benefits:**
-- Centralized receipt storage
-- Automatic signing with server keys
+- Centralized conversation and usage logging
+- On-demand Ed25519 signed receipts
+- Flexible certification schedules (daily, weekly, monthly)
+- Batch receipts with aggregate statistics
+- Receipts linked to full conversation history
 - Analytics and reporting
 - Compliance and audit trails
 - Team-wide cost tracking
+- Public verification endpoints
+- Control over when receipts are generated
 
 ## Usage Statistics
 
@@ -412,6 +830,221 @@ report = generate_compliance_report(service.receipts, start_date, end_date)
 
 with open("compliance_report.json", "w") as f:
     json.dump(report, f, indent=2)
+```
+
+## Use Cases
+
+### Monthly Billing
+
+Generate a single batch receipt for all usage in a billing period:
+
+```python
+from datetime import datetime
+from llmring import LLMRing
+
+async with LLMRing(
+    server_url="http://localhost:8000",
+    api_key="your-api-key",
+    log_conversations=True
+) as ring:
+    # Use LLMs throughout the month...
+
+    # At month end, generate billing receipt
+    if ring.server_client:
+        result = await ring.server_client.generate_receipt(
+            start_date=datetime(2025, 10, 1),
+            end_date=datetime(2025, 10, 31),
+            description="October 2025 - Customer billing",
+            tags=["billing", "monthly", "customer-123"]
+        )
+
+        receipt = result["receipt"]
+        summary = receipt["batch_summary"]
+
+        # Send to billing system
+        invoice = {
+            "customer_id": "customer-123",
+            "period": "October 2025",
+            "total": receipt["total_cost"],
+            "breakdown": summary["by_model"],
+            "receipt_id": receipt["receipt_id"],
+            "signature": receipt["signature"]
+        }
+```
+
+**CLI:**
+```bash
+# End of month
+llmring receipts generate --start 2025-10-01 --end 2025-10-31 \
+  --description "October 2025 billing" --tags billing --tags monthly
+```
+
+### Daily Compliance Certification
+
+Certify all uncertified logs daily for compliance:
+
+```python
+import asyncio
+from datetime import datetime
+from llmring import LLMRing
+
+async def daily_certification():
+    async with LLMRing(
+        server_url="http://localhost:8000",
+        api_key="your-api-key",
+        log_conversations=True
+    ) as ring:
+        if ring.server_client:
+            # Check what needs certification
+            uncert = await ring.server_client.get_uncertified_logs()
+
+            if uncert["total"] > 0:
+                # Generate daily receipt
+                result = await ring.server_client.generate_receipt(
+                    since_last_receipt=True,
+                    description=f"Daily certification - {datetime.now().date()}",
+                    tags=["daily", "compliance"]
+                )
+
+                print(f"✅ Certified {result['certified_count']} logs")
+                print(f"   Total cost: ${result['receipt']['total_cost']:.4f}")
+            else:
+                print("✅ No uncertified logs")
+
+# Run daily (e.g., via cron)
+asyncio.run(daily_certification())
+```
+
+**CLI (via cron):**
+```bash
+# Run at 11pm daily
+0 23 * * * llmring receipts generate --since-last --description "Daily certification"
+```
+
+### Audit Specific Conversation
+
+Generate a receipt for one specific conversation for audit purposes:
+
+```python
+async with LLMRing(
+    server_url="http://localhost:8000",
+    api_key="your-api-key",
+    log_conversations=True
+) as ring:
+    # Make a critical conversation
+    response = await ring.chat(
+        "legal-assistant",
+        messages=[{"role": "user", "content": "Draft contract clause..."}]
+    )
+
+    conversation_id = response.metadata.get("conversation_id")
+
+    # Immediately certify for legal records
+    if ring.server_client and conversation_id:
+        result = await ring.server_client.generate_receipt(
+            conversation_id=conversation_id,
+            description="Legal contract drafting - Case #123",
+            tags=["legal", "audit", "case-123"]
+        )
+
+        receipt = result["receipt"]
+        # Store receipt with case files
+        with open(f"case-123-receipt-{receipt['receipt_id']}.json", "w") as f:
+            json.dump(receipt, f, indent=2)
+```
+
+**CLI:**
+```bash
+llmring receipts generate --conversation 550e8400-e29b-41d4-a716-446655440000 \
+  --description "Legal case #123" --tags legal --tags audit
+```
+
+### Cost Preview Before Billing
+
+Preview costs before generating final receipt:
+
+```python
+from datetime import datetime
+
+async with LLMRing(
+    server_url="http://localhost:8000",
+    api_key="your-api-key",
+    log_conversations=True
+) as ring:
+    if ring.server_client:
+        # Preview monthly costs
+        preview = await ring.server_client.preview_receipt(
+            start_date=datetime(2025, 10, 1),
+            end_date=datetime(2025, 10, 31)
+        )
+
+        print(f"Monthly Preview:")
+        print(f"  Total logs: {preview['total_logs']}")
+        print(f"  Total cost: ${preview['total_cost']:.2f}")
+        print(f"\nBy model:")
+        for model, stats in preview['by_model'].items():
+            print(f"  {model}: {stats['calls']} calls, ${stats['cost']:.2f}")
+
+        # Confirm and generate
+        if input("Generate receipt? (y/n): ").lower() == 'y':
+            result = await ring.server_client.generate_receipt(
+                start_date=datetime(2025, 10, 1),
+                end_date=datetime(2025, 10, 31),
+                description="October billing - confirmed",
+                tags=["billing", "monthly"]
+            )
+            print(f"✅ Receipt generated: {result['receipt']['receipt_id']}")
+```
+
+**CLI:**
+```bash
+# Preview first
+llmring receipts preview --start 2025-10-01 --end 2025-10-31
+
+# If satisfied, generate
+llmring receipts generate --start 2025-10-01 --end 2025-10-31
+```
+
+### Weekly Cost Reports
+
+Generate weekly batch receipts for cost tracking:
+
+```python
+from datetime import datetime, timedelta
+
+async with LLMRing(
+    server_url="http://localhost:8000",
+    api_key="your-api-key",
+    log_conversations=True
+) as ring:
+    if ring.server_client:
+        # Calculate week range
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=7)
+
+        # Generate weekly receipt
+        result = await ring.server_client.generate_receipt(
+            start_date=start_date,
+            end_date=end_date,
+            description=f"Week of {start_date.date()}",
+            tags=["weekly", "report"]
+        )
+
+        receipt = result["receipt"]
+        summary = receipt["batch_summary"]
+
+        # Send to management dashboard
+        report = {
+            "week": f"{start_date.date()} to {end_date.date()}",
+            "total_cost": receipt["total_cost"],
+            "total_calls": summary["total_calls"],
+            "by_alias": summary["by_alias"],
+            "receipt_id": receipt["receipt_id"]
+        }
+
+        print(f"Week: {report['week']}")
+        print(f"Cost: ${report['total_cost']:.2f}")
+        print(f"Calls: {report['total_calls']}")
 ```
 
 ## Best Practices

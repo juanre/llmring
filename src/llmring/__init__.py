@@ -30,16 +30,23 @@ from .file_utils import (  # Core functions; Content creation; Convenience funct
 )
 from .schemas import LLMRequest, LLMResponse, Message
 
+# Import logging decorators
+from .logging import log_llm_call, log_llm_stream
+
 # Import main components
 from .service import LLMRing
-from .service_extended import ConversationManager, LLMRingExtended
+from .service_extended import ConversationManager, LLMRingSession, LLMRingExtended
 
 __all__ = [
     # Core classes
     "LLMRing",
-    "LLMRingExtended",
+    "LLMRingSession",
+    "LLMRingExtended",  # Deprecated, kept for backward compatibility
     "ConversationManager",
     "BaseLLMProvider",
+    # Logging decorators
+    "log_llm_call",
+    "log_llm_stream",
     # Exceptions
     "LLMRingError",
     "ConfigurationError",

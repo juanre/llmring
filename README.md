@@ -10,7 +10,7 @@ A comprehensive Python library for LLM integration with unified interface, advan
 - Unified Structured Output: JSON schema works across all providers with automatic adaptation
 - Conversational Configuration: MCP chat interface for natural language lockfile setup
 - Smart Aliases: Always-current semantic aliases (`deep`, `fast`, `balanced`) via intelligent recommendations
-- Cost Tracking: Automatic cost calculation and receipt generation
+- Cost Tracking: Automatic cost calculation with on-demand receipt generation
 - Registry Integration: Centralized model capabilities and pricing
 - Fallback Models: Automatic failover to alternative models for resilience
 - Type Safety: Comprehensive typed exceptions and error handling
@@ -498,7 +498,8 @@ response = await llm.chat([
 - **[Structured Output](docs/structured-output.md)** - Unified JSON schema support
 - **[File Utilities](docs/file-utilities.md)** - Vision and multimodal file handling
 - **[CLI Reference](docs/cli-reference.md)** - Command-line interface guide
-- **[Receipts & Cost Tracking](docs/receipts.md)** - Cost tracking and receipt system
+- **[Receipts & Cost Tracking](docs/receipts.md)** - On-demand receipt generation and cost tracking
+- **[Migration to On-Demand Receipts](docs/migration-to-on-demand-receipts.md)** - Upgrade guide from automatic to on-demand receipts
 - **[Examples](examples/)** - Working code examples:
   - [Quick Start](examples/quick_start.py) - Basic usage patterns
   - [MCP Chat](examples/mcp_chat_example.py) - MCP integration
@@ -545,7 +546,7 @@ except ProviderRateLimitError as e:
 - Unified Interface: Switch providers without code changes
 - Performance: Real streaming, prompt caching, optimized requests
 - Reliability: Circuit breakers, retries, typed error handling
-- Observability: Cost tracking, usage analytics, receipt generation
+- Observability: Real-time cost tracking, on-demand receipt generation, batch certification
 - Flexibility: Provider-specific features + raw SDK access
 - Standards: Type-safe, well-tested, production-ready
 
@@ -568,4 +569,4 @@ See the `examples/` directory for complete working examples:
 - Tool calling and function execution
 - Provider-specific features
 - MCP integration
-- Cost tracking and receipts
+- On-demand receipt generation and cost tracking

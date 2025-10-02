@@ -16,12 +16,11 @@ from llmring.providers.anthropic_api import AnthropicProvider
 from llmring.providers.google_api import GoogleProvider
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.providers.openai_api import OpenAIProvider
-from llmring.receipts import Receipt, ReceiptGenerator
 from llmring.registry import RegistryClient, RegistryModel
 from llmring.schemas import LLMRequest, LLMResponse, StreamChunk
 from llmring.services.alias_resolver import AliasResolver
 from llmring.services.cost_calculator import CostCalculator
-from llmring.services.receipt_manager import ReceiptManager
+from llmring.services.logging_service import LoggingService
 from llmring.services.schema_adapter import SchemaAdapter
 from llmring.services.validation_service import ValidationService
 from llmring.utils import parse_model_string
@@ -40,6 +39,8 @@ class LLMRing:
         lockfile_path: Optional[str] = None,
         server_url: Optional[str] = None,
         api_key: Optional[str] = None,
+        log_metadata: bool = True,
+        log_conversations: bool = False,
         alias_cache_size: int = 100,
         alias_cache_ttl: int = 3600,
     ):
@@ -52,6 +53,8 @@ class LLMRing:
             lockfile_path: Optional path to lockfile
             server_url: Optional llmring-server URL for usage logging and receipts
             api_key: API key for llmring-server or llmring-api
+            log_metadata: Enable logging of usage metadata (tokens, cost, model) to server
+            log_conversations: Enable logging of full conversations (messages + responses) to server
             alias_cache_size: Maximum number of cached alias resolutions (default: 100)
             alias_cache_ttl: TTL for alias cache entries in seconds (default: 3600)
         """
@@ -62,6 +65,22 @@ class LLMRing:
         self._registry_models: Dict[str, List[RegistryModel]] = {}
         # O(1) alias lookup: provider -> alias -> concrete model name
         self._alias_to_model: Dict[str, Dict[str, str]] = {}
+
+        # Logging configuration
+        # Validate: logging requires server_url
+        if (log_metadata or log_conversations) and not server_url:
+            logger.warning(
+                "Logging enabled but no server_url provided. Logging will be disabled."
+            )
+            log_metadata = False
+            log_conversations = False
+
+        # log_conversations implies log_metadata
+        if log_conversations:
+            log_metadata = True
+
+        self.log_metadata = log_metadata
+        self.log_conversations = log_conversations
 
         # Alias resolution service (will be initialized after providers)
         self._alias_resolver: Optional[AliasResolver] = None
@@ -74,21 +93,33 @@ class LLMRing:
         # Cost calculator service
         self._cost_calculator = CostCalculator(self.registry)
 
-        # Receipt manager service (will be initialized with lockfile)
-        self._receipt_manager: Optional[ReceiptManager] = None
-
         # Validation service
         self._validation_service = ValidationService(self.registry)
 
         # Server client for usage logging and receipts (optional)
         self.server_client: Optional[Any] = None
+        self.logging_service: Optional[LoggingService] = None
+
         if server_url or api_key:
             from llmring.server_client import ServerClient
 
             self.server_client = ServerClient(
                 base_url=server_url or "https://api.llmring.ai", api_key=api_key
             )
-            logger.info(f"Connected to llmring-server at {server_url or 'api.llmring.ai'}")
+
+            # Initialize logging service if logging is enabled
+            if self.log_metadata or self.log_conversations:
+                self.logging_service = LoggingService(
+                    server_client=self.server_client,
+                    log_metadata=self.log_metadata,
+                    log_conversations=self.log_conversations,
+                    origin=self.origin,
+                )
+
+            logger.info(
+                f"Connected to llmring-server at {server_url or 'api.llmring.ai'} "
+                f"(metadata={self.log_metadata}, conversations={self.log_conversations})"
+            )
 
         # Load lockfile with explicit resolution strategy
         self.lockfile: Optional[Lockfile] = None
@@ -125,9 +156,6 @@ class LLMRing:
             except Exception as e:
                 logger.warning(f"Could not load any lockfile: {e}")
                 # Continue without lockfile - some operations may fail
-
-        # Initialize receipt manager with lockfile
-        self._receipt_manager = ReceiptManager(self.lockfile)
 
         self._initialize_providers()
 
@@ -260,11 +288,6 @@ class LLMRing:
                 f"Provider '{provider_type}' not found. Available providers: {list(self.providers.keys())}"
             )
         return self.providers[provider_type]
-
-    @property
-    def receipts(self) -> List[Receipt]:
-        """Get all stored receipts (for backward compatibility)."""
-        return self._receipt_manager.receipts if self._receipt_manager else []
 
     def _parse_model_string(self, model: str) -> tuple[str, str]:
         """
@@ -419,24 +442,14 @@ class LLMRing:
                     f"Calculated cost for {provider_type}:{model_name}: ${cost_info['total_cost']:.6f}"
                 )
 
-        # Generate receipt if we have usage information
-        if self._receipt_manager:
-            self._receipt_manager.generate_receipt(
+        # Log to server if logging is enabled
+        if self.logging_service:
+            await self.logging_service.log_request_response(
+                request=request,
                 response=response,
-                original_alias=original_alias,
-                provider_type=provider_type,
-                model_name=model_name,
-                cost_info=cost_info,
-                profile=profile,
-            )
-
-        # Log usage to server if connected
-        if self.server_client and response.usage:
-            await self._log_usage_to_server(
-                response=response,
-                original_alias=original_alias,
-                provider_type=provider_type,
-                model_name=model_name,
+                alias=original_alias,
+                provider=provider_type,
+                model=model_name,
                 cost_info=cost_info,
                 profile=profile,
             )
@@ -561,40 +574,29 @@ class LLMRing:
             # Yield the chunk to client
             yield chunk
 
-        # After streaming completes, generate receipt if we have usage
-        if accumulated_usage and self._receipt_manager:
+        # After streaming completes, log usage to server if we have usage
+        if accumulated_usage and self.logging_service:
             # Calculate cost if possible
             cost_info = None
-            if accumulated_usage:
-                # Create a temporary response object for cost calculation
-                temp_response = LLMResponse(
-                    content="",
-                    model=f"{provider_type}:{model_name}",
-                    usage=accumulated_usage,
-                    finish_reason="stop",
-                )
-                cost_info = await self.calculate_cost(temp_response)
-
-            # Generate streaming receipt
-            self._receipt_manager.generate_streaming_receipt(
+            # Create a temporary response object for cost calculation and logging
+            temp_response = LLMResponse(
+                content="",
+                model=f"{provider_type}:{model_name}",
                 usage=accumulated_usage,
-                original_alias=original_alias,
-                provider_type=provider_type,
-                model_name=model_name,
+                finish_reason="stop",
+            )
+            cost_info = await self.calculate_cost(temp_response)
+
+            # Log to server using LoggingService
+            await self.logging_service.log_request_response(
+                request=request,
+                response=temp_response,
+                alias=original_alias,
+                provider=provider_type,
+                model=model_name,
                 cost_info=cost_info,
                 profile=profile,
             )
-
-            # Log usage to server if connected
-            if self.server_client:
-                await self._log_usage_to_server(
-                    response=temp_response,
-                    original_alias=original_alias,
-                    provider_type=provider_type,
-                    model_name=model_name,
-                    cost_info=cost_info,
-                    profile=profile,
-                )
 
     async def chat_with_alias(
         self,
@@ -955,76 +957,6 @@ class LLMRing:
             )
 
         return model_info
-
-    async def _log_usage_to_server(
-        self,
-        response: LLMResponse,
-        original_alias: str,
-        provider_type: str,
-        model_name: str,
-        cost_info: Optional[Dict[str, float]] = None,
-        profile: Optional[str] = None,
-        conversation_id: Optional[str] = None,
-    ) -> None:
-        """
-        Send usage data to llmring-server logging endpoint.
-
-        Args:
-            response: LLM response with usage information
-            original_alias: Original alias or model string used
-            provider_type: Provider name (e.g., "openai")
-            model_name: Model name (e.g., "gpt-4o")
-            cost_info: Optional calculated cost information
-            profile: Optional profile name
-            conversation_id: Optional conversation ID for linking
-        """
-        if not self.server_client or not response.usage:
-            return
-
-        try:
-            # Prepare log entry matching UsageLogRequest schema
-            log_data = {
-                "model": model_name,
-                "provider": provider_type,
-                "input_tokens": response.usage.get("prompt_tokens", 0),
-                "output_tokens": response.usage.get("completion_tokens", 0),
-                "cached_input_tokens": response.usage.get("cached_tokens", 0),
-                "origin": self.origin,
-            }
-
-            # Add optional fields
-            if original_alias and ":" not in original_alias:
-                # It's an alias, not a direct model reference
-                log_data["alias"] = original_alias
-
-            if profile:
-                log_data["profile"] = profile
-
-            if cost_info and "total_cost" in cost_info:
-                log_data["cost"] = cost_info["total_cost"]
-
-            if conversation_id:
-                log_data["id_at_origin"] = conversation_id
-
-            # Add metadata
-            log_data["metadata"] = {
-                "model_alias": f"{provider_type}:{model_name}",
-                "finish_reason": response.finish_reason,
-            }
-
-            if conversation_id:
-                log_data["metadata"]["conversation_id"] = conversation_id
-
-            # Send to server
-            await self.server_client.post("/api/v1/log", json=log_data)
-            logger.debug(
-                f"Logged usage to server: {provider_type}:{model_name} "
-                f"({log_data['input_tokens']} in, {log_data['output_tokens']} out)"
-            )
-
-        except Exception as e:
-            logger.warning(f"Failed to log usage to server: {e}")
-            # Don't raise - logging failure shouldn't break the request
 
     async def close(self):
         """Clean up resources."""

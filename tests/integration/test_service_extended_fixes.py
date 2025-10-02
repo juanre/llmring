@@ -1,5 +1,5 @@
 """
-Test service_extended fixes with real APIs.
+Test LLMRingSession fixes with real APIs.
 
 Tests that the fixed response access (response.content instead of response.choices)
 works correctly with actual API calls.
@@ -11,28 +11,28 @@ from uuid import uuid4
 import pytest
 
 from llmring.schemas import LLMRequest, Message
-from llmring.service_extended import LLMRingExtended
+from llmring.service_extended import LLMRingSession
 
 
-class TestServiceExtendedFixes:
-    """Test the fixed service_extended code paths with real APIs."""
+class TestLLMRingSessionFixes:
+    """Test the fixed LLMRingSession code paths with real APIs."""
 
     @pytest.fixture
-    def extended_service(self):
-        """Create extended service with conversation support."""
+    def session_service(self):
+        """Create session service with conversation support."""
         import os
 
         test_lockfile = os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "llmring.lock.json"
         )
-        return LLMRingExtended(
+        return LLMRingSession(
             enable_conversations=True,
             message_logging_level="full",
             lockfile_path=test_lockfile,
         )
 
     @pytest.mark.asyncio
-    async def test_chat_with_conversation_openai(self, extended_service):
+    async def test_chat_with_conversation_openai(self, session_service):
         """Test that chat_with_conversation works with OpenAI (uses response.content)."""
         conversation_id = uuid4()
 
@@ -50,8 +50,8 @@ class TestServiceExtendedFixes:
         )
 
         # Mock the server client to avoid actual server calls
-        with patch.object(extended_service, "server_client", new=None):
-            response = await extended_service.chat_with_conversation(
+        with patch.object(session_service, "server_client", new=None):
+            response = await session_service.chat_with_conversation(
                 request=request,
                 conversation_id=conversation_id,
                 store_messages=False,  # Don't try to store to avoid server dependency
@@ -72,7 +72,7 @@ class TestServiceExtendedFixes:
         print(f"✓ OpenAI response.content access works: {response.content[:50]}...")
 
     @pytest.mark.asyncio
-    async def test_chat_with_conversation_anthropic(self, extended_service):
+    async def test_chat_with_conversation_anthropic(self, session_service):
         """Test that chat_with_conversation works with Anthropic (uses response.content)."""
         conversation_id = uuid4()
 
@@ -90,8 +90,8 @@ class TestServiceExtendedFixes:
         )
 
         # Mock the server client to avoid actual server calls
-        with patch.object(extended_service, "server_client", new=None):
-            response = await extended_service.chat_with_conversation(
+        with patch.object(session_service, "server_client", new=None):
+            response = await session_service.chat_with_conversation(
                 request=request,
                 conversation_id=conversation_id,
                 store_messages=False,  # Don't try to store to avoid server dependency
@@ -112,7 +112,7 @@ class TestServiceExtendedFixes:
         print(f"✓ Anthropic response.content access works: {response.content[:50]}...")
 
     @pytest.mark.asyncio
-    async def test_response_structure_validation(self, extended_service):
+    async def test_response_structure_validation(self, session_service):
         """Test that response structure is correct (has content, not choices)."""
         request = LLMRequest(
             model="openai_fast",
@@ -125,7 +125,7 @@ class TestServiceExtendedFixes:
         )
 
         # Call chat method to verify response structure
-        response = await extended_service.chat(request)
+        response = await session_service.chat(request)
 
         # Verify response has correct structure (not the old choices format)
         assert hasattr(response, "content"), "Response should have content attribute"
@@ -141,7 +141,7 @@ class TestServiceExtendedFixes:
         print(f"✓ Response structure is correct: {response.content[:50]}...")
 
     @pytest.mark.asyncio
-    async def test_message_storage_structure(self, extended_service):
+    async def test_message_storage_structure(self, session_service):
         """Test that message storage uses correct response structure."""
         conversation_id = uuid4()
 
@@ -154,9 +154,9 @@ class TestServiceExtendedFixes:
 
         # Mock server client to capture what would be sent
         mock_server_client = AsyncMock()
-        extended_service.server_client = mock_server_client
+        session_service.server_client = mock_server_client
 
-        await extended_service.chat_with_conversation(
+        await session_service.chat_with_conversation(
             request=request, conversation_id=conversation_id, store_messages=True
         )
 
@@ -188,7 +188,7 @@ class TestServiceExtendedFixes:
         print("✓ Message storage structure is correct (uses response.content)")
 
     @pytest.mark.asyncio
-    async def test_tool_calls_in_response_structure(self, extended_service):
+    async def test_tool_calls_in_response_structure(self, session_service):
         """Test that tool calls are properly handled in the fixed response structure."""
         request = LLMRequest(
             model="openai_balanced",
@@ -219,7 +219,7 @@ class TestServiceExtendedFixes:
             temperature=0.1,
         )
 
-        response = await extended_service.chat(request)
+        response = await session_service.chat(request)
 
         # Verify response structure includes tool_calls if present
         assert hasattr(response, "tool_calls"), "Response should have tool_calls attribute"

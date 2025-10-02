@@ -1,5 +1,13 @@
 """
-Extended LLM service with conversation support for MCP integration.
+LLM service with conversation session management.
+
+This module provides LLMRingSession, a stateful extension of LLMRing that manages
+conversation sessions on llmring-server. Use this when you need:
+- Multi-turn conversations with persistent history
+- Conversation metadata (title, system prompt, settings)
+- Server-side conversation storage and retrieval
+
+For stateless, single-shot LLM calls, use the base LLMRing class instead.
 """
 
 import logging
@@ -13,8 +21,15 @@ from llmring.service import LLMRing
 logger = logging.getLogger(__name__)
 
 
-class LLMRingExtended(LLMRing):
-    """Extended LLM service with conversation and message tracking support."""
+class LLMRingSession(LLMRing):
+    """
+    LLM service with conversation session management.
+
+    Extends LLMRing with stateful conversation tracking on llmring-server.
+    Each session can create, manage, and retrieve conversation history.
+
+    Requires llmring-server for conversation persistence.
+    """
 
     def __init__(
         self,
@@ -23,25 +38,25 @@ class LLMRingExtended(LLMRing):
         lockfile_path: Optional[str] = None,
         server_url: Optional[str] = None,
         api_key: Optional[str] = None,
-        enable_conversations: bool = False,
+        enable_conversations: bool = True,
         message_logging_level: str = "full",
     ):
         """
-        Initialize the extended LLM service.
+        Initialize the session-based LLM service.
 
         Args:
             origin: Origin identifier for tracking
             registry_url: Optional custom registry URL
             lockfile_path: Optional path to lockfile
-            server_url: Optional llmring-server URL for receipts/conversations
+            server_url: llmring-server URL for conversation storage (required for sessions)
             api_key: API key for llmring-server or llmring-api
-            enable_conversations: Whether to enable conversation tracking
+            enable_conversations: Whether to enable conversation tracking (default: True)
             message_logging_level: Level of message logging (none, metadata, full)
         """
         # Pass server_url and api_key to parent for usage logging
         super().__init__(origin, registry_url, lockfile_path, server_url, api_key)
 
-        # Additional extended features
+        # Session-specific features
         self.enable_conversations = enable_conversations
         self.message_logging_level = message_logging_level
 
@@ -259,10 +274,29 @@ class LLMRingExtended(LLMRing):
             return []
 
 
-class ConversationManager:
-    """Helper class for managing conversations with LLMRingExtended."""
+# Backward compatibility alias (deprecated)
+class LLMRingExtended(LLMRingSession):
+    """
+    Deprecated: Use LLMRingSession instead.
 
-    def __init__(self, llm_service: LLMRingExtended):
+    This class is maintained for backward compatibility and will be removed
+    in a future version. Please migrate to LLMRingSession.
+    """
+    def __init__(self, *args, **kwargs):
+        import warnings
+        warnings.warn(
+            "LLMRingExtended is deprecated and will be removed in v2.0. "
+            "Use LLMRingSession instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        super().__init__(*args, **kwargs)
+
+
+class ConversationManager:
+    """Helper class for managing conversations with LLMRingSession."""
+
+    def __init__(self, llm_service: LLMRingSession):
         """
         Initialize conversation manager.
 
