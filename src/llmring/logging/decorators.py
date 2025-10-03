@@ -490,7 +490,20 @@ def _extract_messages_from_args(args: tuple, kwargs: dict) -> Optional[list]:
             if isinstance(messages, str):
                 return [{"role": "user", "content": messages}]
             elif isinstance(messages, list):
+                # Validate list format
+                if messages and not isinstance(messages[0], dict):
+                    logger.debug(
+                        f"Found '{param_name}' parameter but format is unexpected "
+                        f"(expected list of dicts, got {type(messages[0]).__name__}). "
+                        "Skipping message extraction."
+                    )
+                    return None
                 return messages
+            else:
+                logger.debug(
+                    f"Found '{param_name}' parameter but type is unexpected "
+                    f"(got {type(messages).__name__}). Skipping message extraction."
+                )
 
     # Try first positional argument if it looks like messages
     if args and isinstance(args[0], (list, str)):
@@ -498,6 +511,14 @@ def _extract_messages_from_args(args: tuple, kwargs: dict) -> Optional[list]:
         if isinstance(messages, str):
             return [{"role": "user", "content": messages}]
         elif isinstance(messages, list):
+            # Validate list format
+            if messages and not isinstance(messages[0], dict):
+                logger.debug(
+                    f"First argument is a list but format is unexpected "
+                    f"(expected list of dicts, got {type(messages[0]).__name__}). "
+                    "Skipping message extraction."
+                )
+                return None
             return messages
 
     return None

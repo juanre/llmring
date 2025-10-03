@@ -35,6 +35,8 @@ def count_tokens_openai(messages: List[Dict[str, Any]], model: str) -> int:
         return _estimate_tokens_from_messages(messages)
 
     # Get the correct encoding for the model
+    # NOTE: Hardcoded model name patterns below are an accepted exception per
+    # source-of-truth.md line 285 (token counting heuristics require model-specific encodings)
     try:
         if "gpt-4o" in model:
             encoding = tiktoken.get_encoding("o200k_base")

@@ -73,6 +73,8 @@ class LoggingService:
         try:
             # Log conversations if enabled
             if self.log_conversations:
+                # Log full conversation (messages + response) to conversations/messages tables
+                # This provides audit trail and conversation replay capabilities
                 await self._log_conversation(
                     request=request,
                     response=response,
@@ -82,8 +84,13 @@ class LoggingService:
                     cost_info=cost_info,
                     profile=profile,
                 )
-                # Also log usage metadata when logging conversations
-                # This ensures usage records exist for analytics and receipts
+
+                # ALSO log aggregated usage to usage_logs table for analytics
+                # This creates a separate record optimized for cost tracking and reporting
+                # The two tables serve different purposes:
+                # - conversations/messages: normalized, message-level audit trail
+                # - usage_logs: denormalized, call-level analytics (dashboards, billing)
+                # No duplicate data: conversations store content; usage_logs store metrics
                 await self._log_usage_only(
                     response=response,
                     alias=alias,

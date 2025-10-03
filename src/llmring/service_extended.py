@@ -132,8 +132,13 @@ class LLMRingSession(LLMRing):
             response = await super().chat(request, profile)
         finally:
             # Clear conversation_id after the call to avoid leaking to subsequent requests
+            # Defensive: wrap in try/except to ensure cleanup never fails
             if conversation_id and self.logging_service:
-                self.logging_service.clear_conversation_id()
+                try:
+                    self.logging_service.clear_conversation_id()
+                except Exception as e:
+                    logger.warning(f"Failed to clear conversation_id: {e}")
+                    # Continue execution - cleanup failure shouldn't break the request
 
         # Store messages if configured
         if (
