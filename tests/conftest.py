@@ -73,6 +73,28 @@ async def llmring_server_client(test_db_factory) -> AsyncGenerator[AsyncClient, 
     # Inject the test database into the app
     server_app.state.db = db
 
+    # Ensure receipt keys are configured for testing
+    from pathlib import Path
+    import tempfile
+    from llmring_server.config import ensure_receipt_keys, Settings
+
+    # Create a temporary directory for receipt keys
+    temp_dir = Path(tempfile.mkdtemp())
+    key_file = temp_dir / "receipt_test_keys"
+
+    # Generate keys and get them
+    settings = Settings()
+    settings = ensure_receipt_keys(settings, key_file=key_file)
+
+    # Inject settings into app state for dependency injection to work
+    server_app.state.settings = settings
+
+    # Also set environment variables as fallback for any code that creates Settings() directly
+    if settings.receipts_private_key_base64:
+        os.environ["LLMRING_RECEIPTS_PRIVATE_KEY_BASE64"] = settings.receipts_private_key_base64
+    if settings.receipts_public_key_base64:
+        os.environ["LLMRING_RECEIPTS_PUBLIC_KEY_BASE64"] = settings.receipts_public_key_base64
+
     # Create ASGI transport and client
     transport = ASGITransport(app=server_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -82,7 +104,7 @@ async def llmring_server_client(test_db_factory) -> AsyncGenerator[AsyncClient, 
 @pytest.fixture
 def project_headers():
     """Default project header for key-scoped server routes."""
-    return {"X-Project-Key": "proj_test"}
+    return {"X-API-Key": "proj_test"}
 
 
 @pytest_asyncio.fixture
