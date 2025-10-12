@@ -516,7 +516,12 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             request_params["temperature"] = temperature
 
         if max_tokens:
-            request_params["max_tokens"] = max_tokens
+            # Reasoning models (o1, o3-mini, GPT-5) use max_completion_tokens instead of max_tokens
+            # These models generate internal reasoning tokens not visible to users
+            if model.startswith(("o1", "o3", "gpt-5")):
+                request_params["max_completion_tokens"] = max_tokens
+            else:
+                request_params["max_tokens"] = max_tokens
 
         # Handle response format
         if response_format:
@@ -966,7 +971,12 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             request_params["temperature"] = temperature
 
         if max_tokens:
-            request_params["max_tokens"] = max_tokens
+            # Reasoning models (o1, o3-mini, GPT-5) use max_completion_tokens instead of max_tokens
+            # These models generate internal reasoning tokens not visible to users
+            if model.startswith(("o1", "o3", "gpt-5")):
+                request_params["max_completion_tokens"] = max_tokens
+            else:
+                request_params["max_tokens"] = max_tokens
 
         # Handle response format
         if response_format:
