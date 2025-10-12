@@ -242,6 +242,71 @@ async def cmd_lock_bump_registry(args):
     return 0
 
 
+def format_models_for_prompt(models_data: dict, providers_data: dict) -> str:
+    """
+    Format models from registry into a concise summary for system prompt.
+
+    Note: Expects fields from LockfileManagerTools.list_models() output format
+    including aliases: input_cost, output_cost, supports_functions, supports_vision.
+    These are added by list_models() to simplify access to nested pricing fields.
+
+    Args:
+        models_data: Dict from LockfileManagerTools.list_models()
+        providers_data: Dict from LockfileManagerTools.get_available_providers()
+
+    Returns:
+        Formatted string with model information
+    """
+    configured_providers = set(providers_data.get("configured", []))
+    models = models_data.get("models", [])
+
+    if not models:
+        return "(No models available from registry)"
+
+    # Group models by provider
+    by_provider = {}
+    for m in models:
+        provider = m.get("provider", "unknown")
+        if provider not in by_provider:
+            by_provider[provider] = []
+        by_provider[provider].append(m)
+
+    lines = []
+    for provider in sorted(by_provider.keys()):
+        has_key = provider in configured_providers
+        status = "✓ CONFIGURED" if has_key else "✗ no API key"
+        lines.append(f"\n{provider.upper()} ({status}):")
+
+        # Show top 5 models per provider (most relevant)
+        provider_models = by_provider[provider][:5]
+        for m in provider_models:
+            # Format: model_name | context | cost/1M in/out | capabilities
+            ctx = (
+                f"{m['context_window'] // 1000}K"
+                if m.get("context_window") and m["context_window"] > 0
+                else "?"
+            )
+            cost_in = f"${m['input_cost']:.2f}" if m.get("input_cost") else "?"
+            cost_out = f"${m['output_cost']:.2f}" if m.get("output_cost") else "?"
+            caps = []
+            if m.get("supports_vision"):
+                caps.append("vision")
+            if m.get("supports_functions"):
+                caps.append("tools")
+            caps_str = f" [{','.join(caps)}]" if caps else ""
+
+            lines.append(
+                f"  • {m['model_name']:<25} {ctx:>5} ctx | "
+                f"{cost_in:>6}/{cost_out:>6} per 1M{caps_str}"
+            )
+
+        if len(by_provider[provider]) > 5:
+            remaining = len(by_provider[provider]) - 5
+            lines.append(f"  ... and {remaining} more models")
+
+    return "\n".join(lines)
+
+
 async def cmd_lock_chat(args):
     """Conversational lockfile management using MCP chat interface."""
     import subprocess
@@ -283,8 +348,41 @@ async def cmd_lock_chat(args):
     # This ensures the 'advisor' alias works but doesn't affect the server
     os.environ["LLMRING_LOCKFILE_PATH"] = str(Lockfile.get_package_lockfile_path())
 
+    # Fetch registry models for system prompt prepopulation
+    from llmring.mcp.tools.lockfile_manager import LockfileManagerTools
+
+    print("📊 Loading available models from registry...")
+    try:
+        # Create tools instance to fetch models
+        tools_instance = LockfileManagerTools(lockfile_path=user_lockfile_path)
+
+        # Fetch models and providers in parallel for faster startup
+        models_data, providers_data = await asyncio.gather(
+            tools_instance.list_models(), tools_instance.get_available_providers()
+        )
+
+        # Format for system prompt
+        models_summary = format_models_for_prompt(models_data, providers_data)
+        configured_count = len(providers_data.get("configured", []))
+        total_count = models_data.get("total_count", 0)
+        print(f"✅ Loaded {total_count} models from {configured_count} configured provider(s)\n")
+    except Exception as e:
+        import logging
+
+        logging.warning(f"Could not fetch models for system prompt: {e}")
+        print("⚠️  Could not fetch models from registry")
+        models_summary = "(Registry unavailable - use list_models tool to fetch current models)"
+
     # System prompt that explains multi-model aliases and profiles clearly
-    system_prompt = """You are the LLMRing Lockfile Manager assistant. You help users manage their LLM aliases and model configurations.
+    system_prompt = f"""You are the LLMRing Lockfile Manager assistant. You help users manage their LLM aliases and model configurations.
+
+AVAILABLE MODELS FROM REGISTRY (snapshot at startup):
+{models_summary}
+
+The models listed above are currently available from the registry. Use this information to make informed recommendations.
+If a provider shows "✗ no API key", models from that provider won't work until the user configures their API key.
+
+NOTE: This is a snapshot taken at startup. You can call the list_models tool to fetch fresh or complete model information if needed.
 
 IMPORTANT: Understanding Model Pools in LLMRing
 ================================================
