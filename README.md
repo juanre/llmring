@@ -1,21 +1,21 @@
 # LLMRing
 
-A comprehensive Python library for LLM integration with unified interface, advanced features, and MCP support. Supports OpenAI, Anthropic, Google Gemini, and Ollama with consistent APIs.
+A Python library for LLM integration with unified interface and MCP support. Supports OpenAI, Anthropic, Google Gemini, and Ollama with consistent APIs.
 
-## Key Features
+## Features
 
 - Unified Interface: Single API for all major LLM providers
-- Streaming Support: Real streaming for all providers (not simulated)
+- Streaming Support: Streaming for all providers
 - Native Tool Calling: Provider-native function calling with consistent interface
 - Unified Structured Output: JSON schema works across all providers with automatic adaptation
 - Conversational Configuration: MCP chat interface for natural language lockfile setup
-- Smart Aliases: Always-current semantic aliases (`deep`, `fast`, `balanced`) via intelligent recommendations
-- Cost Tracking: Automatic cost calculation with on-demand receipt generation
+- Aliases: Semantic aliases (`deep`, `fast`, `balanced`) with registry-based recommendations
+- Cost Tracking: Cost calculation with on-demand receipt generation
 - Registry Integration: Centralized model capabilities and pricing
-- Fallback Models: Automatic failover to alternative models for resilience
-- Type Safety: Comprehensive typed exceptions and error handling
+- Fallback Models: Automatic failover to alternative models
+- Type Safety: Typed exceptions and error handling
 - MCP Integration: Model Context Protocol support for tool ecosystems
-- MCP Chat Client: Generic chat interface with persistent history for any MCP server
+- MCP Chat Client: Chat interface with persistent history for any MCP server
 
 ## Quick Start
 
@@ -66,7 +66,7 @@ async with LLMRing() as service:
 
 ```python
 async with LLMRing() as service:
-    # Real streaming for all providers
+    # Streaming for all providers
     request = LLMRequest(
         model="balanced",
         messages=[Message(role="user", content="Count to 10")]
@@ -144,10 +144,10 @@ finally:
 
 ## Advanced Features
 
-### Unified Structured Output (All Providers)
+### Unified Structured Output
 
 ```python
-# Same JSON schema API works across ALL providers!
+# JSON schema API works across all providers
 request = LLMRequest(
     model="balanced",  # Works with any provider
     messages=[Message(role="user", content="Generate a person")],
@@ -254,11 +254,11 @@ request = LLMRequest(
 # model="advisor"   → Claude Opus 4.1 - powers conversational config
 ```
 
-**Key Benefits:**
-- **Always current**: Registry-based recommendations, no hardcoded models
-- **Resilient**: Fallback models provide automatic failover
-- **Cost-aware**: Transparent cost analysis and recommendations
-- **Environment-specific**: Different configurations for dev/staging/prod
+Key features:
+- Registry-based recommendations
+- Fallback models provide automatic failover
+- Cost analysis and recommendations
+- Environment-specific configurations for dev/staging/prod
 
 ### Profiles: Environment-Specific Configurations
 
@@ -368,20 +368,20 @@ request = LLMRequest(
 - **Model Reference**: Full `provider:model` format like `openai:gpt-4o` (escape hatch)
 - **Raw SDK Access**: Bypassing LLMRing entirely using provider clients directly (see [Provider Guide](docs/providers.md))
 
-**Recommendation**: Use aliases for maintainability and cost optimization. Use direct model references only when you need a specific model version or provider-specific features.
+Recommendation: Use aliases for maintainability and cost optimization. Use direct model references only when you need a specific model version or provider-specific features.
 
-### Raw SDK Access (Escape Hatch)
+### Raw SDK Access
 
-When you need the full power of the underlying SDKs:
+When you need direct access to the underlying SDKs:
 
 ```python
-# Access any provider's raw client for maximum SDK features
+# Access provider SDK clients directly
 openai_client = service.get_provider("openai").client      # openai.AsyncOpenAI
 anthropic_client = service.get_provider("anthropic").client # anthropic.AsyncAnthropic
 google_client = service.get_provider("google").client       # google.genai.Client
 ollama_client = service.get_provider("ollama").client       # ollama.AsyncClient
 
-# Use any SDK feature not exposed by LLMRing
+# Use SDK features not exposed by LLMRing
 response = await openai_client.chat.completions.create(
     model="fast",  # Use alias or provider:model format when needed
     messages=[{"role": "user", "content": "Hello"}],
@@ -422,8 +422,8 @@ response = google_client.models.generate_content(
 )
 ```
 
-**When to use raw clients:**
-- Advanced SDK features not in LLMRing
+When to use raw clients:
+- SDK features not exposed by LLMRing
 - Provider-specific optimizations
 - Complex configurations
 - Performance-critical applications
@@ -432,10 +432,10 @@ response = google_client.models.generate_content(
 
 | Provider | Models | Streaming | Tools | Special Features |
 |----------|--------|-----------|-------|------------------|
-| **OpenAI** | GPT-4o, GPT-4o-mini, o1 | ✅ Real | ✅ Native | JSON schema, PDF processing |
-| **Anthropic** | Claude 3.5 Sonnet/Haiku | ✅ Real | ✅ Native | Prompt caching, large context |
-| **Google** | Gemini 1.5/2.0 Pro/Flash | ✅ Real | ✅ Native | Multimodal, 2M+ context |
-| **Ollama** | Llama, Mistral, etc. | ✅ Real | 🔧 Prompt | Local models, custom options |
+| **OpenAI** | GPT-4o, GPT-4o-mini, o1 | Yes | Native | JSON schema, PDF processing |
+| **Anthropic** | Claude 3.5 Sonnet/Haiku | Yes | Native | Prompt caching, large context |
+| **Google** | Gemini 1.5/2.0 Pro/Flash | Yes | Native | Multimodal, 2M+ context |
+| **Ollama** | Llama, Mistral, etc. | Yes | Prompt-based | Local models, custom options |
 
 ## Setup
 
@@ -476,7 +476,7 @@ pip install ollama>=0.4     # Ollama
 ```python
 from llmring.mcp.client import create_enhanced_llm
 
-# Create MCP-enabled LLM with tool ecosystem
+# Create MCP-enabled LLM with tools
 llm = await create_enhanced_llm(
     model="fast",
     mcp_server_path="path/to/mcp/server"
@@ -541,14 +541,14 @@ except ProviderRateLimitError as e:
     print(f"Rate limited, retry after {e.retry_after}s")
 ```
 
-## Key Benefits
+## Key Features Summary
 
 - Unified Interface: Switch providers without code changes
-- Performance: Real streaming, prompt caching, optimized requests
+- Performance: Streaming, prompt caching, optimized requests
 - Reliability: Circuit breakers, retries, typed error handling
-- Observability: Real-time cost tracking, on-demand receipt generation, batch certification
-- Flexibility: Provider-specific features + raw SDK access
-- Standards: Type-safe, well-tested, production-ready
+- Observability: Cost tracking, on-demand receipt generation, batch certification
+- Flexibility: Provider-specific features and raw SDK access
+- Standards: Type-safe, well-tested
 
 ## License
 
