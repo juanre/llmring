@@ -267,3 +267,64 @@ class TestServiceWithRegistry:
 
         # Registry fields will be missing, that's ok
         assert "display_name" not in info or info["display_name"] is None
+
+
+class TestReasoningModelFields:
+    """Test reasoning model specific fields in RegistryModel schema."""
+
+    def test_registry_model_supports_reasoning_fields(self):
+        """Test that RegistryModel schema includes reasoning model fields."""
+        # Create a reasoning model with the new fields
+        reasoning_model = RegistryModel(
+            provider="openai",
+            model_name="o1",
+            display_name="o1",
+            description="Reasoning model",
+            is_reasoning_model=True,
+            min_recommended_reasoning_tokens=5000,
+            max_input_tokens=128000,
+            max_output_tokens=32768,
+            is_active=True,
+        )
+
+        # Verify the fields are accessible
+        assert reasoning_model.is_reasoning_model is True
+        assert reasoning_model.min_recommended_reasoning_tokens == 5000
+
+    def test_registry_model_reasoning_fields_default_values(self):
+        """Test default values for reasoning model fields."""
+        # Create a non-reasoning model without specifying reasoning fields
+        non_reasoning_model = RegistryModel(
+            provider="openai",
+            model_name="gpt-4",
+            display_name="GPT-4",
+            description="Non-reasoning model",
+            is_active=True,
+        )
+
+        # Verify defaults
+        assert non_reasoning_model.is_reasoning_model is False
+        assert non_reasoning_model.min_recommended_reasoning_tokens is None
+
+    def test_registry_model_parses_reasoning_fields_from_json(self):
+        """Test that reasoning fields are preserved when parsing from JSON."""
+        # Simulate JSON data from registry
+        json_data = {
+            "provider": "openai",
+            "model_name": "gpt-5",
+            "display_name": "GPT-5",
+            "description": "GPT-5 reasoning model",
+            "is_reasoning_model": True,
+            "min_recommended_reasoning_tokens": 2000,
+            "max_input_tokens": 272000,
+            "max_output_tokens": 128000,
+            "is_active": True,
+        }
+
+        # Parse the model
+        model = RegistryModel(**json_data)
+
+        # Verify reasoning fields are preserved
+        assert model.is_reasoning_model is True
+        assert model.min_recommended_reasoning_tokens == 2000
+        assert model.model_name == "gpt-5"

@@ -46,6 +46,17 @@ class RegistryModel(BaseModel):
     supports_temperature: bool = Field(True, description="Supports temperature parameter")
     supports_streaming: bool = Field(True, description="Supports streaming responses")
 
+    # Reasoning model support
+    is_reasoning_model: bool = Field(
+        False,
+        description="Model uses reasoning tokens for internal thinking before generating output"
+    )
+    min_recommended_reasoning_tokens: Optional[int] = Field(
+        None,
+        description="Typical number of reasoning tokens this model uses before generating output. "
+                    "For reasoning models, max_completion_tokens should be at least this value + desired output tokens."
+    )
+
     # API routing hints
     api_endpoint: Optional[Literal["chat", "responses", "assistants", "generateContent"]] = Field(
         None, description="Preferred API endpoint (chat/responses/assistants/generateContent)"
