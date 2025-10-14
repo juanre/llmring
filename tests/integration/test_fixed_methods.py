@@ -71,15 +71,17 @@ class TestFixedMethods:
                 metadata={"test": "data"},
             )
         except Exception as e:
-            # Connection errors and method not allowed (405) are OK, we're testing the signature
+            # Connection errors, 404, and method not allowed (405) are OK, we're testing the signature
             error_str = str(e).lower()
             if (
                 "connect" not in error_str
                 and "refused" not in error_str
+                and "404" not in error_str
+                and "not found" not in error_str
                 and "405" not in error_str
                 and "method not allowed" not in error_str
             ):
-                # Re-raise if it's not a connection/405 error
+                # Re-raise if it's not a connection/404/405 error
                 raise
 
     @pytest.mark.asyncio

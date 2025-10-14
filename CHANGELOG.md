@@ -2,6 +2,53 @@
 
 All notable changes to LLMRing will be documented in this file.
 
+## [1.1.1] - 2025-10-14
+
+### 🚀 Features
+
+#### Reasoning Model Support
+- **NEW**: Support for OpenAI reasoning models (o1, o3, gpt-5 series)
+- **NEW**: `reasoning_tokens` parameter for controlling internal reasoning budget
+- **NEW**: Registry-based detection of reasoning models via `is_reasoning_model` flag
+- **NEW**: `max_completion_tokens` used instead of `max_tokens` for reasoning models
+- **NEW**: `min_recommended_reasoning_tokens` field in registry for optimal settings
+
+#### MCP Enhancements
+- **IMPROVED**: Prepopulate lockfile chat with registry models for better recommendations
+
+### 🔧 Improvements
+
+#### Provider Updates
+- **ADDED**: `reasoning_tokens` parameter to Anthropic provider signature (ignored, for API consistency)
+- **FIXED**: OpenAI reasoning model configuration with proper defaults
+- **IMPROVED**: Registry model schema validation for reasoning capabilities
+
+#### Testing
+- **FIXED**: Integration tests to handle 404 errors gracefully
+- **FIXED**: Receipt test expectations for automatic generation
+- **UPDATED**: Test registry data with correct reasoning token recommendations
+- **ADDED**: OpenAI validation tests for reasoning models
+
+#### Dependencies
+- **FIXED**: Use PyPI version of llmring-server (>=0.1.2) instead of local path
+- **REMOVED**: Local development path override for llmring-server
+
+#### Documentation
+- **IMPROVED**: Removed marketing language and emojis from README for professional tone
+
+### 🐛 Bug Fixes
+- **FIXED**: Reasoning model detection using registry instead of hardcoded list
+- **FIXED**: Token parameter selection based on model capabilities
+- **FIXED**: Test failures related to receipt generation behavior
+
+### 📦 Technical Details
+- Reasoning models use `max_completion_tokens` parameter (OpenAI API requirement)
+- Non-reasoning models continue using standard `max_tokens` parameter
+- Registry provides single source of truth for model capabilities
+- Automatic fallback to hardcoded defaults if registry unavailable
+
+---
+
 ## [1.1.0] - 2025-09-29
 
 ### 📚 Documentation

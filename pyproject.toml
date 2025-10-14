@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llmring"
-version = "1.1.0"
+version = "1.1.1"
 description = "Unified Python interface for OpenAI, Anthropic, Google, and Ollama LLMs"
 readme = "README.md"
 license = { text = "MIT" }
@@ -83,7 +83,7 @@ dev = [
     "types-toml>=0.10.8.20240310",
     "twine>=6.2.0",
     "pre-commit>=4.3.0",
-    "llmring-server",
+    "llmring-server>=0.1.2",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -139,6 +139,3 @@ ensure_newline_before_comments = true
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-
-[tool.uv.sources]
-llmring-server = { path = "../llmring-server", editable = true }

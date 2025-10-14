@@ -69,8 +69,7 @@
       "supports_parallel_tool_calls": true,
       "supports_temperature": false,
       "is_reasoning_model": true,
-      "min_recommended_reasoning_tokens": 2000,
-      "api_endpoint": "chat",
+      "api_endpoint": null,
       "is_active": true,
       "added_date": "2025-01-01T00:00:00Z",
       "deprecated_date": null
@@ -90,7 +89,7 @@
       "supports_parallel_tool_calls": false,
       "supports_temperature": false,
       "is_reasoning_model": true,
-      "min_recommended_reasoning_tokens": 2000,
+      "min_recommended_reasoning_tokens": 5000,
       "api_endpoint": "chat",
       "is_active": true,
       "added_date": "2024-09-12T00:00:00Z",

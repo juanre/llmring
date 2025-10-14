@@ -65,8 +65,9 @@ class TestOnDemandReceiptsE2E:
         log_data = log_response.json()
         conversation_id = log_data["conversation_id"]
 
-        # Step 2: Verify no automatic receipt
-        assert log_data.get("receipt") is None, "Phase 7.5: receipts should not be auto-generated"
+        # Step 2: Verify automatic receipt generation (UPDATED: receipts are now auto-generated)
+        assert log_data.get("receipt") is not None, "Receipts should be auto-generated"
+        assert log_data["receipt"]["receipt_id"].startswith("rcpt_")
 
         # Step 3: Generate receipt on-demand
         receipt_response = await llmring_server_client.post(

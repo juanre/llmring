@@ -20,7 +20,7 @@ class TestOpenAIReasoningModels:
 
         assert config["is_reasoning"] is True
         assert config["min_recommended_reasoning_tokens"] == 2000
-        assert config["api_endpoint"] == "chat"
+        assert config["api_endpoint"] is None
 
     @pytest.mark.asyncio
     async def test_get_model_config_non_reasoning_model(self, openai_provider):
@@ -36,7 +36,7 @@ class TestOpenAIReasoningModels:
         config = await openai_provider._get_model_config("o1")
 
         assert config["is_reasoning"] is True
-        assert config["min_recommended_reasoning_tokens"] == 2000
+        assert config["min_recommended_reasoning_tokens"] == 5000
 
     @pytest.mark.asyncio
     async def test_get_model_config_fallback_when_registry_unavailable(self):
@@ -74,7 +74,7 @@ class TestOpenAIReasoningModels:
         response = await openai_provider.chat(
             messages=messages,
             model="gpt-5",
-            max_tokens=500  # User wants 500 output tokens
+            max_tokens=500,  # User wants 500 output tokens
             # Should automatically add 2000 reasoning tokens = 2500 total
         )
 
@@ -93,7 +93,7 @@ class TestOpenAIReasoningModels:
             messages=messages,
             model="gpt-5",
             max_tokens=500,
-            reasoning_tokens=3000  # Custom reasoning budget
+            reasoning_tokens=3000,  # Custom reasoning budget
             # Should use 3000 + 500 = 3500 total
         )
 
@@ -111,7 +111,7 @@ class TestOpenAIReasoningModels:
             messages=messages,
             model="gpt-3.5-turbo",
             max_tokens=50,
-            reasoning_tokens=2000  # Should be ignored
+            reasoning_tokens=2000,  # Should be ignored
         )
 
         assert response.content is not None
