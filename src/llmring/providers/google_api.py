@@ -323,6 +323,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -338,6 +339,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model: Model to use (e.g., "gemini-2.5-pro")
             temperature: Sampling temperature (0.0 to 1.0)
             max_tokens: Maximum tokens to generate
+            reasoning_tokens: Token budget for reasoning models' internal thinking (ignored)
             response_format: Optional response format
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
@@ -353,6 +355,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning_tokens=reasoning_tokens,
             response_format=response_format,
             tools=tools,
             tool_choice=tool_choice,
@@ -367,6 +370,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -382,6 +386,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model: Model to use (e.g., "gemini-2.5-pro")
             temperature: Sampling temperature (0.0 to 1.0)
             max_tokens: Maximum tokens to generate
+            reasoning_tokens: Token budget for reasoning models' internal thinking (ignored)
             response_format: Optional response format
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
@@ -401,6 +406,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning_tokens=reasoning_tokens,
             response_format=response_format,
             tools=tools,
             tool_choice=tool_choice,
@@ -415,6 +421,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -423,6 +430,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """Real streaming implementation using Google SDK."""
+        # reasoning_tokens is ignored for Google models
         # Process model name (remove provider prefix)
         model = strip_provider_prefix(model, "google")
         model = strip_provider_prefix(model, "gemini")
@@ -828,6 +836,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -836,6 +845,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
+        # reasoning_tokens is ignored for Google models
         # Strip provider prefix if present
         model = strip_provider_prefix(model, "google")
         model = strip_provider_prefix(model, "gemini")

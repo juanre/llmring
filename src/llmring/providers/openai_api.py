@@ -334,6 +334,46 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             # Fallback to rough estimate: ~4 characters per token for English text
             return len(text) // 4
 
+    async def _get_model_config(self, model: str) -> Dict[str, Any]:
+        """
+        Get model configuration from registry.
+
+        Args:
+            model: Model name (without provider prefix)
+
+        Returns:
+            Dictionary with model configuration:
+            - is_reasoning: Whether model uses reasoning tokens
+            - min_recommended_reasoning_tokens: Minimum recommended token budget
+            - api_endpoint: Preferred API endpoint (chat/responses)
+        """
+        try:
+            if self._registry_client:
+                models = await self._registry_client.fetch_current_models("openai")
+                model_info = next((m for m in models if m.model_name == model), None)
+
+                if model_info:
+                    # Only use fallback default for reasoning models
+                    min_reasoning_tokens = model_info.min_recommended_reasoning_tokens
+                    if model_info.is_reasoning_model and min_reasoning_tokens is None:
+                        min_reasoning_tokens = 2000
+
+                    return {
+                        "is_reasoning": model_info.is_reasoning_model,
+                        "min_recommended_reasoning_tokens": min_reasoning_tokens,
+                        "api_endpoint": model_info.api_endpoint,
+                    }
+        except Exception as e:
+            self.log_debug(f"Could not fetch model config from registry: {e}")
+
+        # Fallback to string matching for backward compatibility
+        is_reasoning = model.startswith(("o1", "o3", "gpt-5"))
+        return {
+            "is_reasoning": is_reasoning,
+            "min_recommended_reasoning_tokens": 2000 if is_reasoning else None,
+            "api_endpoint": None,
+        }
+
     async def _chat_via_responses(
         self,
         messages: List[Message],
@@ -443,6 +483,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -455,7 +496,8 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             messages: List of messages
             model: Model to use
             temperature: Sampling temperature
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate (output tokens)
+            reasoning_tokens: Token budget for reasoning models' internal thinking
             response_format: Optional response format
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
@@ -487,6 +529,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                reasoning_tokens=reasoning_tokens,
                 response_format=response_format,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -515,12 +558,22 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         if temperature is not None:
             request_params["temperature"] = temperature
 
+        # Handle token limits with registry-based reasoning model detection
         if max_tokens:
-            # Reasoning models (o1, o3-mini, GPT-5) use max_completion_tokens instead of max_tokens
-            # These models generate internal reasoning tokens not visible to users
-            if model.startswith(("o1", "o3", "gpt-5")):
-                request_params["max_completion_tokens"] = max_tokens
+            model_config = await self._get_model_config(model)
+
+            if model_config["is_reasoning"]:
+                # For reasoning models, separate reasoning and output tokens
+                reasoning_budget = reasoning_tokens if reasoning_tokens is not None else model_config["min_recommended_reasoning_tokens"]
+                total_tokens = reasoning_budget + max_tokens
+                request_params["max_completion_tokens"] = total_tokens
+
+                self.log_debug(
+                    f"Reasoning model '{model}': reasoning={reasoning_budget}, "
+                    f"output={max_tokens}, total={total_tokens}"
+                )
             else:
+                # Non-reasoning models use max_tokens directly
                 request_params["max_tokens"] = max_tokens
 
         # Handle response format
@@ -797,6 +850,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -811,7 +865,8 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             messages: List of messages
             model: Model to use (e.g., "gpt-4o")
             temperature: Sampling temperature (0.0 to 1.0)
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate (output tokens)
+            reasoning_tokens: Token budget for reasoning models' internal thinking
             response_format: Optional response format
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
@@ -827,6 +882,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning_tokens=reasoning_tokens,
             response_format=response_format,
             tools=tools,
             tool_choice=tool_choice,
@@ -841,6 +897,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -855,7 +912,8 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             messages: List of messages
             model: Model to use (e.g., "gpt-4o")
             temperature: Sampling temperature (0.0 to 1.0)
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate (output tokens)
+            reasoning_tokens: Token budget for reasoning models' internal thinking
             response_format: Optional response format
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
@@ -875,6 +933,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning_tokens=reasoning_tokens,
             response_format=response_format,
             tools=tools,
             tool_choice=tool_choice,
@@ -887,6 +946,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -901,7 +961,8 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             messages: List of messages
             model: Model to use (e.g., "gpt-4o")
             temperature: Sampling temperature (0.0 to 1.0)
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate (output tokens)
+            reasoning_tokens: Token budget for reasoning models' internal thinking
             response_format: Optional response format
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
@@ -970,12 +1031,22 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         if temperature is not None:
             request_params["temperature"] = temperature
 
+        # Handle token limits with registry-based reasoning model detection
         if max_tokens:
-            # Reasoning models (o1, o3-mini, GPT-5) use max_completion_tokens instead of max_tokens
-            # These models generate internal reasoning tokens not visible to users
-            if model.startswith(("o1", "o3", "gpt-5")):
-                request_params["max_completion_tokens"] = max_tokens
+            model_config = await self._get_model_config(model)
+
+            if model_config["is_reasoning"]:
+                # For reasoning models, separate reasoning and output tokens
+                reasoning_budget = reasoning_tokens if reasoning_tokens is not None else model_config["min_recommended_reasoning_tokens"]
+                total_tokens = reasoning_budget + max_tokens
+                request_params["max_completion_tokens"] = total_tokens
+
+                self.log_debug(
+                    f"Reasoning model '{model}': reasoning={reasoning_budget}, "
+                    f"output={max_tokens}, total={total_tokens}"
+                )
             else:
+                # Non-reasoning models use max_tokens directly
                 request_params["max_tokens"] = max_tokens
 
         # Handle response format

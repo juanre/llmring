@@ -171,6 +171,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -185,7 +186,8 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             messages: List of messages
             model: Model to use (e.g., "claude-3-opus-20240229")
             temperature: Sampling temperature (0.0 to 1.0)
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate (output tokens)
+            reasoning_tokens: Token budget for reasoning models' internal thinking (ignored)
             response_format: Optional response format
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
@@ -196,6 +198,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         Returns:
             LLM response with complete generated content
         """
+        # reasoning_tokens is ignored for Anthropic models
         return await self._chat_non_streaming(
             messages=messages,
             model=model,

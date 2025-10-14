@@ -53,6 +53,48 @@
       "is_active": true,
       "added_date": "2023-06-13T00:00:00Z",
       "deprecated_date": null
+    },
+    "openai:gpt-5": {
+      "provider": "openai",
+      "model_name": "gpt-5",
+      "display_name": "GPT-5",
+      "description": "Advanced reasoning model",
+      "max_input_tokens": 200000,
+      "max_output_tokens": 100000,
+      "dollars_per_million_tokens_input": 5.00,
+      "dollars_per_million_tokens_output": 15.00,
+      "supports_vision": true,
+      "supports_function_calling": true,
+      "supports_json_mode": true,
+      "supports_parallel_tool_calls": true,
+      "supports_temperature": false,
+      "is_reasoning_model": true,
+      "min_recommended_reasoning_tokens": 2000,
+      "api_endpoint": "chat",
+      "is_active": true,
+      "added_date": "2025-01-01T00:00:00Z",
+      "deprecated_date": null
+    },
+    "openai:o1": {
+      "provider": "openai",
+      "model_name": "o1",
+      "display_name": "O1",
+      "description": "Reasoning model with extended thinking",
+      "max_input_tokens": 200000,
+      "max_output_tokens": 100000,
+      "dollars_per_million_tokens_input": 15.00,
+      "dollars_per_million_tokens_output": 60.00,
+      "supports_vision": false,
+      "supports_function_calling": false,
+      "supports_json_mode": false,
+      "supports_parallel_tool_calls": false,
+      "supports_temperature": false,
+      "is_reasoning_model": true,
+      "min_recommended_reasoning_tokens": 2000,
+      "api_endpoint": "chat",
+      "is_active": true,
+      "added_date": "2024-09-12T00:00:00Z",
+      "deprecated_date": null
     }
   }
 }

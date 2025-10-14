@@ -24,6 +24,12 @@ class LLMRequest(BaseModel):
     model: Optional[str] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
+    reasoning_tokens: Optional[int] = Field(
+        None,
+        description="Token budget for reasoning models' internal thinking. "
+                    "If not specified for reasoning models, defaults to min_recommended_reasoning_tokens from registry. "
+                    "For non-reasoning models, this parameter is ignored."
+    )
     response_format: Optional[Dict[str, Any]] = None
     tools: Optional[List[Dict[str, Any]]] = None
     tool_choice: Optional[Union[str, Dict[str, Any]]] = None

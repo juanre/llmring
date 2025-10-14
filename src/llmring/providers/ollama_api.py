@@ -209,6 +209,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -224,6 +225,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model: Model to use (e.g., "llama3.3")
             temperature: Sampling temperature (0.0 to 1.0)
             max_tokens: Maximum tokens to generate
+            reasoning_tokens: Token budget for reasoning models' internal thinking (ignored)
             response_format: Optional response format
             tools: Optional list of tools (implemented through prompt engineering)
             tool_choice: Optional tool choice parameter (implemented through prompt engineering)
@@ -239,6 +241,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning_tokens=reasoning_tokens,
             response_format=response_format,
             tools=tools,
             tool_choice=tool_choice,
@@ -253,6 +256,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -268,6 +272,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model: Model to use (e.g., "llama3.3")
             temperature: Sampling temperature (0.0 to 1.0)
             max_tokens: Maximum tokens to generate
+            reasoning_tokens: Token budget for reasoning models' internal thinking (ignored)
             response_format: Optional response format
             tools: Optional list of tools (implemented through prompt engineering)
             tool_choice: Optional tool choice parameter (implemented through prompt engineering)
@@ -287,6 +292,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning_tokens=reasoning_tokens,
             response_format=response_format,
             tools=tools,
             tool_choice=tool_choice,
@@ -301,6 +307,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -309,6 +316,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """Real streaming implementation using Ollama SDK."""
+        # reasoning_tokens is ignored for Ollama models
         # Strip provider prefix if present
         model = strip_provider_prefix(model, "ollama")
 
@@ -449,6 +457,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -457,6 +466,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
+        # reasoning_tokens is ignored for Ollama models
         # Strip provider prefix if present
         model = strip_provider_prefix(model, "ollama")
 

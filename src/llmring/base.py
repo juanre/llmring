@@ -38,6 +38,7 @@ class BaseLLMProvider(ABC):
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -52,7 +53,8 @@ class BaseLLMProvider(ABC):
             messages: List of messages in the conversation
             model: Model identifier to use
             temperature: Sampling temperature (0.0 to 1.0)
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate (output tokens)
+            reasoning_tokens: Token budget for reasoning models' internal thinking
             response_format: Optional response format specification
             tools: Optional list of tools/functions available
             tool_choice: Optional tool choice parameter
@@ -72,6 +74,7 @@ class BaseLLMProvider(ABC):
         model: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
@@ -86,7 +89,8 @@ class BaseLLMProvider(ABC):
             messages: List of messages in the conversation
             model: Model identifier to use
             temperature: Sampling temperature (0.0 to 1.0)
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate (output tokens)
+            reasoning_tokens: Token budget for reasoning models' internal thinking
             response_format: Optional response format specification
             tools: Optional list of tools/functions available
             tool_choice: Optional tool choice parameter

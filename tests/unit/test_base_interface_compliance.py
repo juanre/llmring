@@ -50,6 +50,7 @@ class TestBaseInterfaceCompliance:
             "model",
             "temperature",
             "max_tokens",
+            "reasoning_tokens",
             "response_format",
             "tools",
             "tool_choice",
