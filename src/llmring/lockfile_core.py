@@ -574,22 +574,8 @@ class Lockfile(BaseModel):
 
         # Parse pyproject.toml to find the package
         try:
-            import tomllib
-        except ImportError:
-            try:
-                import tomli as tomllib
-            except ImportError:
-                # Can't parse TOML, fall back to heuristics
-                src_dir = project_root / "src"
-                if src_dir.exists():
-                    for item in src_dir.iterdir():
-                        if item.is_dir() and (item / "__init__.py").exists():
-                            return item
-                return None
-
-        try:
-            with open(pyproject_path, "rb") as f:
-                data = tomllib.load(f)
+            with open(pyproject_path, "r") as f:
+                data = toml.load(f)
 
             # Check for package name in project metadata
             package_name = None
@@ -617,7 +603,9 @@ class Lockfile(BaseModel):
                         return item
 
         except Exception as e:
-            logger.debug(f"Could not parse pyproject.toml: {e}")
+            import logging
+
+            logging.debug(f"Could not parse pyproject.toml: {e}")
 
         return None
 
