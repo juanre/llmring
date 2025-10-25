@@ -18,10 +18,10 @@ async with LLMRing(
     # Use service here
     response = await service.chat(request)
 
-# Lockfile Resolution Order (when lockfile_path not specified):
+# If you omit lockfile_path, resolution order is:
 # 1. LLMRING_LOCKFILE_PATH environment variable (file must exist)
-# 2. ./llmring.lock in current directory (if exists)
-# 3. Bundled lockfile from package at src/llmring/llmring.lock (minimal fallback)
+# 2. ./llmring.lock in the current directory (if present)
+# 3. Bundled fallback at src/llmring/llmring.lock
 
 # Or manual resource management
 service = LLMRing()
@@ -32,9 +32,10 @@ finally:
 ```
 
 **Methods:**
-- `async chat(request: LLMRequest, profile: str = None) -> LLMResponse | AsyncIterator[StreamChunk]`
+- `async chat(request: LLMRequest, profile: str | None = None) -> LLMResponse`
+- `async chat_stream(request: LLMRequest, profile: str | None = None) -> AsyncIterator[StreamChunk]`
 - `get_provider(name: str) -> BaseLLMProvider`
-- `resolve_alias(alias: str, profile: str = None) -> str` - Resolves alias with fallback support
+- `resolve_alias(alias_or_model: str, profile: str | None = None) -> str`
 - `calculate_cost(response: LLMResponse) -> Dict[str, float]`
 - `async close() -> None` - Clean up resources
 - `async __aenter__() -> LLMRing` - Context manager entry
@@ -55,10 +56,10 @@ request = LLMRequest(
     response_format={"type": "json_object"}, # Optional: Response format
     tools=[...],                             # Optional: Available functions
     tool_choice="auto",                      # Optional: Tool usage mode
-    stream=False,                            # Optional: Streaming mode
     extra_params={}                          # Optional: Provider-specific params
 )
 ```
+> Note: streaming is handled via `LLMRing.chat_stream(...)`, not by passing a `stream` flag on the request.
 
 ### LLMResponse
 

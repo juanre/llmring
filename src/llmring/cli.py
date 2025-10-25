@@ -476,29 +476,19 @@ async def cmd_list_models(args):
 
 async def cmd_chat(args):
     """Send a chat message to an LLM."""
-    # Check if we should use an alias
-    if ":" not in args.model:
-        # Try to resolve as alias from package lockfile
-        package_dir = Lockfile.find_package_directory()
-        if package_dir:
-            lockfile_path = package_dir / LOCKFILE_NAME
-        else:
-            # Fall back to current directory if no package found
-            lockfile_path = Path(LOCKFILE_NAME)
-
-        if lockfile_path.exists():
-            lockfile = Lockfile.load(lockfile_path)
-
-            # Get profile from environment or use default
-            profile_name = os.environ.get("LLMRING_PROFILE", args.profile)
-
-            # Resolve alias
-            model_ref = lockfile.resolve_alias(args.model, profile_name)
-            if model_ref:
-                print(f"[Using alias '{args.model}' → '{model_ref}']")
-                args.model = model_ref
+    model_input = args.model
+    profile_name = os.environ.get("LLMRING_PROFILE", args.profile)
 
     async with LLMRing() as ring:
+        # Preview alias resolution without losing alias metadata
+        if ":" not in model_input:
+            try:
+                resolved_preview = ring.resolve_alias(model_input, profile_name)
+                print(f"[Using alias '{model_input}' → '{resolved_preview}']")
+            except ValueError as exc:
+                print(f"Error: {exc}")
+                return 1
+
         # Create message
         messages = [Message(role="user", content=args.message)]
         if args.system:
@@ -507,25 +497,26 @@ async def cmd_chat(args):
         # Create request
         request = LLMRequest(
             messages=messages,
-            model=args.model,
+            model=model_input,
             temperature=args.temperature,
             max_tokens=args.max_tokens,
-            stream=args.stream if hasattr(args, "stream") else False,
         )
 
         try:
             # Send request
-            response = await ring.chat(request)
-
             # Handle streaming response
-            if args.stream if hasattr(args, "stream") else False:
+            if args.stream:
                 # Stream response chunks
                 import sys
 
                 full_content = ""
                 accumulated_usage = None
+                final_model = None
+                finish_reason = None
 
-                async for chunk in response:
+                stream = ring.chat_stream(request, profile=profile_name)
+
+                async for chunk in stream:
                     if chunk.delta:
                         if not args.json:
                             # Print chunks as they arrive
@@ -536,16 +527,21 @@ async def cmd_chat(args):
                     # Capture final usage stats
                     if chunk.usage:
                         accumulated_usage = chunk.usage
+                    if chunk.model:
+                        final_model = chunk.model
+                    if chunk.finish_reason:
+                        finish_reason = chunk.finish_reason
 
                 if args.json:
                     # For JSON output, collect all chunks first
+                    output_model = final_model or model_input
                     print(
                         json.dumps(
                             {
                                 "content": full_content,
-                                "model": (chunk.model if chunk and chunk.model else args.model),
+                                "model": output_model,
                                 "usage": accumulated_usage,
-                                "finish_reason": chunk.finish_reason if chunk else None,
+                                "finish_reason": finish_reason,
                             },
                             indent=2,
                         )
@@ -555,7 +551,8 @@ async def cmd_chat(args):
                     print()
 
                     if args.verbose and accumulated_usage:
-                        print(f"\n[Model: {chunk.model if chunk and chunk.model else args.model}]")
+                        output_model = final_model or model_input
+                        print(f"\n[Model: {output_model}]")
                         print(
                             f"[Tokens: {accumulated_usage.get('prompt_tokens', 0)} in, {accumulated_usage.get('completion_tokens', 0)} out]"
                         )
@@ -564,6 +561,7 @@ async def cmd_chat(args):
             else:
                 # Non-streaming response (existing code)
                 # Display response
+                response = await ring.chat(request, profile=profile_name)
                 if args.json:
                     print(
                         json.dumps(

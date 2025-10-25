@@ -45,16 +45,21 @@ class RegistryModel(BaseModel):
     supports_parallel_tool_calls: bool = Field(False, description="Supports parallel tools")
     supports_temperature: bool = Field(True, description="Supports temperature parameter")
     supports_streaming: bool = Field(True, description="Supports streaming responses")
+    supports_caching: bool = Field(False, description="Supports prompt caching")
 
     # Reasoning model support
     is_reasoning_model: bool = Field(
         False,
-        description="Model uses reasoning tokens for internal thinking before generating output"
+        description="Model uses reasoning tokens for internal thinking before generating output",
     )
     min_recommended_reasoning_tokens: Optional[int] = Field(
         None,
         description="Typical number of reasoning tokens this model uses before generating output. "
-                    "For reasoning models, max_completion_tokens should be at least this value + desired output tokens."
+        "For reasoning models, max_completion_tokens should be at least this value + desired output tokens.",
+    )
+    supports_thinking: bool = Field(False, description="Model supports dedicated thinking tokens")
+    dollars_per_million_tokens_output_thinking: Optional[float] = Field(
+        None, description="USD per million thinking tokens"
     )
 
     # API routing hints
@@ -76,6 +81,37 @@ class RegistryModel(BaseModel):
     is_active: bool = Field(True, description="Model is currently available")
     added_date: Optional[datetime] = Field(None, description="When model was added")
     deprecated_date: Optional[datetime] = Field(None, description="When model was deprecated")
+
+    # Cache pricing (provider-specific)
+    dollars_per_million_tokens_cached_input: Optional[float] = Field(
+        None, description="USD per million cached input tokens"
+    )
+    dollars_per_million_tokens_cache_write_5m: Optional[float] = Field(
+        None, description="USD per million cache write tokens (5 minute TTL)"
+    )
+    dollars_per_million_tokens_cache_write_1h: Optional[float] = Field(
+        None, description="USD per million cache write tokens (1 hour TTL)"
+    )
+    dollars_per_million_tokens_cache_read: Optional[float] = Field(
+        None, description="USD per million cache read tokens"
+    )
+    cache_storage_cost_per_million_tokens_per_hour: Optional[float] = Field(
+        None, description="USD per million cache storage tokens per hour"
+    )
+
+    # Long context pricing
+    supports_long_context_pricing: bool = Field(
+        False, description="Model offers separate long-context pricing tiers"
+    )
+    long_context_threshold_tokens: Optional[int] = Field(
+        None, description="Token threshold where long-context pricing applies"
+    )
+    dollars_per_million_tokens_input_long_context: Optional[float] = Field(
+        None, description="USD per million input tokens beyond the long-context threshold"
+    )
+    dollars_per_million_tokens_output_long_context: Optional[float] = Field(
+        None, description="USD per million output tokens beyond the long-context threshold"
+    )
 
 
 class RegistryVersion(BaseModel):
@@ -241,6 +277,22 @@ class RegistryClient:
                     raise FileNotFoundError(f"Registry file not found: {file_path}")
                 with open(file_path, "r") as f:
                     data = json.load(f)
+
+                version_info = RegistryVersion(
+                    provider=provider,
+                    version=version,
+                    updated_at=datetime.fromisoformat(
+                        data.get("updated_at", datetime.now(timezone.utc).isoformat())
+                    ),
+                    models=[RegistryModel(**m) for m in data.get("models", [])],
+                )
+
+                # Save to cache for parity with HTTP branch
+                with open(cache_file, "w") as f:
+                    json.dump(data, f, indent=2)
+
+                self._cache[cache_key] = version_info
+                return version_info
             else:
                 # Handle HTTP/HTTPS URLs
                 async with httpx.AsyncClient() as client:

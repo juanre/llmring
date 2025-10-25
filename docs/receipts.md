@@ -146,34 +146,19 @@ llmring export --format csv --output receipts.csv
 ```python
 import json
 from datetime import datetime, UTC
-from llmring import LLMRing
+from llmring.server_client import ServerClient
 
-service = LLMRing()
+client = ServerClient(base_url="http://localhost:8000", api_key="llmr_pk_...")
 
-# Make requests...
+page = await client.list_receipts(limit=100)
 
-# Export receipts
 export_data = {
     "exported_at": datetime.now(UTC).isoformat(),
-    "receipts": [
-        {
-            "receipt_id": r.receipt_id,
-            "timestamp": r.timestamp.isoformat(),
-            "alias": r.alias,
-            "profile": r.profile,
-            "provider": r.provider,
-            "model": r.model,
-            "prompt_tokens": r.prompt_tokens,
-            "completion_tokens": r.completion_tokens,
-            "total_tokens": r.total_tokens,
-            "total_cost": r.total_cost,
-        }
-        for r in service.receipts
-    ],
+    "receipts": page.get("receipts", []),
 }
 
-with open("receipts.json", "w") as f:
-    json.dump(export_data, f, indent=2)
+with open("receipts.json", "w") as fh:
+    json.dump(export_data, fh, indent=2)
 ```
 
 ## On-Demand Receipts (Phase 7.5)
@@ -702,70 +687,45 @@ async with LLMRing(
 
 ## Usage Statistics
 
-### Local Statistics
+Usage and receipts live on the server. Inspect them via the CLI or the `ServerClient` helper.
 
 ```bash
-# View local usage
+# Aggregate usage for the current API key
 llmring stats
 
-# Detailed view
-llmring stats --verbose
+# Export usage and receipts
+llmring export --output usage.json
+llmring receipts list --limit 20
+llmring receipts uncertified --limit 20
 ```
 
 ```python
-from llmring import LLMRing
+from llmring.server_client import ServerClient
 
-service = LLMRing()
+client = ServerClient(base_url="http://localhost:8000", api_key="llmr_pk_...")
 
-# Calculate total usage
-if service.receipts:
-    total_cost = sum(r.total_cost for r in service.receipts)
-    total_tokens = sum(r.total_tokens for r in service.receipts)
+# Preview the next receipt before you generate it
+preview = await client.preview_receipt(since_last_receipt=True)
+print(
+    f"Would certify {preview['total_logs']} logs "
+    f"for ${preview['total_cost']:.4f}"
+)
 
-    print(f"Total requests: {len(service.receipts)}")
-    print(f"Total tokens: {total_tokens:,}")
-    print(f"Total cost: ${total_cost:.6f}")
-```
+# Generate a signed receipt when you're ready
+result = await client.generate_receipt(
+    since_last_receipt=True,
+    description="Weekly certification",
+    tags=["weekly", "compliance"],
+)
+print(f"Issued receipt {result['receipt']['receipt_id']}")
 
-### Aggregation and Analysis
+# Inspect uncertified logs
+uncertified = await client.get_uncertified_logs(limit=10)
+print(f"Remaining uncertified logs: {uncertified['total']}")
 
-```python
-from collections import defaultdict
-from llmring import LLMRing
-
-service = LLMRing()
-
-# Group by provider
-by_provider = defaultdict(lambda: {"requests": 0, "tokens": 0, "cost": 0.0})
-
-for receipt in service.receipts:
-    by_provider[receipt.provider]["requests"] += 1
-    by_provider[receipt.provider]["tokens"] += receipt.total_tokens
-    by_provider[receipt.provider]["cost"] += receipt.total_cost
-
-# Report
-for provider, stats in by_provider.items():
-    print(f"{provider}:")
-    print(f"  Requests: {stats['requests']}")
-    print(f"  Tokens: {stats['tokens']:,}")
-    print(f"  Cost: ${stats['cost']:.6f}")
-```
-
-### Cost by Alias
-
-```python
-from collections import defaultdict
-
-by_alias = defaultdict(lambda: {"requests": 0, "tokens": 0, "cost": 0.0})
-
-for receipt in service.receipts:
-    by_alias[receipt.alias]["requests"] += 1
-    by_alias[receipt.alias]["tokens"] += receipt.total_tokens
-    by_alias[receipt.alias]["cost"] += receipt.total_cost
-
-# Find most expensive alias
-most_expensive = max(by_alias.items(), key=lambda x: x[1]["cost"])
-print(f"Most expensive alias: {most_expensive[0]} (${most_expensive[1]['cost']:.6f})")
+# Cost breakdowns returned by cost calculator
+for field, amount in result["receipt"]["cost_breakdown"].items():
+    print(f"{field}: ${amount:.6f}")
 ```
 
 ## Compliance and Auditing
@@ -783,23 +743,41 @@ Receipts include features for compliance and auditing:
 ### Audit Trail Example
 
 ```python
+from base64 import urlsafe_b64decode
+from nacl.exceptions import BadSignatureError
+from nacl.signing import VerifyKey
 from llmring.receipts import Receipt
 
-# Load receipts from storage
+# List of receipts returned by llmring-server (dicts or Receipt objects)
 receipts = load_receipts_from_database()
 
-# Verify all receipts
-public_key = load_public_key()
+# Public key published by the server (base64url encoded Ed25519 key)
+public_key_b64 = load_public_key_b64()
+verify_key = VerifyKey(urlsafe_b64decode(public_key_b64 + "=="))
 
-for receipt in receipts:
-    if not ReceiptSigner.verify_receipt(receipt, public_key):
+for payload in receipts:
+    receipt = Receipt.model_validate(payload)
+    signature = receipt.signature
+    if not signature:
+        print(f"⚠️  Missing signature: {receipt.receipt_id}")
+        continue
+
+    try:
+        verify_key.verify(
+            receipt.to_canonical_json().encode("utf-8"),
+            urlsafe_b64decode(signature + "=="),
+        )
+    except BadSignatureError:
         print(f"⚠️  Invalid signature: {receipt.receipt_id}")
-    else:
-        print(f"✅ Valid: {receipt.receipt_id}")
-        print(f"   Timestamp: {receipt.timestamp}")
-        print(f"   Model: {receipt.provider}:{receipt.model}")
-        print(f"   Cost: ${receipt.total_cost:.6f}")
+        continue
+
+    print(f"✅ Valid: {receipt.receipt_id}")
+    print(f"   Timestamp: {receipt.timestamp}")
+    print(f"   Model: {receipt.provider}:{receipt.model}")
+    print(f"   Cost: ${receipt.total_cost:.6f}")
 ```
+
+> Install `pynacl` to use this verification flow: `pip install pynacl`.
 
 ### Compliance Reporting
 
@@ -841,10 +819,14 @@ def generate_compliance_report(receipts, start_date, end_date):
 
     return report
 
+# Fetch receipts from the server first
+page = await client.list_receipts(limit=1000)
+receipts = page.get("receipts", [])
+
 # Generate monthly report
 end_date = datetime.now()
 start_date = end_date - timedelta(days=30)
-report = generate_compliance_report(service.receipts, start_date, end_date)
+report = generate_compliance_report(receipts, start_date, end_date)
 
 with open("compliance_report.json", "w") as f:
     json.dump(report, f, indent=2)
@@ -1077,18 +1059,18 @@ async with LLMRing(
 
 ### Security
 
-1. **Protect Keys**: Keep signing keys secure
-2. **Verify Receipts**: Validate signatures for critical applications
-3. **Backup Receipts**: Export and store receipts safely
-4. **Audit Trails**: Maintain logs of all API usage
-5. **Server Mode**: Use LLMRing server for centralized security
+1. **Protect Keys**: Keep Ed25519 signing keys in your secret manager
+2. **Verify Receipts**: Validate signatures for compliance-critical workflows
+3. **Backup Receipts**: Export and archive receipts and usage logs regularly
+4. **Audit Trails**: Maintain conversation logs (available when `log_conversations=True`)
+5. **Server Hardening**: Run llmring-server behind TLS with restricted CORS
 
 ### Performance
 
-1. **Local Receipts**: Limited by memory; export periodically
-2. **Server Mode**: Unlimited storage and analytics
-3. **Batch Export**: Export in batches for large datasets
-4. **Caching**: Receipt generation is fast; no special caching needed
+1. **Server Storage**: Receipts and logs live in PostgreSQL; scale storage as needed
+2. **Batch Export**: Paginate `list_receipts` / `get_receipt_logs` for large datasets
+3. **Cost of Generation**: Receipt signing is lightweight; batch receipts reduce overhead
+4. **Caching**: Registry and pricing data are cached client-side for 24 hours
 
 ## Troubleshooting
 
@@ -1110,12 +1092,21 @@ else:
 ### Signature Verification Failures
 
 ```python
+from base64 import urlsafe_b64decode
+from nacl.exceptions import BadSignatureError
+from nacl.signing import VerifyKey
+
+verify_key = VerifyKey(urlsafe_b64decode(public_key_b64 + "=="))
+
 try:
-    is_valid = ReceiptSigner.verify_receipt(receipt, public_key)
-    if not is_valid:
-        print("Signature invalid - receipt may be tampered")
-except Exception as e:
-    print(f"Verification error: {e}")
+    verify_key.verify(
+        receipt.to_canonical_json().encode("utf-8"),
+        urlsafe_b64decode(receipt.signature + "=="),
+    )
+except BadSignatureError:
+    print("Signature invalid - receipt may be tampered")
+except Exception as exc:
+    print(f"Verification error: {exc}")
 ```
 
 **Causes:**

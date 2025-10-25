@@ -1,104 +1,115 @@
-# LLMRing Lockfile Documentation
+# LLMRing Lockfile Guide
 
-## Overview
+## Purpose
 
-The lockfile (`llmring.lock`) is the central configuration mechanism in LLMRing that maps semantic aliases to specific LLM models. It provides version control for your AI model choices, enables reproducible deployments, and supports environment-specific configurations through profiles.
+Each codebase that uses LLMRing owns an `llmring.lock`. This file is the authoritative source for:
 
-## Key Concepts
+- Semantic aliases and their ordered model pools
+- Per-environment profiles (dev, prod, test, …)
+- Pinned registry versions per provider for drift detection
+- Optional metadata about the configuration
 
-### Aliases
-Instead of hardcoding model IDs like `"openai:gpt-4o"` throughout your code, you use semantic aliases like `"fast"`, `"balanced"`, or `"deep"`. This allows you to:
-- Change models without modifying code
-- Optimize costs by switching providers
-- Use different models in different environments
-- Share consistent configurations across teams
+Aliases are **never** synced through the server or SaaS; they stay in version control next to your code, matching the source-of-truth v4.3 architecture.
 
-### Fallback Models
-Aliases can specify multiple models in priority order. If the primary model fails (rate limit, availability, etc.), LLMRing automatically tries the fallbacks:
+## File Structure
+
+A lockfile is a single TOML (default) or JSON document. The current schema is:
+
+- `version` – lockfile format version (`"1.0"` today)
+- `created_at` / `updated_at` – ISO timestamps
+- `default_profile` – name of the profile used when none is supplied
+- `metadata` – free-form dictionary (optional)
+- `profiles` – map of profile name to profile configuration
+  - `name` – repeated for clarity inside the profile
+  - `registry_versions` – provider → pinned registry version integer
+  - `bindings` – list of alias bindings
+    - `alias` – alias string (e.g., `fast`)
+    - `models` – ordered list of `provider:model` strings (fallbacks after index 0)
+    - `constraints` – optional dictionary for future rules (rate limits, etc.)
+
+### Example (TOML)
 
 ```toml
-[[bindings]]
+version = "1.0"
+created_at = "2025-09-28T12:00:00+00:00"
+updated_at = "2025-09-28T12:05:34.812341+00:00"
+default_profile = "default"
+
+[metadata]
+project = "customer-support-bot"
+
+[profiles.default]
+name = "default"
+
+[profiles.default.registry_versions]
+openai = 27
+anthropic = 14
+
+[[profiles.default.bindings]]
 alias = "assistant"
 models = [
-    "anthropic:claude-3-5-sonnet",  # Primary choice
-    "openai:gpt-4o",                 # First fallback
-    "google:gemini-1.5-pro"          # Second fallback
+    "anthropic:claude-3-5-sonnet",
+    "openai:gpt-4o",
 ]
-```
 
-## Lockfile Format
-
-LLMRing supports both TOML (default) and JSON formats. The format is detected by file extension.
-
-### Basic Structure (TOML)
-
-```toml
-# Registry version pinning (optional)
-[registry_versions]
-openai = 12
-anthropic = 8
-google = 15
-
-# Default profile bindings
-[[bindings]]
-alias = "fast"
-models = ["openai:gpt-4o-mini"]
-
-[[bindings]]
-alias = "balanced"
-models = ["anthropic:claude-3-5-sonnet", "openai:gpt-4o"]
-
-[[bindings]]
-alias = "deep"
-models = ["anthropic:claude-3-5-sonnet-20241022"]
-
-[[bindings]]
+[[profiles.default.bindings]]
 alias = "vision"
-models = ["google:gemini-1.5-flash"]
+models = ["google:gemini-1.5-pro"]
 
-# Environment-specific profiles
 [profiles.dev]
+name = "dev"
+
+[profiles.dev.registry_versions]
+openai = 27
+
 [[profiles.dev.bindings]]
 alias = "assistant"
-models = ["openai:gpt-4o-mini"]  # Cheaper for development
+models = ["openai:gpt-4o-mini"]
 
-[profiles.prod]
-[[profiles.prod.bindings]]
+[profiles.test]
+name = "test"
+
+[[profiles.test.bindings]]
 alias = "assistant"
-models = ["anthropic:claude-3-5-sonnet"]  # Higher quality for production
+models = ["ollama:llama3"]
 ```
 
-### JSON Format
-
-LLMRing also supports JSON format for lockfiles. Simply use `.json` extension instead of `.lock`.
-
-**Complete JSON Example:**
+### Example (JSON)
 
 ```json
 {
-  "registry_versions": {
-    "openai": 12,
-    "anthropic": 8,
-    "google": 15
+  "version": "1.0",
+  "created_at": "2025-09-28T12:00:00+00:00",
+  "updated_at": "2025-09-28T12:05:34.812341+00:00",
+  "default_profile": "default",
+  "metadata": {
+    "project": "customer-support-bot"
   },
-  "bindings": [
-    {
-      "alias": "fast",
-      "models": ["openai:gpt-4o-mini"]
-    },
-    {
-      "alias": "balanced",
-      "models": ["anthropic:claude-3-5-sonnet", "openai:gpt-4o"]
-    },
-    {
-      "alias": "deep",
-      "models": ["anthropic:claude-3-5-sonnet-20241022"]
-    }
-  ],
   "profiles": {
-    "dev": {
+    "default": {
+      "name": "default",
       "registry_versions": {
-        "openai": 12
+        "openai": 27,
+        "anthropic": 14
+      },
+      "bindings": [
+        {
+          "alias": "assistant",
+          "models": [
+            "anthropic:claude-3-5-sonnet",
+            "openai:gpt-4o"
+          ]
+        },
+        {
+          "alias": "vision",
+          "models": ["google:gemini-1.5-pro"]
+        }
+      ]
+    },
+    "dev": {
+      "name": "dev",
+      "registry_versions": {
+        "openai": 27
       },
       "bindings": [
         {
@@ -107,15 +118,12 @@ LLMRing also supports JSON format for lockfiles. Simply use `.json` extension in
         }
       ]
     },
-    "prod": {
-      "registry_versions": {
-        "anthropic": 8,
-        "openai": 12
-      },
+    "test": {
+      "name": "test",
       "bindings": [
         {
           "alias": "assistant",
-          "models": ["anthropic:claude-3-5-sonnet", "openai:gpt-4o"]
+          "models": ["ollama:llama3"]
         }
       ]
     }
@@ -123,293 +131,78 @@ LLMRing also supports JSON format for lockfiles. Simply use `.json` extension in
 }
 ```
 
-**When to Use JSON vs TOML:**
+Both formats are interchangeable via `Lockfile.load()` and `Lockfile.save()`. TOML is the default when running CLI commands.
 
-| Format | Best For | Pros | Cons |
-|--------|---------|------|------|
-| **TOML** | Human editing, configuration | Readable, comments supported | Slightly more verbose |
-| **JSON** | Programmatic generation, APIs | Machine-friendly, ubiquitous | No comments, less readable |
+## Resolution Order
 
-**Format Detection:**
-- `.lock` or `.toml` → TOML format
-- `.json` → JSON format
-- Auto-detected by file content if extension is ambiguous
+When `LLMRing()` starts, it resolves the lockfile in the following order:
 
-**Converting Between Formats:**
+1. `lockfile_path` parameter (must exist)
+2. `LLMRING_LOCKFILE_PATH` environment variable (must exist)
+3. `./llmring.lock` in the current working directory
+4. Bundled fallback at `llmring/llmring.lock` inside the package (minimal advisor-only file)
+
+Lockfiles are **never** created implicitly. If the selected path is missing, LLMRing raises `FileNotFoundError`.
+
+## Creating and Managing Lockfiles
+
+### Initialize with Registry Defaults
+
+```bash
+llmring lock init            # auto-detect package directory
+llmring lock init --file ./config/llmring.lock
+llmring lock init --file ./llmring.lock --force  # overwrite existing file
+```
+
+The command queries the registry, inspects available API keys, and seeds the default profile with useful aliases. If the registry is unreachable, it falls back to an empty skeleton.
+
+### Conversational Editing (Recommended)
+
+```bash
+llmring lock chat
+llmring lock chat --model advisor --server-url "http://localhost:8080"
+```
+
+This starts an MCP chat session that:
+- Reads your existing lockfile
+- Fetches provider capabilities and pricing from the registry
+- Proposes alias pools and profiles based on your prompts
+- Applies changes only after you confirm them
+
+### Direct CLI Helpers
+
+```bash
+llmring aliases --profile prod
+llmring bind assistant "anthropic:claude-3-5-sonnet,openai:gpt-4o" --profile prod
+llmring lock validate
+llmring lock bump-registry
+```
+
+- `llmring aliases` – list bindings for a profile
+- `llmring bind` – add or update an alias (supports comma-separated fallbacks)
+- `llmring lock validate` – confirm that every referenced model exists in the registry
+- `llmring lock bump-registry` – update pinned registry versions to the latest release
+
+### Programmatic Access
 
 ```python
 from llmring.lockfile_core import Lockfile
 
-# Load TOML
 lockfile = Lockfile.load("llmring.lock")
-
-# Save as JSON
-lockfile.save("llmring.json")
-
-# Or vice versa
-lockfile = Lockfile.load("llmring.json")
-lockfile.save("llmring.lock")
+prod = lockfile.get_profile("prod")
+prod.set_binding("assistant", ["anthropic:claude-3-5-sonnet", "openai:gpt-4o"])
+lockfile.save()
 ```
 
-## Resolution Order
-
-When LLMRing starts, it looks for a lockfile in this order:
-
-1. **Explicit Path** - If `lockfile_path` parameter is provided, that file MUST exist
-2. **Environment Variable** - `LLMRING_LOCKFILE_PATH` (file MUST exist if set)
-3. **Current Directory** - `./llmring.lock` (if exists)
-4. **Bundled Fallback** - `src/llmring/llmring.lock` (ships with packages)
-
-**Important**: Lockfile creation is always explicit. If you specify a path (via parameter or environment variable) and the file doesn't exist, LLMRing will raise an error rather than creating it implicitly.
-
-## Creating and Managing Lockfiles
-
-### Basic Creation
-
-```bash
-# Create a basic lockfile with common aliases
-llmring lock init
-
-# Create at specific location
-llmring lock init --path /path/to/llmring.lock
-```
-
-### Conversational Configuration (Recommended)
-
-The most powerful way to configure your lockfile is through the MCP chat interface:
-
-```bash
-# Start conversational configuration
-llmring lock chat
-
-# Example conversation:
-You: I need a configuration for a coding assistant that prioritizes accuracy
-Assistant: I'll help you configure that. Based on the registry, I recommend...
-```
-
-The chat interface:
-- Analyzes the current model registry for capabilities and pricing
-- Recommends optimal configurations based on your needs
-- Explains tradeoffs between different models
-- Updates your lockfile based on the conversation
-
-### CLI Commands
-
-```bash
-# View current bindings
-llmring aliases
-
-# Add or update an alias
-llmring bind assistant "anthropic:claude-3-5-sonnet"
-
-# Add fallback models
-llmring bind assistant "anthropic:claude-3-5-sonnet,openai:gpt-4o,google:gemini-1.5-pro"
-
-# Use different profile
-llmring bind assistant "openai:gpt-4o-mini" --profile dev
-
-# Analyze current configuration
-llmring lock analyze
-
-# Validate lockfile
-llmring lock validate
-```
-
-## Profiles
-
-Profiles allow different configurations for different environments:
-
-### Setting the Active Profile
-
-```python
-# Via code
-from llmring import LLMRing
-
-async with LLMRing() as service:
-    # Use dev profile
-    response = await service.chat(request, profile="dev")
-```
-
-```bash
-# Via environment variable
-export LLMRING_PROFILE=dev
-
-# Via CLI
-llmring chat "Hello" --profile dev
-```
-
-### Profile Selection Priority
-
-1. Explicit parameter (`profile="dev"` or `--profile dev`)
-2. Environment variable (`LLMRING_PROFILE`)
-3. Default profile (`default`)
-
-### Common Profile Patterns
-
-```toml
-# Development: Cheaper, faster models
-[profiles.dev]
-[[profiles.dev.bindings]]
-alias = "assistant"
-models = ["openai:gpt-4o-mini"]
-
-# Staging: Production models with fallbacks
-[profiles.staging]
-[[profiles.staging.bindings]]
-alias = "assistant"
-models = ["anthropic:claude-3-5-sonnet", "openai:gpt-4o"]
-
-# Production: Highest quality with multiple fallbacks
-[profiles.prod]
-[[profiles.prod.bindings]]
-alias = "assistant"
-models = [
-    "anthropic:claude-3-5-sonnet",
-    "openai:gpt-4o",
-    "google:gemini-1.5-pro"
-]
-
-# Testing: Local models
-[profiles.test]
-[[profiles.test.bindings]]
-alias = "assistant"
-models = ["ollama:llama3.2"]
-```
-
-## Packaging Lockfiles with Libraries
-
-Libraries using LLMRing can ship with their own default lockfiles.
-
-### Include in Package Distribution
-
-In `pyproject.toml`:
-```toml
-[tool.hatch.build]
-include = [
-    "src/yourpackage/**/*.py",
-    "src/yourpackage/**/*.lock",  # Include lockfiles
-]
-```
-
-Or with setuptools in `MANIFEST.in`:
-```
-include src/yourpackage/*.lock
-```
-
-### Load Bundled Lockfile
-
-```python
-from pathlib import Path
-from llmring import LLMRing
-
-class YourService:
-    def __init__(self, lockfile_path=None):
-        if lockfile_path:
-            # User-provided lockfile
-            self.service = LLMRing(lockfile_path=lockfile_path)
-        else:
-            # Check for user's lockfile first
-            if Path("llmring.lock").exists():
-                self.service = LLMRing()
-            else:
-                # Fall back to bundled lockfile
-                bundled = Path(__file__).parent / "llmring.lock"
-                self.service = LLMRing(lockfile_path=str(bundled))
-```
-
-## Model Capabilities and Constraints
-
-### Temperature Filtering
-
-Some models don't support temperature parameters. LLMRing automatically filters out the temperature parameter for these models to prevent errors.
-
-### Registry Integration
-
-The lockfile can pin specific registry versions to ensure consistent model information:
-
-```toml
-[registry_versions]
-openai = 12      # Use version 12 of OpenAI registry
-anthropic = 8    # Use version 8 of Anthropic registry
-```
-
-## Special Aliases
-
-LLMRing ships with a minimal bundled lockfile containing:
-
-- **`advisor`** - Points to `anthropic:claude-opus-4-1-20250805`, used by `llmring lock chat` for intelligent configuration
+`Lockfile.calculate_digest()` returns the SHA256 hash used in receipt signatures. `Lockfile.find_package_directory()` helps installers place lockfiles inside `src/<package>/`.
 
 ## Best Practices
 
-1. **Use Semantic Aliases**: Choose aliases that describe the use case (`coder`, `writer`, `analyzer`) rather than model properties
-2. **Configure Fallbacks**: Always provide at least one fallback for production aliases
-3. **Environment Profiles**: Use different profiles for dev/staging/prod
-4. **Version Control**: Commit your `llmring.lock` file to ensure reproducible deployments
-5. **Regular Updates**: Periodically run `llmring lock analyze` to check for better models
-6. **Cost Awareness**: Use `llmring lock chat` to understand cost implications of your choices
+1. **Keep lockfiles in version control.** Review changes the same way you review code.
+2. **Use semantic aliases everywhere.** Only fall back to direct `provider:model` strings for one-off experiments.
+3. **Provide fallbacks.** Ordered pools protect you from outages and missing API keys.
+4. **Pin registry versions.** `llmring lock bump-registry` helps you detect pricing/model drift intentionally.
+5. **Per-profile discipline.** Use dev/staging/prod/test profiles instead of separate lockfiles.
+6. **No secrets inside.** Lockfiles do not store API keys; use environment variables or secret managers.
 
-## Troubleshooting
-
-### Lockfile Not Found
-
-If you see "No lockfile found", create one:
-```bash
-llmring lock init
-```
-
-### Invalid Alias
-
-If an alias isn't recognized:
-```bash
-# Check current aliases
-llmring aliases
-
-# Add the missing alias
-llmring bind myalias "provider:model"
-```
-
-### Model Not Available
-
-If a model fails, check:
-1. API key is set for that provider
-2. Model name is correct (check registry)
-3. Add fallback models for resilience
-
-## Example Configurations
-
-### Cost-Optimized Setup
-
-```toml
-[[bindings]]
-alias = "default"
-models = ["openai:gpt-4o-mini"]
-
-[[bindings]]
-alias = "when-needed"
-models = ["anthropic:claude-3-5-haiku"]
-```
-
-### High-Reliability Setup
-
-```toml
-[[bindings]]
-alias = "critical"
-models = [
-    "anthropic:claude-3-5-sonnet",
-    "openai:gpt-4o",
-    "google:gemini-1.5-pro",
-    "anthropic:claude-3-5-haiku"  # Last resort
-]
-```
-
-### Development Setup
-
-```toml
-[[bindings]]
-alias = "local"
-models = ["ollama:llama3.2"]
-
-[[bindings]]
-alias = "debug"
-models = ["openai:gpt-4o-mini"]  # Cheap for testing
-```
+By following these guidelines, contributors and automated agents always know which models are in play and can audit changes via Git history. This keeps the alias-first workflow aligned with the LLMRing source of truth.

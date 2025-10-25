@@ -42,7 +42,7 @@ LLMRing is a lightweight, provider-agnostic LLM orchestration library. It provid
 │  │  - Alias Resolution                                    │  │
 │  │  - Schema Adaptation                                   │  │
 │  │  - Cost Calculation                                    │  │
-│  │  - Receipt Management                                  │  │
+│  │  - Usage Logging & Receipts                            │  │
 │  │  - Validation                                          │  │
 │  └───────────────────────────────────────────────────────┘  │
 │                         │                                    │
@@ -76,7 +76,7 @@ LLMRing (service.py)
 │   ├── AliasResolver - Resolves model aliases from lockfiles
 │   ├── SchemaAdapter - Adapts schemas for provider-specific APIs
 │   ├── CostCalculator - Calculates token costs from registry
-│   ├── ReceiptManager - Generates cryptographic receipts
+│   ├── LoggingService - Sends usage metadata to llmring-server / SaaS
 │   └── ValidationService - Validates requests and context limits
 │
 ├── Providers/
@@ -140,7 +140,7 @@ LLMRing (service.py)
 4. Service Layer: Post-processing
    ├─► Post-process structured output (SchemaAdapter)
    ├─► Calculate cost (CostCalculator)
-   ├─► Generate receipt (ReceiptManager)
+   ├─► Log usage / conversations (LoggingService + ServerClient)
    └─► Return response to user
 ```
 
@@ -167,6 +167,7 @@ LLMRing (service.py)
                     ▼
 4. User processes chunks in async loop
    └─► Each chunk contains: content, role, usage (if final)
+5. Optional logging when stream finishes (LoggingService)
 ```
 
 ### Error Handling Flow

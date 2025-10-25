@@ -682,14 +682,17 @@ class LLMRing:
         Returns:
             LLM response or async iterator of stream chunks if streaming
         """
-        # Resolve alias
-        model = self.resolve_alias(alias_or_model, profile)
+        # Keep original identifier so logging retains alias metadata.
+        model_identifier = alias_or_model
 
-        # Create request
+        # Validate alias early so callers get prompt feedback.
+        if ":" not in model_identifier:
+            self.resolve_alias(model_identifier, profile)
+
         from llmring.schemas import LLMRequest
 
         request = LLMRequest(
-            model=model,
+            model=model_identifier,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,

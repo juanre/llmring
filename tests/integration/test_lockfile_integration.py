@@ -11,9 +11,9 @@ from unittest.mock import patch
 
 import pytest
 
-from llmring import LLMRequest, LLMRing, Message
+from llmring import LLMRequest, LLMResponse, LLMRing, Message
 from llmring.lockfile import Lockfile
-from llmring.registry import RegistryClient
+from llmring.registry import RegistryClient, RegistryModel
 
 
 class TestLockfileIntegration:
@@ -83,8 +83,6 @@ class TestLockfileIntegration:
     @pytest.mark.asyncio
     async def test_cost_calculation_with_registry(self, service_with_lockfile):
         """Test cost calculation using registry pricing."""
-        from llmring.schemas import LLMResponse
-
         service = service_with_lockfile
 
         # Create mock response
@@ -109,6 +107,43 @@ class TestLockfileIntegration:
         assert cost_info["input_cost"] == pytest.approx(expected_input_cost)
         assert cost_info["output_cost"] == pytest.approx(expected_output_cost)
         assert cost_info["total_cost"] == pytest.approx(expected_total)
+
+    @pytest.mark.asyncio
+    async def test_cost_breakdown_with_cached_tokens(self, service_with_lockfile):
+        """Cost calculation includes cache-specific components."""
+        service = service_with_lockfile
+
+        cache_model = RegistryModel(
+            provider="openai",
+            model_name="gpt-cache-test",
+            display_name="GPT Cache Test",
+            description="Synthetic cache-aware model",
+            dollars_per_million_tokens_input=1.0,
+            dollars_per_million_tokens_output=2.0,
+            dollars_per_million_tokens_cached_input=0.25,
+            dollars_per_million_tokens_cache_write_5m=0.5,
+            dollars_per_million_tokens_cache_write_1h=0.75,
+            dollars_per_million_tokens_cache_read=0.1,
+            supports_caching=True,
+            is_active=True,
+        )
+        service._registry_models = {"openai": [cache_model]}
+
+        response = LLMResponse(
+            content="Test",
+            model="openai:gpt-cache-test",
+            usage={
+                "prompt_tokens": 1200,
+                "completion_tokens": 250,
+                "cached_tokens": 500,
+                "cache_creation_input_tokens": 80,
+            },
+        )
+
+        cost_info = await service.calculate_cost(response)
+        assert cost_info is not None
+        assert cost_info["cache_read_cost"] > 0
+        assert cost_info["cache_write_cost_other"] > 0
 
     @pytest.mark.asyncio
     async def test_context_validation_with_registry(self, service_with_lockfile):
@@ -140,6 +175,31 @@ class TestLockfileIntegration:
         error = await service.validate_context_limit(request_huge)
         assert error is not None
         assert "exceeds" in error.lower()
+
+    @pytest.mark.asyncio
+    async def test_chat_with_alias_preserves_alias_for_logging(self, service_with_lockfile):
+        """chat_with_alias should forward the alias string into chat."""
+        service = service_with_lockfile
+
+        captured = {}
+
+        async def stub_chat(request, profile=None):
+            captured["model"] = request.model
+            captured["profile"] = profile
+            return LLMResponse(content="ok", model="openai:gpt-4o-mini")
+
+        original_chat = service.chat
+        service.chat = stub_chat
+
+        try:
+            response = await service.chat_with_alias(
+                "summarizer", [Message(role="user", content="hello world")]
+            )
+        finally:
+            service.chat = original_chat
+
+        assert captured["model"] == "summarizer"
+        assert isinstance(response, LLMResponse)
 
     @pytest.mark.asyncio
     async def test_registry_model_info(self, test_registry_url):

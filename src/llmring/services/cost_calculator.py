@@ -94,33 +94,134 @@ class CostCalculator:
             return None
 
         # Extract token counts
-        prompt_tokens = response.usage.get("prompt_tokens", 0)
-        completion_tokens = response.usage.get("completion_tokens", 0)
+        usage = response.usage
+        prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+        completion_tokens = int(usage.get("completion_tokens", 0) or 0)
 
-        # Calculate costs
-        input_cost = self._calculate_token_cost(
-            prompt_tokens, registry_model.dollars_per_million_tokens_input
+        # Cache read metrics
+        cache_read_tokens = int(
+            usage.get("cache_read_input_tokens") or usage.get("cached_tokens") or 0
         )
-        output_cost = self._calculate_token_cost(
-            completion_tokens, registry_model.dollars_per_million_tokens_output
+
+        # Cache write metrics
+        cache_write_5m_tokens = int(usage.get("cache_creation_5m_tokens", 0) or 0)
+        cache_write_1h_tokens = int(usage.get("cache_creation_1h_tokens", 0) or 0)
+        cache_write_generic_tokens = int(usage.get("cache_creation_input_tokens", 0) or 0)
+
+        # Reasoning tokens (if provider reports them)
+        reasoning_tokens = int(usage.get("reasoning_tokens", 0) or 0)
+
+        base_input_rate = registry_model.dollars_per_million_tokens_input or 0.0
+        base_output_rate = registry_model.dollars_per_million_tokens_output or 0.0
+        cached_input_rate = registry_model.dollars_per_million_tokens_cached_input
+        cache_write_5m_rate = registry_model.dollars_per_million_tokens_cache_write_5m
+        cache_write_1h_rate = registry_model.dollars_per_million_tokens_cache_write_1h
+        cache_read_rate = (
+            registry_model.dollars_per_million_tokens_cache_read
+            or cached_input_rate
+            or base_input_rate
         )
-        total_cost = input_cost + output_cost
+
+        # Handle prompt tokens: remove cached reads from base billing
+        non_cached_prompt_tokens = max(prompt_tokens - cache_read_tokens, 0)
+
+        # Long-context pricing: models may charge different rates above a threshold
+        # For example, Sonnet 4 charges $3/M for first 200k tokens, $6/M beyond that
+        long_context_threshold = registry_model.long_context_threshold_tokens or 0
+        supports_long_context = (
+            registry_model.supports_long_context_pricing and long_context_threshold > 0
+        )
+
+        if supports_long_context and non_cached_prompt_tokens > long_context_threshold:
+            # Split tokens: regular rate up to threshold, long-context rate beyond
+            long_tokens = non_cached_prompt_tokens - long_context_threshold
+            regular_prompt_tokens = long_context_threshold
+        else:
+            # All tokens billed at regular rate
+            long_tokens = 0
+            regular_prompt_tokens = non_cached_prompt_tokens
+
+        regular_prompt_cost = self._calculate_token_cost(regular_prompt_tokens, base_input_rate)
+        long_context_input_rate = (
+            registry_model.dollars_per_million_tokens_input_long_context or base_input_rate
+        )
+        long_context_cost = self._calculate_token_cost(long_tokens, long_context_input_rate)
+
+        cache_read_cost = self._calculate_token_cost(cache_read_tokens, cache_read_rate)
+
+        # Cache writes
+        cache_write_cost_5m = self._calculate_token_cost(cache_write_5m_tokens, cache_write_5m_rate)
+        cache_write_cost_1h = self._calculate_token_cost(cache_write_1h_tokens, cache_write_1h_rate)
+
+        # Remaining generic cache write tokens (if provider only reports a single total)
+        consumed_write_tokens = cache_write_5m_tokens + cache_write_1h_tokens
+        generic_write_tokens = max(cache_write_generic_tokens - consumed_write_tokens, 0)
+        fallback_write_rate = (
+            cache_write_5m_rate or cache_write_1h_rate or cached_input_rate or base_input_rate
+        )
+        cache_write_cost_generic = self._calculate_token_cost(
+            generic_write_tokens, fallback_write_rate
+        )
+
+        # Output / reasoning costs
+        reasoning_cost = 0.0
+        reasoning_rate = registry_model.dollars_per_million_tokens_output_thinking or 0.0
+        if reasoning_tokens > 0 and reasoning_rate:
+            if completion_tokens >= reasoning_tokens:
+                completion_tokens -= reasoning_tokens
+            reasoning_cost = self._calculate_token_cost(reasoning_tokens, reasoning_rate)
+
+        output_cost = self._calculate_token_cost(completion_tokens, base_output_rate)
+
+        total_cost = (
+            regular_prompt_cost
+            + long_context_cost
+            + cache_read_cost
+            + cache_write_cost_5m
+            + cache_write_cost_1h
+            + cache_write_cost_generic
+            + output_cost
+            + reasoning_cost
+        )
 
         logger.debug(
-            f"Cost for {provider}:{model_name}: "
-            f"${total_cost:.6f} (input: ${input_cost:.6f}, output: ${output_cost:.6f})"
+            "Cost for %s:%s: $%.6f (prompt: $%.6f, long_context: $%.6f, cache_read: $%.6f, "
+            "cache_write_5m: $%.6f, cache_write_1h: $%.6f, cache_write_other: $%.6f, "
+            "output: $%.6f, reasoning: $%.6f)",
+            provider,
+            model_name,
+            total_cost,
+            regular_prompt_cost,
+            long_context_cost,
+            cache_read_cost,
+            cache_write_cost_5m,
+            cache_write_cost_1h,
+            cache_write_cost_generic,
+            output_cost,
+            reasoning_cost,
         )
 
         return {
-            "input_cost": input_cost,
+            "input_cost": regular_prompt_cost + long_context_cost,
             "output_cost": output_cost,
+            "cache_read_cost": cache_read_cost,
+            "cache_write_cost_5m": cache_write_cost_5m,
+            "cache_write_cost_1h": cache_write_cost_1h,
+            "cache_write_cost_other": cache_write_cost_generic,
+            "long_context_input_cost": long_context_cost,
+            "reasoning_cost": reasoning_cost,
             "total_cost": total_cost,
-            "cost_per_million_input": registry_model.dollars_per_million_tokens_input,
-            "cost_per_million_output": registry_model.dollars_per_million_tokens_output,
+            "cost_per_million_input": base_input_rate,
+            "cost_per_million_output": base_output_rate,
+            "cost_per_million_cached_input": cached_input_rate,
+            "cost_per_million_cache_read": cache_read_rate,
+            "cost_per_million_cache_write_5m": cache_write_5m_rate,
+            "cost_per_million_cache_write_1h": cache_write_1h_rate,
+            "cost_per_million_output_thinking": reasoning_rate or None,
         }
 
     @staticmethod
-    def _calculate_token_cost(token_count: int, cost_per_million: float) -> float:
+    def _calculate_token_cost(token_count: int, cost_per_million: Optional[float]) -> float:
         """
         Calculate cost for a given number of tokens.
 
@@ -131,6 +232,8 @@ class CostCalculator:
         Returns:
             Cost in dollars
         """
+        if not cost_per_million:
+            return 0.0
         return (token_count / 1_000_000) * cost_per_million
 
     async def _get_registry_model(self, provider: str, model_name: str) -> Optional[RegistryModel]:
@@ -169,10 +272,25 @@ class CostCalculator:
             response.usage = {}
 
         response.usage["cost"] = cost_info["total_cost"]
-        response.usage["cost_breakdown"] = {
-            "input": cost_info["input_cost"],
-            "output": cost_info["output_cost"],
+        breakdown = {
+            "input": cost_info.get("input_cost", 0.0),
+            "output": cost_info.get("output_cost", 0.0),
         }
+
+        if cost_info.get("cache_read_cost"):
+            breakdown["cache_read"] = cost_info["cache_read_cost"]
+        if cost_info.get("cache_write_cost_5m"):
+            breakdown["cache_write_5m"] = cost_info["cache_write_cost_5m"]
+        if cost_info.get("cache_write_cost_1h"):
+            breakdown["cache_write_1h"] = cost_info["cache_write_cost_1h"]
+        if cost_info.get("cache_write_cost_other"):
+            breakdown["cache_write_other"] = cost_info["cache_write_cost_other"]
+        if cost_info.get("long_context_input_cost"):
+            breakdown["long_context_input"] = cost_info["long_context_input_cost"]
+        if cost_info.get("reasoning_cost"):
+            breakdown["reasoning"] = cost_info["reasoning_cost"]
+
+        response.usage["cost_breakdown"] = breakdown
 
     def get_zero_cost_info(self) -> Dict[str, float]:
         """

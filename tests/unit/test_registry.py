@@ -90,6 +90,88 @@ class TestRegistryClient:
             # Validate non-existing model
             assert await registry_client.validate_model("openai", "non-existent-model-xyz") is False
 
+    async def test_fetch_version_from_file_scheme(self, tmp_path):
+        """Ensure file:// registry versions return structured data."""
+        registry_root = tmp_path / "registry"
+        version_dir = registry_root / "openai" / "v" / "2"
+        version_dir.mkdir(parents=True, exist_ok=True)
+
+        version_payload = {
+            "provider": "openai",
+            "version": 2,
+            "updated_at": "2025-09-01T00:00:00Z",
+            "models": [
+                {
+                    "provider": "openai",
+                    "model_name": "gpt-test",
+                    "display_name": "GPT Test",
+                    "description": "Test model",
+                    "max_input_tokens": 1000,
+                    "max_output_tokens": 1000,
+                    "dollars_per_million_tokens_input": 0.1,
+                    "dollars_per_million_tokens_output": 0.2,
+                    "supports_vision": False,
+                    "supports_function_calling": True,
+                    "supports_json_mode": True,
+                    "supports_parallel_tool_calls": False,
+                    "is_active": True,
+                }
+            ],
+        }
+
+        (version_dir / "models.json").write_text(json.dumps(version_payload))
+
+        registry = RegistryClient(
+            registry_url=f"file://{registry_root}",
+            cache_dir=tmp_path / "cache",
+        )
+
+        version_info = await registry.fetch_version("openai", 2)
+
+        assert version_info.version == 2
+        assert version_info.provider == "openai"
+        assert len(version_info.models) == 1
+        assert version_info.models[0].model_name == "gpt-test"
+
+    async def test_registry_model_extended_pricing_fields(self):
+        """Ensure RegistryModel captures extended pricing metadata."""
+        model = RegistryModel(
+            provider="openai",
+            model_name="gpt-test",
+            display_name="GPT Test",
+            description="Synthetic model",
+            dollars_per_million_tokens_input=1.0,
+            dollars_per_million_tokens_output=2.0,
+            dollars_per_million_tokens_cached_input=0.25,
+            dollars_per_million_tokens_cache_write_5m=0.5,
+            dollars_per_million_tokens_cache_write_1h=0.75,
+            dollars_per_million_tokens_cache_read=0.1,
+            cache_storage_cost_per_million_tokens_per_hour=0.01,
+            supports_long_context_pricing=True,
+            long_context_threshold_tokens=128000,
+            dollars_per_million_tokens_input_long_context=0.4,
+            dollars_per_million_tokens_output_long_context=1.0,
+            supports_thinking=True,
+            dollars_per_million_tokens_output_thinking=3.0,
+            is_reasoning_model=True,
+            min_recommended_reasoning_tokens=2000,
+            supports_caching=True,
+            supports_streaming=True,
+            is_active=True,
+        )
+
+        assert model.dollars_per_million_tokens_cached_input == 0.25
+        assert model.dollars_per_million_tokens_cache_write_5m == 0.5
+        assert model.dollars_per_million_tokens_cache_write_1h == 0.75
+        assert model.dollars_per_million_tokens_cache_read == 0.1
+        assert model.cache_storage_cost_per_million_tokens_per_hour == 0.01
+        assert model.supports_long_context_pricing is True
+        assert model.long_context_threshold_tokens == 128000
+        assert model.dollars_per_million_tokens_input_long_context == 0.4
+        assert model.dollars_per_million_tokens_output_long_context == 1.0
+        assert model.supports_thinking is True
+        assert model.dollars_per_million_tokens_output_thinking == 3.0
+
 
 @pytest.mark.asyncio
 class TestServiceWithRegistry:

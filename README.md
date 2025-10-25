@@ -206,7 +206,7 @@ request = LLMRequest(
 
 ### Model Aliases and Lockfiles
 
-LLMRing uses lockfiles to map semantic aliases to models, with support for fallback models and environment-specific profiles:
+LLMRing uses lockfiles to map semantic aliases to models, with support for fallback pools and environment-specific profiles:
 
 ```bash
 # Initialize lockfile (explicit creation at current directory)
@@ -214,9 +214,6 @@ llmring lock init
 
 # Conversational configuration with AI advisor (recommended)
 llmring lock chat  # Natural language interface for lockfile management
-
-# Analyze your configuration
-llmring lock analyze
 
 # View current aliases
 llmring aliases
@@ -281,18 +278,24 @@ async with LLMRing() as service:
 **Profile Configuration in Lockfiles:**
 
 ```toml
-# llmring.lock - Different models per environment
+# llmring.lock (truncated for brevity)
+version = "1.0"
+default_profile = "default"
+
 [profiles.default]
+name = "default"
 [[profiles.default.bindings]]
 alias = "assistant"
 models = ["anthropic:claude-3-5-sonnet"]  # Production quality
 
 [profiles.dev]
+name = "dev"
 [[profiles.dev.bindings]]
 alias = "assistant"
 models = ["openai:gpt-4o-mini"]  # Cheaper for development
 
 [profiles.test]
+name = "test"
 [[profiles.test.bindings]]
 alias = "assistant"
 models = ["ollama:llama3"]  # Local model for testing
@@ -334,12 +337,14 @@ Aliases can specify multiple models for automatic failover:
 
 ```toml
 # In llmring.lock
-[[bindings]]
+[profiles.default]
+name = "default"
+[[profiles.default.bindings]]
 alias = "assistant"
 models = [
     "anthropic:claude-3-5-sonnet",  # Primary
-    "openai:gpt-4o",                 # First fallback
-    "google:gemini-1.5-pro"          # Second fallback
+    "openai:gpt-4o",                # First fallback
+    "google:gemini-1.5-pro"         # Second fallback
 ]
 ```
 
