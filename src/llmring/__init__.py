@@ -10,8 +10,11 @@ from .exceptions import (
     ConversationNotFoundError,
     LLMRingError,
     ModelNotFoundError,
+    ProviderAuthenticationError,
     ProviderError,
     ProviderNotFoundError,
+    ProviderRateLimitError,
+    ProviderTimeoutError,
     ServerConnectionError,
 )
 
@@ -28,14 +31,14 @@ from .file_utils import (  # Core functions; Content creation; Convenience funct
     get_file_mime_type,
     validate_image_file,
 )
-from .schemas import LLMRequest, LLMResponse, Message
 
 # Import logging decorators
 from .logging import log_llm_call, log_llm_stream
+from .schemas import LLMRequest, LLMResponse, Message
 
 # Import main components
 from .service import LLMRing
-from .service_extended import ConversationManager, LLMRingSession, LLMRingExtended
+from .service_extended import ConversationManager, LLMRingExtended, LLMRingSession
 
 __all__ = [
     # Core classes
@@ -52,6 +55,9 @@ __all__ = [
     "ConfigurationError",
     "ProviderError",
     "ProviderNotFoundError",
+    "ProviderAuthenticationError",
+    "ProviderRateLimitError",
+    "ProviderTimeoutError",
     "ModelNotFoundError",
     "ConversationNotFoundError",
     "ServerConnectionError",
