@@ -128,6 +128,8 @@ LLMRing provides **expert guidance skills** for Claude Code that teach Claude ho
 
 **Result:** Complete lockfile configuration with environment-specific settings!
 
+## Overview
+
 ### Streaming
 
 ```python
