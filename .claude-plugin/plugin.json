@@ -1,0 +1,13 @@
+{
+  "name": "llmring",
+  "description": "Unified Python interface for OpenAI, Anthropic, Google, and Ollama LLMs - skills for chat, streaming, structured output, tools, providers, and lockfiles",
+  "version": "1.2.0",
+  "author": {
+    "name": "Juan Reyero",
+    "email": "juan@juanreyero.com"
+  },
+  "homepage": "https://llmring.ai",
+  "repository": "https://github.com/juanre/llmring",
+  "license": "MIT",
+  "keywords": ["llmring", "llm", "ai", "openai", "anthropic", "claude", "gpt", "gemini", "ollama", "skills"]
+}
