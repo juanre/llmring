@@ -164,6 +164,10 @@ class CostCalculator:
         )
 
         # Output / reasoning costs
+        # Note: Most providers include reasoning_tokens in completion_tokens total.
+        # We subtract them here to avoid double-counting when applying separate pricing.
+        # If completion_tokens < reasoning_tokens, the provider reports them separately,
+        # so we skip the subtraction.
         reasoning_cost = 0.0
         reasoning_rate = registry_model.dollars_per_million_tokens_output_thinking or 0.0
         if reasoning_tokens > 0 and reasoning_rate:
