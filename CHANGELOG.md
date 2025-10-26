@@ -2,6 +2,26 @@
 
 All notable changes to LLMRing will be documented in this file.
 
+## [1.2.0] - 2025-10-28
+
+### 🚀 Features
+
+- **Detailed cost breakdowns**: Prompt caching (reads/writes), long-context tiers, and thinking tokens are now itemised in every `LLMResponse.usage.cost_breakdown` entry and propagated to receipts/logging APIs.
+- **Cache-aware pricing**: Prompt cache reads/writes (`cache_read_input_tokens`, `cache_creation_*`) bill against provider-specific rates automatically.
+- **Long-context support**: When requests exceed a model's `long_context_threshold_tokens`, LLMRing switches to the higher-tier pricing without custom code.
+
+### 🔧 Improvements
+
+- **Registry schema**: Added caching, long-context, and thinking-token pricing fields (`dollars_per_million_tokens_cached_input`, `dollars_per_million_tokens_cache_write_{5m,1h}`, `supports_long_context_pricing`, `supports_thinking`, etc.).
+- **Cost calculator**: Refactored to handle cache reads/writes, reasoning tokens, and long-context overflow while preventing double billing.
+- **Receipts & logs**: Include per-feature cost breakdown and extended token counters for downstream analytics.
+
+### 🧪 Testing
+
+- **Cost calculator**: Added unit coverage for cache read/write pricing, reasoning-token separation, and long-context thresholds.
+
+---
+
 ## [1.1.1] - 2025-10-14
 
 ### 🚀 Features
