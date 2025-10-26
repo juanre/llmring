@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llmring"
-version = "1.1.1"
+version = "1.2.0"
 description = "Unified Python interface for OpenAI, Anthropic, Google, and Ollama LLMs"
 readme = "README.md"
 license = { text = "MIT" }
