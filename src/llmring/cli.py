@@ -794,14 +794,88 @@ async def cmd_cache_info(args):
 
 
 async def cmd_register(args):
-    """Register with LLMRing server (placeholder)."""
-    print("⚠️  The 'register' command requires a server connection.")
-    print("This feature is not yet available in the local-only version.")
-    print("\nLLMRing SaaS features coming soon:")
-    print("  • Central binding management")
-    print("  • Usage analytics and cost tracking")
-    print("  • Team collaboration")
-    print("  • Signed receipts for compliance")
+    """Register with LLMRing SaaS and provision an API key via CLI."""
+    import httpx
+
+    from llmring.server_client import ServerClient
+
+    server_url = args.server or os.getenv("LLMRING_SERVER_URL") or "https://api.llmring.ai"
+    server_url = server_url.rstrip("/")
+
+    non_interactive = bool(getattr(args, "non_interactive", False))
+
+    email = args.email
+    if not email and not non_interactive:
+        email = input("Email address: ").strip()
+
+    if not email:
+        print(format_error("Email is required to create an account."))
+        return 1
+
+    organization = args.org
+    if organization is None and not non_interactive:
+        org_input = input("Organization (optional): ").strip()
+        organization = org_input or None
+
+    project_name = args.project_name
+    if project_name is None and not non_interactive:
+        proj_input = input("Project name [Default Project]: ").strip()
+        project_name = proj_input or None
+
+    accept_terms = bool(args.accept_terms)
+    if not accept_terms and not non_interactive:
+        confirmation = input("Do you accept the LLMRing Terms of Service? [y/N]: ").strip()
+        accept_terms = confirmation.lower() in ("y", "yes")
+
+    if not accept_terms:
+        print(format_error("You must accept the Terms of Service to create an account."))
+        return 1
+
+    payload = {
+        "email": email,
+        "organization": organization,
+        "project_name": project_name,
+        "accept_terms": True,
+    }
+
+    print(format_info(f"Registering with LLMRing at {server_url}..."))
+
+    try:
+        async with ServerClient(base_url=server_url) as client:
+            result = await client.post("/api/v1/cli/register", json=payload)
+    except httpx.HTTPStatusError as exc:
+        try:
+            detail = exc.response.json().get("detail")
+        except Exception:
+            detail = exc.response.text
+        if exc.response.status_code == 409:
+            print(format_warning(f"{detail} Visit {server_url}/login to manage your account."))
+        else:
+            print(format_error(f"Registration failed: {detail}"))
+        return 1
+    except httpx.RequestError as exc:
+        print(format_error(f"Could not reach {server_url}: {exc}"))
+        return 1
+
+    api_key = result["api_key"]
+    dashboard_url = result.get("dashboard_url", f"{server_url}/dashboard")
+    api_key_active = result.get("api_key_active", True)
+
+    print()
+    print(format_success("Account created!"))
+    print(f"🔑  API key: {api_key}")
+    if not api_key_active:
+        print(format_warning("API key is pending email verification and cannot be used yet."))
+    print("📬  Verification email sent. Please verify to unlock dashboard access.")
+    print(
+        format_info(
+            f"Dashboard: {dashboard_url}\n"
+            "Add the API key to your environment:\n"
+            f'    export LLMRING_API_KEY="{api_key}"\n'
+            "Keep this key secret—it cannot be shown again."
+        )
+    )
+
     return 0
 
 
@@ -1337,6 +1411,24 @@ def main():
     )
     register_parser.add_argument("--email", help="Email address for registration")
     register_parser.add_argument("--org", help="Organization name")
+    register_parser.add_argument(
+        "--project-name",
+        help="Optional name for the initial project (default: 'Default Project')",
+    )
+    register_parser.add_argument(
+        "--server",
+        help="LLMRing API base URL (defaults to $LLMRING_SERVER_URL or https://api.llmring.ai)",
+    )
+    register_parser.add_argument(
+        "--accept-terms",
+        action="store_true",
+        help="Accept the Terms of Service without interactive confirmation",
+    )
+    register_parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Fail instead of prompting when required fields are missing",
+    )
 
     args = parser.parse_args()
 
