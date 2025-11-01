@@ -855,6 +855,18 @@ class AsyncMCPClient:
     ):
         self._method_handlers[method] = handler
 
+    def unregister_notification_handler(self, method: str, handler: Callable):
+        """Remove a previously registered notification handler, if present."""
+        handlers = self._notification_handlers.get(method)
+        if not handlers:
+            return
+        try:
+            handlers.remove(handler)
+        except ValueError:
+            return
+        if not handlers:
+            self._notification_handlers.pop(method, None)
+
     def _on_transport_message(self, message: dict[str, Any]) -> None:
         """Schedule async dispatch for incoming transport messages."""
         try:

@@ -944,7 +944,378 @@ async def cmd_receipts_generate(args):
             print(f"  Date range: {summary.get('start_date')} to {summary.get('end_date')}")
 
         return 0
+    except Exception as e:
+        print(f"❌ Error generating receipt: {e}")
+        return 1
 
+
+# ============================================================================
+# MCP CLI Commands (Managed persistence via server)
+# ============================================================================
+
+
+async def _ensure_server_env() -> tuple[str, str] | None:
+    """Validate server URL and API key in environment, print friendly errors."""
+    server_url = os.getenv("LLMRING_SERVER_URL", "http://localhost:8000")
+    api_key = os.getenv("LLMRING_API_KEY")
+    if not api_key:
+        print("❌ Error: LLMRING_API_KEY environment variable required for MCP management.")
+        print("Set it to your project API key from the dashboard.")
+        return None
+    return server_url, api_key
+
+
+async def cmd_mcp_servers_list(args):
+    """List MCP servers for the current project (API key scope)."""
+    from llmring.mcp.http_client import MCPHttpClient
+
+    env = await _ensure_server_env()
+    if not env:
+        return 1
+    server_url, api_key = env
+
+    client = MCPHttpClient(base_url=server_url, api_key=api_key)
+    try:
+        servers = await client.list_servers()
+        if not servers:
+            print("(No MCP servers registered)")
+            return 0
+
+        show_inactive = bool(getattr(args, "all", False))
+        for s in servers:
+            if (s.get("is_active") is False) and not show_inactive:
+                continue
+            print(
+                f"- {s.get('name')}  id={s.get('id')}  type={s.get('transport_type')}  url={s.get('url')}"
+            )
+        return 0
+    except Exception as e:
+        print(f"❌ Error listing MCP servers: {e}")
+        return 1
+
+
+async def cmd_mcp_servers_register(args):
+    """Register a new MCP server for this project."""
+    from llmring.mcp.http_client import MCPHttpClient
+
+    env = await _ensure_server_env()
+    if not env:
+        return 1
+    server_url, api_key = env
+
+    client = MCPHttpClient(base_url=server_url, api_key=api_key)
+    try:
+        created = await client.register_server(
+            name=args.name, url=args.url, transport_type=args.transport
+        )
+        print("✅ Registered MCP server")
+        print(json.dumps(created, indent=2, default=str))
+        return 0
+    except Exception as e:
+        print(f"❌ Error registering MCP server: {e}")
+        return 1
+
+
+async def cmd_mcp_tools_list(args):
+    """List MCP tools; optionally filter by server id."""
+    from uuid import UUID
+
+    from llmring.mcp.http_client import MCPHttpClient
+
+    env = await _ensure_server_env()
+    if not env:
+        return 1
+    server_url, api_key = env
+
+    client = MCPHttpClient(base_url=server_url, api_key=api_key)
+    try:
+        server_id = None
+        if getattr(args, "server_id", None):
+            try:
+                server_id = UUID(args.server_id)
+            except Exception:
+                print("❌ Invalid --server-id (must be UUID)")
+                return 1
+
+        tools = await client.list_tools(server_id=server_id)
+        if not tools:
+            print("(No MCP tools found)")
+            return 0
+
+        for t in tools:
+            name = t.get("name")
+            tid = t.get("id")
+            server = t.get("server") or {}
+            sname = server.get("name") or "?"
+            print(f"- {name}  id={tid}  server={sname}")
+        return 0
+    except Exception as e:
+        print(f"❌ Error listing MCP tools: {e}")
+        return 1
+
+
+async def cmd_mcp_prompts_list(args):
+    """List MCP prompts; optionally filter by server id."""
+    from uuid import UUID
+
+    from llmring.mcp.http_client import MCPHttpClient
+
+    env = await _ensure_server_env()
+    if not env:
+        return 1
+    server_url, api_key = env
+
+    client = MCPHttpClient(base_url=server_url, api_key=api_key)
+    try:
+        server_id = None
+        if getattr(args, "server_id", None):
+            try:
+                server_id = UUID(args.server_id)
+            except Exception:
+                print("❌ Invalid --server-id (must be UUID)")
+                return 1
+
+        prompts = await client.list_prompts(server_id=server_id)
+        if not prompts:
+            print("(No MCP prompts found)")
+            return 0
+
+        for p in prompts:
+            print(f"- {p.get('name')}  id={p.get('id')}  server={p.get('server_id')}")
+        return 0
+    except Exception as e:
+        print(f"❌ Error listing MCP prompts: {e}")
+        return 1
+
+
+async def cmd_mcp_prompts_register(args):
+    """Append a prompt to a server by fetching current capabilities and refreshing."""
+    from uuid import UUID
+
+    from llmring.mcp.http_client import MCPHttpClient
+
+    env = await _ensure_server_env()
+    if not env:
+        return 1
+    server_url, api_key = env
+
+    try:
+        server_id = UUID(args.server_id)
+    except Exception:
+        print("❌ Invalid --server-id (must be UUID)")
+        return 1
+
+    # Parse arguments JSON (inline or file path)
+    arguments = None
+    if getattr(args, "arguments", None):
+        raw = args.arguments
+        try:
+            # If it's a path to a file, read it
+            if raw.endswith(".json") and os.path.exists(raw):
+                with open(raw, "r") as f:
+                    import json as _json
+
+                    arguments = _json.load(f)
+            else:
+                import json as _json
+
+                arguments = _json.loads(raw)
+        except Exception as e:
+            print(f"❌ Failed to parse --arguments as JSON or file: {e}")
+            return 1
+
+    client = MCPHttpClient(base_url=server_url, api_key=api_key)
+    try:
+        # Fetch current capabilities
+        tools = await client.list_tools(server_id=server_id)
+        resources = await client.list_resources(server_id=server_id)
+        prompts = await client.list_prompts(server_id=server_id)
+
+        # Convert to refresh shapes
+        tools_caps = [
+            {
+                "name": t.get("name"),
+                "description": t.get("description"),
+                "inputSchema": t.get("input_schema") or {},
+            }
+            for t in tools
+        ]
+        resources_caps = [
+            {
+                "uri": r.get("uri"),
+                "name": r.get("name"),
+                "description": r.get("description"),
+                "mimeType": r.get("mime_type"),
+            }
+            for r in resources
+        ]
+        prompts_caps = [
+            {
+                "name": p.get("name"),
+                "description": p.get("description"),
+                "arguments": p.get("arguments") or {},
+            }
+            for p in prompts
+        ]
+
+        # Append new prompt
+        prompts_caps.append(
+            {
+                "name": args.name,
+                "description": getattr(args, "description", None),
+                "arguments": arguments or {},
+            }
+        )
+
+        await client.refresh_server_capabilities(
+            server_id=server_id,
+            tools=tools_caps,
+            resources=resources_caps,
+            prompts=prompts_caps,
+        )
+
+        print("✅ Registered prompt")
+        return 0
+    except Exception as e:
+        print(f"❌ Error registering prompt: {e}")
+        return 1
+
+
+async def cmd_mcp_resources_register(args):
+    """Append a resource to a server by fetching current capabilities and refreshing."""
+    from uuid import UUID
+
+    from llmring.mcp.http_client import MCPHttpClient
+
+    env = await _ensure_server_env()
+    if not env:
+        return 1
+    server_url, api_key = env
+
+    try:
+        server_id = UUID(args.server_id)
+    except Exception:
+        print("❌ Invalid --server-id (must be UUID)")
+        return 1
+
+    client = MCPHttpClient(base_url=server_url, api_key=api_key)
+    try:
+        # Fetch current capabilities
+        tools = await client.list_tools(server_id=server_id)
+        resources = await client.list_resources(server_id=server_id)
+        prompts = await client.list_prompts(server_id=server_id)
+
+        # Convert to refresh shapes
+        tools_caps = [
+            {
+                "name": t.get("name"),
+                "description": t.get("description"),
+                "inputSchema": t.get("input_schema") or {},
+            }
+            for t in tools
+        ]
+        resources_caps = [
+            {
+                "uri": r.get("uri"),
+                "name": r.get("name"),
+                "description": r.get("description"),
+                "mimeType": r.get("mime_type"),
+            }
+            for r in resources
+        ]
+        prompts_caps = [
+            {
+                "name": p.get("name"),
+                "description": p.get("description"),
+                "arguments": p.get("arguments") or {},
+            }
+            for p in prompts
+        ]
+
+        # Append new resource
+        resources_caps.append(
+            {
+                "uri": args.uri,
+                "name": getattr(args, "name", None),
+                "description": getattr(args, "description", None),
+                "mimeType": getattr(args, "mime_type", None),
+            }
+        )
+
+        await client.refresh_server_capabilities(
+            server_id=server_id,
+            tools=tools_caps,
+            resources=resources_caps,
+            prompts=prompts_caps,
+        )
+
+        print("✅ Registered resource")
+        return 0
+    except Exception as e:
+        print(f"❌ Error registering resource: {e}")
+        return 1
+
+
+async def cmd_mcp_resources_list(args):
+    """List MCP resources; optionally filter by server id."""
+    from uuid import UUID
+
+    from llmring.mcp.http_client import MCPHttpClient
+
+    env = await _ensure_server_env()
+    if not env:
+        return 1
+    server_url, api_key = env
+
+    client = MCPHttpClient(base_url=server_url, api_key=api_key)
+    try:
+        server_id = None
+        if getattr(args, "server_id", None):
+            try:
+                server_id = UUID(args.server_id)
+            except Exception:
+                print("❌ Invalid --server-id (must be UUID)")
+                return 1
+
+        resources = await client.list_resources(server_id=server_id)
+        if not resources:
+            print("(No MCP resources found)")
+            return 0
+
+        for r in resources:
+            print(
+                f"- {r.get('uri')}  id={r.get('id')}  mime={r.get('mime_type')}  server={r.get('server_id')}"
+            )
+        return 0
+    except Exception as e:
+        print(f"❌ Error listing MCP resources: {e}")
+        return 1
+
+
+async def cmd_mcp_apply(args):
+    """Apply MCP configuration from a JSON manifest file."""
+    from llmring.mcp.apply import ensure_from_manifest, load_manifest
+    from llmring.mcp.http_client import MCPHttpClient
+
+    env = await _ensure_server_env()
+    if not env:
+        return 1
+    server_url, api_key = env
+
+    try:
+        manifest = load_manifest(args.file)
+    except Exception as e:
+        print(f"❌ Failed to load manifest: {e}")
+        return 1
+
+    client = MCPHttpClient(base_url=server_url, api_key=api_key)
+    try:
+        applied = await ensure_from_manifest(client, manifest)
+        print(f"✅ Applied MCP manifest for {len(applied)} server(s)")
+        return 0
+    except Exception as e:
+        print(f"❌ Error applying manifest: {e}")
+        return 1
     except Exception as e:
         print(f"❌ Error generating receipt: {e}")
         return 1
@@ -1405,6 +1776,83 @@ def main():
     verify_parser = receipts_subparsers.add_parser("verify", help="Verify a receipt from JSON file")
     verify_parser.add_argument("receipt_file", help="Path to receipt JSON file")
 
+    # MCP management commands (servers, tools)
+    mcp_parser = subparsers.add_parser(
+        "mcp", help="Manage MCP servers, tools, and discovery (requires backend)"
+    )
+    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command", help="MCP commands")
+
+    # mcp servers list
+    mcp_servers_parser = mcp_subparsers.add_parser(
+        "servers", help="Manage MCP servers (register/list)"
+    )
+    mcp_servers_sub = mcp_servers_parser.add_subparsers(
+        dest="mcp_servers_command", help="MCP server subcommands"
+    )
+    mcp_servers_list = mcp_servers_sub.add_parser("list", help="List MCP servers")
+    mcp_servers_list.add_argument(
+        "--all", action="store_true", help="Show inactive servers as well"
+    )
+
+    # mcp servers register
+    mcp_servers_register = mcp_servers_sub.add_parser("register", help="Register a new MCP server")
+    mcp_servers_register.add_argument("--name", required=True, help="Server name")
+    mcp_servers_register.add_argument("--url", required=True, help="Server URL")
+    mcp_servers_register.add_argument(
+        "--transport",
+        choices=["stdio", "http", "websocket"],
+        default="http",
+        help="Transport type",
+    )
+
+    # mcp tools list
+    mcp_tools_parser = mcp_subparsers.add_parser(
+        "tools", help="List MCP tools (optionally filtered by server)"
+    )
+    mcp_tools_parser.add_argument("--server-id", help="Filter by MCP server UUID")
+
+    # mcp prompts list
+    mcp_prompts_parser = mcp_subparsers.add_parser(
+        "prompts", help="List MCP prompts (optionally filtered by server)"
+    )
+    mcp_prompts_parser.add_argument("--server-id", help="Filter by MCP server UUID")
+    mcp_prompts_sub = mcp_prompts_parser.add_subparsers(
+        dest="mcp_prompts_command", help="MCP prompts subcommands"
+    )
+    mcp_prompts_register = mcp_prompts_sub.add_parser(
+        "register", help="Register (append) a prompt to a server"
+    )
+    mcp_prompts_register.add_argument("--server-id", required=True, help="MCP server UUID")
+    mcp_prompts_register.add_argument("--name", required=True, help="Prompt name")
+    mcp_prompts_register.add_argument("--description", help="Prompt description")
+    mcp_prompts_register.add_argument(
+        "--arguments",
+        help="JSON object or path to JSON file describing prompt arguments",
+    )
+
+    # mcp resources list
+    mcp_resources_parser = mcp_subparsers.add_parser(
+        "resources", help="List MCP resources (optionally filtered by server)"
+    )
+    mcp_resources_parser.add_argument("--server-id", help="Filter by MCP server UUID")
+    mcp_resources_sub = mcp_resources_parser.add_subparsers(
+        dest="mcp_resources_command", help="MCP resources subcommands"
+    )
+    mcp_resources_register = mcp_resources_sub.add_parser(
+        "register", help="Register (append) a resource to a server"
+    )
+    mcp_resources_register.add_argument("--server-id", required=True, help="MCP server UUID")
+    mcp_resources_register.add_argument("--uri", required=True, help="Resource URI")
+    mcp_resources_register.add_argument("--name", help="Resource name")
+    mcp_resources_register.add_argument("--description", help="Resource description")
+    mcp_resources_register.add_argument("--mime-type", help="MIME type")
+
+    # mcp apply -f manifest.json
+    mcp_apply_parser = mcp_subparsers.add_parser(
+        "apply", help="Apply MCP configuration from a JSON manifest"
+    )
+    mcp_apply_parser.add_argument("-f", "--file", required=True, help="Path to manifest JSON file")
+
     # Register command
     register_parser = subparsers.add_parser(
         "register", help="Register with LLMRing server (for SaaS features)"
@@ -1483,6 +1931,53 @@ def main():
 
         if args.receipts_command in receipts_commands:
             return asyncio.run(receipts_commands[args.receipts_command](args))
+
+    # Handle mcp subcommands
+    if args.command == "mcp":
+        if not args.mcp_command:
+            mcp_parser.print_help()
+            return 1
+
+        # Nested: mcp servers
+        if args.mcp_command == "servers":
+            if not args.mcp_servers_command:
+                mcp_servers_parser.print_help()
+                return 1
+
+            mcp_servers_commands = {
+                "list": cmd_mcp_servers_list,
+                "register": cmd_mcp_servers_register,
+            }
+            if args.mcp_servers_command in mcp_servers_commands:
+                return asyncio.run(mcp_servers_commands[args.mcp_servers_command](args))
+
+        # mcp tools
+        if args.mcp_command == "tools":
+            return asyncio.run(cmd_mcp_tools_list(args))
+
+        # mcp prompts
+        if args.mcp_command == "prompts":
+            if getattr(args, "mcp_prompts_command", None) is None:
+                return asyncio.run(cmd_mcp_prompts_list(args))
+            prompts_commands = {
+                "register": cmd_mcp_prompts_register,
+            }
+            if args.mcp_prompts_command in prompts_commands:
+                return asyncio.run(prompts_commands[args.mcp_prompts_command](args))
+
+        # mcp resources
+        if args.mcp_command == "resources":
+            if getattr(args, "mcp_resources_command", None) is None:
+                return asyncio.run(cmd_mcp_resources_list(args))
+            resources_commands = {
+                "register": cmd_mcp_resources_register,
+            }
+            if args.mcp_resources_command in resources_commands:
+                return asyncio.run(resources_commands[args.mcp_resources_command](args))
+
+        # mcp apply
+        if args.mcp_command == "apply":
+            return asyncio.run(cmd_mcp_apply(args))
 
     # Run the appropriate command
     async_commands = {
