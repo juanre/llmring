@@ -158,18 +158,39 @@ class MCPHttpClient(BaseHTTPClient):
                 return tool
         return None
 
-    async def execute_tool(
+    async def record_tool_execution(
         self,
         tool_id: UUID,
         input: Dict[str, Any],
+        output: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+        duration_ms: Optional[int] = None,
         conversation_id: Optional[UUID] = None,
     ) -> Dict[str, Any]:
-        """Execute an MCP tool."""
+        """Record an MCP tool execution for observability.
+
+        Note: This records execution metadata. Actual tool execution
+        happens client-side via AsyncMCPClient.
+
+        Args:
+            tool_id: Tool ID
+            input: Tool input arguments
+            output: Tool output (if execution completed)
+            error: Error message (if execution failed)
+            duration_ms: Execution duration in milliseconds
+            conversation_id: Optional conversation ID
+
+        Returns:
+            Execution record with ID and metadata
+        """
         return await self.post(
             f"/api/v1/mcp/tools/{tool_id}/execute",
             json={
                 "tool_id": str(tool_id),
                 "input": input,
+                "output": output,
+                "error": error,
+                "duration_ms": duration_ms,
                 "conversation_id": str(conversation_id) if conversation_id else None,
             },
         )
