@@ -156,6 +156,9 @@ class Lockfile(BaseModel):
         default_factory=dict, description="Metadata for additional lockfile information"
     )
 
+    # Track where lockfile was loaded from for better error messages
+    file_path: Optional[Path] = Field(default=None, exclude=True)
+
     @classmethod
     def create_default(cls) -> "Lockfile":
         """Create a default lockfile with empty profiles.
@@ -414,6 +417,65 @@ class Lockfile(BaseModel):
         binding = self.get_binding(alias, profile)
         return binding.models if binding else []
 
+    def has_alias(self, alias: str, profile: Optional[str] = None) -> bool:
+        """Check if alias is defined in lockfile.
+
+        Args:
+            alias: Alias name to check
+            profile: Optional profile name (defaults to default_profile)
+
+        Returns:
+            True if alias exists and can be resolved, False otherwise
+
+        Example:
+            if lockfile.has_alias("summarizer"):
+                models = lockfile.resolve_alias("summarizer")
+        """
+        try:
+            models = self.resolve_alias(alias, profile)
+            return len(models) > 0
+        except (KeyError, ValueError, IndexError, AttributeError):
+            return False
+
+    def require_aliases(
+        self, required: List[str], profile: Optional[str] = None, context: Optional[str] = None
+    ) -> None:
+        """Validate that all required aliases exist.
+
+        Args:
+            required: List of alias names that must be defined
+            profile: Optional profile name (defaults to default_profile)
+            context: Optional context string for error message (e.g., "library-a")
+
+        Raises:
+            ValueError: If any required aliases are missing, with helpful message
+
+        Example:
+            lockfile.require_aliases(
+                ["summarizer", "analyzer"],
+                context="my-library"
+            )
+        """
+        if not required:
+            return  # Empty list is valid (no requirements)
+
+        missing = [alias for alias in required if not self.has_alias(alias, profile)]
+
+        if missing:
+            # Build helpful error message
+            context_msg = f" for {context}" if context else ""
+            profile_msg = f" (profile: {profile or self.default_profile})"
+
+            # Include lockfile path if available
+            path_msg = ""
+            if self.file_path:
+                path_msg = f"\nLockfile path: {self.file_path}"
+
+            raise ValueError(
+                f"Lockfile missing required aliases{context_msg}{profile_msg}: {', '.join(missing)}.{path_msg}\n"
+                f"Please ensure your lockfile defines these aliases."
+            )
+
     def save(self, path: Optional[Path] = None):
         """Save the lockfile to disk."""
         path = path or Path(LOCKFILE_NAME)
@@ -478,7 +540,9 @@ class Lockfile(BaseModel):
         if "metadata" not in data:
             data["metadata"] = {}
 
-        return cls(**data)
+        lockfile = cls(**data)
+        lockfile.file_path = path
+        return lockfile
 
     @classmethod
     def get_package_lockfile_path(cls) -> Path:

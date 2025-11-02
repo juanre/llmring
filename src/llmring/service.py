@@ -370,6 +370,48 @@ class LLMRing:
             raise RuntimeError("Alias resolver not initialized")
         return self._alias_resolver.resolve(alias_or_model, profile)
 
+    def has_alias(self, alias: str, profile: Optional[str] = None) -> bool:
+        """Check if alias is defined in loaded lockfile.
+
+        Args:
+            alias: Alias name to check
+            profile: Optional profile name
+
+        Returns:
+            True if alias exists, False if alias doesn't exist or no lockfile loaded
+
+        Example:
+            if ring.has_alias("summarizer"):
+                response = ring.chat("summarizer", messages=[...])
+        """
+        if not self.lockfile:
+            return False
+        return self.lockfile.has_alias(alias, profile)
+
+    def require_aliases(
+        self, required: List[str], profile: Optional[str] = None, context: Optional[str] = None
+    ) -> None:
+        """Validate that required aliases exist in loaded lockfile.
+
+        Args:
+            required: List of alias names that must be defined
+            profile: Optional profile name
+            context: Optional context for error message
+
+        Raises:
+            ValueError: If no lockfile loaded or required aliases missing
+
+        Example:
+            ring = LLMRing(lockfile_path="./my.lock")
+            ring.require_aliases(["summarizer", "analyzer"], context="my-library")
+        """
+        if not self.lockfile:
+            raise ValueError(
+                f"No lockfile loaded. Cannot validate required aliases: {', '.join(required)}. "
+                f"Provide lockfile_path parameter when initializing LLMRing."
+            )
+        self.lockfile.require_aliases(required, profile, context)
+
     def clear_alias_cache(self):
         """Clear the alias resolution cache."""
         if self._alias_resolver:
