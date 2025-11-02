@@ -34,13 +34,28 @@ This skill covers:
 
 ## Quick Start
 
+**FIRST: Create your lockfile** (required for all real applications):
+
+```bash
+# Initialize lockfile with your aliases
+llmring lock init
+
+# Or use interactive configuration
+llmring lock chat
+
+# Bind an alias for your use case
+llmring bind summarizer anthropic:claude-3-5-haiku-20241022
+```
+
+**THEN: Use in code:**
+
 ```python
 from llmring import LLMRing, LLMRequest, Message
 
 # Use context manager for automatic resource cleanup
 async with LLMRing() as service:
     request = LLMRequest(
-        model="fast",  # Semantic alias
+        model="summarizer",  # YOUR semantic alias (defined in llmring.lock)
         messages=[
             Message(role="system", content="You are a helpful assistant."),
             Message(role="user", content="Hello!")
@@ -50,6 +65,8 @@ async with LLMRing() as service:
     response = await service.chat(request)
     print(response.content)
 ```
+
+**⚠️ Important:** The bundled lockfile that ships with llmring is ONLY for running `llmring lock chat`. Real applications must create their own lockfile.
 
 ## Complete API Documentation
 

@@ -15,11 +15,20 @@ uv add llmring
 pip install llmring
 ```
 
+## When to Create Your Own Lockfile
+
+**You MUST create your own `llmring.lock` for:**
+- ✅ Any real application
+- ✅ Any library you're building
+- ✅ Any code you're committing to git
+
+**The bundled lockfile** that ships with llmring is ONLY for running `llmring lock chat`. It provides the "advisor" alias so the configuration assistant works. **It is NOT for your application.**
+
 ## API Overview
 
 This skill covers:
 - Lockfile (`llmring.lock`) structure and resolution
-- Semantic aliases (fast, balanced, deep)
+- Semantic alias naming (use task names, not performance descriptors)
 - Profiles for environment-specific configuration
 - Fallback models for automatic failover
 - CLI commands for lockfile management
@@ -28,16 +37,17 @@ This skill covers:
 ## Quick Start
 
 ```bash
-# Initialize lockfile in current directory
+# REQUIRED: Create lockfile in your project
 llmring lock init
 
 # View current aliases
 llmring aliases
 
-# Bind alias to model
-llmring bind fast "openai:gpt-4o-mini"
+# Bind semantic aliases for your use case
+llmring bind summarizer "anthropic:claude-3-5-haiku-20241022"
+llmring bind analyzer "openai:gpt-4o"
 
-# Use conversational configuration (recommended)
+# Or use conversational configuration (recommended)
 llmring lock chat
 ```
 
@@ -47,13 +57,26 @@ llmring lock chat
 from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
-    # Use semantic alias (defined in lockfile)
+    # Use YOUR semantic alias (defined in llmring.lock)
     request = LLMRequest(
-        model="fast",  # Resolves to configured model
+        model="summarizer",  # Resolves to model you configured
         messages=[Message(role="user", content="Hello")]
     )
     response = await service.chat(request)
 ```
+
+## Choosing Alias Names
+
+**Use domain-specific semantic names:**
+- ✅ `"summarizer"` - Clear what it does
+- ✅ `"code-reviewer"` - Describes purpose
+- ✅ `"extractor"` - Self-documenting
+- ✅ `"sql-generator"` - Intent is obvious
+
+**Avoid generic performance descriptors:**
+- ❌ `"fast"`, `"balanced"`, `"deep"` - Don't describe the task
+
+Generic names like "fast" appear in examples for illustration only. Real applications should use names that describe the task, not model characteristics.
 
 ## Lockfile Resolution Order
 
@@ -62,7 +85,7 @@ LLMRing searches for lockfiles in this order:
 1. **Explicit path** via `lockfile_path` parameter (must exist)
 2. **Environment variable** `LLMRING_LOCKFILE_PATH` (must exist)
 3. **Current directory** `./llmring.lock` (if exists)
-4. **Package bundled lockfile** `src/llmring/llmring.lock` (fallback)
+4. **LLMRing's internal lockfile** (only for `llmring lock chat` - NOT for your app)
 
 **Example:**
 
