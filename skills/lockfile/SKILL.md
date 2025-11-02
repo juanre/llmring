@@ -1,6 +1,6 @@
 ---
 name: lockfile
-description: Use when configuring model aliases, managing environment-specific profiles (dev/staging/prod), or setting up fallback models - lockfile system provides semantic aliases and automatic failover across OpenAI, Anthropic, Google, and Ollama
+description: Use when creating llmring.lock file for new project (REQUIRED for all applications), configuring model aliases with semantic task-based names, managing environment-specific profiles (dev/staging/prod), or setting up fallback models - lockfile creation is mandatory first step, bundled lockfile is only for llmring tools
 ---
 
 # Aliases, Profiles, and Lockfile Configuration
@@ -114,20 +114,20 @@ default_profile = "default"
 name = "default"
 
 [[profiles.default.bindings]]
-alias = "fast"
+alias = "summarizer"
 models = ["openai:gpt-4o-mini"]
 
 [[profiles.default.bindings]]
-alias = "balanced"
+alias = "analyzer"
 models = [
-    "anthropic:claude-3-5-sonnet",   # Primary
-    "openai:gpt-4o",                  # Fallback
-    "google:gemini-1.5-pro"           # Second fallback
+    "anthropic:claude-3-5-sonnet-20241022",   # Primary
+    "openai:gpt-4o",                           # Fallback
+    "google:gemini-1.5-pro"                    # Second fallback
 ]
 
 [[profiles.default.bindings]]
-alias = "deep"
-models = ["anthropic:claude-opus-4"]
+alias = "code-reviewer"
+models = ["anthropic:claude-3-5-sonnet-20241022"]
 
 [profiles.dev]
 name = "dev"
@@ -663,12 +663,12 @@ request = LLMRequest(
 )
 ```
 
-**Right: Use Aliases**
+**Right: Use Semantic Aliases**
 
 ```python
 # DO THIS - flexible, easy to update
 request = LLMRequest(
-    model="fast",  # Defined in lockfile
+    model="summarizer",  # Semantic name defined in lockfile
     messages=[...]
 )
 ```

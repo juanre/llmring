@@ -33,13 +33,20 @@ This skill covers:
 
 ## Quick Start
 
+**First, create your lockfile** (see llmring:lockfile skill):
+```bash
+llmring lock init
+llmring bind chatbot anthropic:claude-3-5-haiku-20241022
+```
+
+**Then use streaming:**
 ```python
 from llmring import LLMRing, LLMRequest, Message
 from llmring.schemas import StreamChunk  # Optional: for type hints
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="fast",
+        model="chatbot",  # YOUR alias from llmring.lock
         messages=[Message(role="user", content="Count to 10")]
     )
 
@@ -122,7 +129,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="fast",
+        model="chatbot",  # Your streaming alias
         messages=[Message(role="user", content="Tell me a joke")]
     )
 
@@ -171,7 +178,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="fast",
+        model="chatbot",  # Your streaming alias
         messages=[Message(role="user", content="Write a story")]
     )
 
@@ -238,7 +245,7 @@ async with LLMRing() as service:
     ]
 
     # First streaming response
-    request = LLMRequest(model="fast", messages=messages)
+    request = LLMRequest(model="chatbot",  # Your streaming alias messages=messages)
     response_text = ""
 
     print("Assistant: ", end="")
@@ -252,7 +259,7 @@ async with LLMRing() as service:
 
     # Second turn
     messages.append(Message(role="user", content="Give me an example"))
-    request = LLMRequest(model="fast", messages=messages)
+    request = LLMRequest(model="chatbot",  # Your streaming alias messages=messages)
     response_text = ""
 
     print("Assistant: ", end="")
@@ -270,7 +277,7 @@ from llmring import LLMRing, LLMRequest, Message
 async with LLMRing() as service:
     # Limit streaming response length
     request = LLMRequest(
-        model="fast",
+        model="chatbot",  # Your streaming alias
         messages=[Message(role="user", content="Write a long essay")],
         max_tokens=50  # Stop after 50 tokens
     )
@@ -290,7 +297,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="fast",
+        model="chatbot",  # Your streaming alias
         messages=[Message(role="user", content="Hello")]
     )
 
@@ -320,7 +327,7 @@ from llmring.exceptions import (
 async with LLMRing() as service:
     try:
         request = LLMRequest(
-            model="fast",
+            model="chatbot",  # Your streaming alias
             messages=[Message(role="user", content="Hello")]
         )
 

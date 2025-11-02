@@ -1,6 +1,6 @@
 ---
 name: chat
-description: Use when getting started with llmring, making basic LLM chat completions, or sending messages to OpenAI, Anthropic, Google, or Ollama - unified interface for all providers with consistent message structure and response handling
+description: Use when starting a new project with llmring, building an application using LLMs, making basic chat completions, or sending messages to OpenAI, Anthropic, Google, or Ollama - covers lockfile creation (MANDATORY first step), semantic alias usage, unified interface for all providers with consistent message structure and response handling
 ---
 
 # Basic Chat Completions
@@ -200,13 +200,13 @@ from llmring import LLMRequest, Message
 
 # Simple request
 request = LLMRequest(
-    model="fast",
+    model="summarizer",  # Your domain-specific alias
     messages=[Message(role="user", content="Hello")]
 )
 
 # With parameters
 request = LLMRequest(
-    model="balanced",
+    model="explainer",  # Another semantic alias you define
     messages=[
         Message(role="system", content="You are a helpful assistant."),
         Message(role="user", content="Explain quantum computing")
@@ -322,7 +322,7 @@ from llmring import LLMRing, LLMRequest, Message
 # Context manager handles cleanup automatically
 async with LLMRing() as service:
     request = LLMRequest(
-        model="fast",
+        model="chatbot",  # Your alias for conversational AI
         messages=[Message(role="user", content="Hello")]
     )
     response = await service.chat(request)
@@ -355,7 +355,7 @@ async with LLMRing() as service:
     ]
 
     # First turn
-    request = LLMRequest(model="fast", messages=messages)
+    request = LLMRequest(model="assistant", messages=messages)
     response = await service.chat(request)
 
     # Add assistant response to history
@@ -363,7 +363,7 @@ async with LLMRing() as service:
 
     # Second turn
     messages.append(Message(role="user", content="What about JavaScript?"))
-    request = LLMRequest(model="fast", messages=messages)
+    request = LLMRequest(model="assistant", messages=messages)
     response = await service.chat(request)
 
     print(response.content)
@@ -372,16 +372,17 @@ async with LLMRing() as service:
 ### Using Model Aliases
 
 ```python
-# Semantic aliases (defined in lockfile)
+# Semantic aliases YOU define in your lockfile
 request = LLMRequest(
-    model="fast",      # Cost-effective quick responses
+    model="summarizer",  # Alias you configured for this task
     messages=[Message(role="user", content="Hello")]
 )
 
-# Other common aliases:
-# model="balanced"  - Optimal all-around model
-# model="deep"      - Most capable reasoning model
-# model="advisor"   - Claude Opus 4.1 for complex tasks
+# Use task-based names:
+# model="code-reviewer"  - For code review tasks
+# model="sql-generator"  - For generating SQL
+# model="extractor"      - For extracting structured data
+# model="analyzer"       - For analysis tasks
 ```
 
 ### Using Direct Model References
@@ -405,14 +406,14 @@ request = LLMRequest(
 ```python
 # Creative writing (higher temperature)
 request = LLMRequest(
-    model="balanced",
+    model="creative-writer",  # Your alias for creative tasks
     messages=[Message(role="user", content="Write a poem")],
     temperature=1.2  # More random/creative
 )
 
 # Factual responses (lower temperature)
 request = LLMRequest(
-    model="balanced",
+    model="factual-responder",  # Your alias for factual tasks
     messages=[Message(role="user", content="What is 2+2?")],
     temperature=0.2  # More deterministic
 )
@@ -423,7 +424,7 @@ request = LLMRequest(
 ```python
 # Limit response length
 request = LLMRequest(
-    model="fast",
+    model="summarizer",  # Your summarization alias
     messages=[Message(role="user", content="Summarize this...")],
     max_tokens=100  # Cap at 100 tokens
 )
@@ -446,7 +447,7 @@ from llmring import (
 async with LLMRing() as service:
     try:
         request = LLMRequest(
-            model="fast",
+            model="chatbot",  # Your conversational alias
             messages=[Message(role="user", content="Hello")]
         )
         response = await service.chat(request)
@@ -510,12 +511,12 @@ request = LLMRequest(
 )
 ```
 
-**Right: Specify Model or Use Lockfile**
+**Right: Use Semantic Alias from Lockfile**
 
 ```python
-# DO THIS - specify model
+# DO THIS - use your semantic alias
 request = LLMRequest(
-    model="fast",  # or "anthropic:claude-3-5-sonnet"
+    model="chatbot",  # or "anthropic:claude-3-5-sonnet" for direct reference
     messages=[Message(role="user", content="Hello")]
 )
 ```
