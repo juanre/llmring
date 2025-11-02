@@ -52,8 +52,8 @@ Creating lockfile with registry-based defaults...
 
 Default aliases:
   fast → openai:gpt-4o-mini
-  balanced → anthropic:claude-3-5-sonnet
-  deep → anthropic:claude-3-5-sonnet
+  balanced → anthropic:claude-sonnet-4-5-20250929
+  deep → anthropic:claude-sonnet-4-5-20250929
 
 💡 Use 'llmring lock chat' for conversational lockfile management
 ```
@@ -118,7 +118,7 @@ Validating lockfile bindings...
 
 Profile 'default':
   ✅ fast → openai:gpt-4o-mini
-  ✅ balanced → anthropic:claude-3-5-sonnet
+  ✅ balanced → anthropic:claude-sonnet-4-5-20250929
   ❌ old-model → openai:gpt-3.5-turbo-0301
 
 ✅ All bindings are valid
@@ -154,10 +154,10 @@ Bind an alias to one or more models.
 
 ```bash
 # Single model
-llmring bind assistant "anthropic:claude-3-5-sonnet"
+llmring bind assistant "anthropic:claude-sonnet-4-5-20250929"
 
 # Multiple models with fallbacks
-llmring bind assistant "anthropic:claude-3-5-sonnet,openai:gpt-4o,google:gemini-1.5-pro"
+llmring bind assistant "anthropic:claude-sonnet-4-5-20250929,openai:gpt-4o,google:gemini-2.5-pro"
 
 # Specific profile
 llmring bind assistant "openai:gpt-4o-mini" --profile dev
@@ -168,8 +168,8 @@ llmring bind assistant "openai:gpt-4o-mini" --profile dev
 
 **Example output:**
 ```
-✅ Bound 'assistant' → anthropic:claude-3-5-sonnet in profile 'default'
-   Fallbacks: openai:gpt-4o, google:gemini-1.5-pro
+✅ Bound 'assistant' → anthropic:claude-sonnet-4-5-20250929 in profile 'default'
+   Fallbacks: openai:gpt-4o, google:gemini-2.5-pro
 ```
 
 ---
@@ -197,9 +197,9 @@ llmring aliases
 ```
 Aliases in profile 'default':
   fast → openai:gpt-4o-mini
-  balanced → anthropic:claude-3-5-sonnet, openai:gpt-4o
-  deep → anthropic:claude-3-5-sonnet
-  vision → google:gemini-1.5-flash
+  balanced → anthropic:claude-sonnet-4-5-20250929, openai:gpt-4o
+  deep → anthropic:claude-sonnet-4-5-20250929
+  vision → google:gemini-2.5-flash
 ```
 
 ---
@@ -234,7 +234,7 @@ OPENAI:
   - o1-mini
 
 ANTHROPIC:
-  - claude-3-5-sonnet
+  - claude-sonnet-4-5-20250929
   - claude-3-5-haiku
   - claude-3-opus
 ```
@@ -388,7 +388,7 @@ Total cost: $0.045210
 
 Recent requests:
   2024-01-15 10:30: fast → openai:gpt-4o-mini ($0.000123)
-  2024-01-15 10:28: balanced → anthropic:claude-3-5-sonnet ($0.012450)
+  2024-01-15 10:28: balanced → anthropic:claude-sonnet-4-5-20250929 ($0.012450)
 ```
 
 **Note:** Full statistics require server connection. See [Receipts Documentation](receipts.md) for details.
@@ -575,7 +575,7 @@ llmring chat "Hello, world!"
 llmring bind assistant "openai:gpt-4o-mini" --profile dev
 
 # 2. Set up production profile
-llmring bind assistant "anthropic:claude-3-5-sonnet,openai:gpt-4o" --profile prod
+llmring bind assistant "anthropic:claude-sonnet-4-5-20250929,openai:gpt-4o" --profile prod
 
 # 3. Test dev profile
 export LLMRING_PROFILE=dev

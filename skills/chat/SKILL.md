@@ -37,15 +37,21 @@ This skill covers:
 **FIRST: Create your lockfile** (required for all real applications):
 
 ```bash
-# Initialize lockfile with your aliases
+# Initialize lockfile
 llmring lock init
 
-# Or use interactive configuration
-llmring lock chat
+# Check available models (get current names from registry):
+llmring list --provider openai
+llmring list --provider anthropic
 
-# Bind an alias for your use case
+# Bind aliases using CURRENT model names:
 llmring bind summarizer anthropic:claude-3-5-haiku-20241022
+
+# Or use interactive configuration (recommended - knows current models):
+llmring lock chat
 ```
+
+**⚠️ Important:** Check `llmring list` for current model names. Models change (e.g., gemini-2.5-pro → gemini-2.5-pro).
 
 **THEN: Use in code:**
 
@@ -290,7 +296,7 @@ Response from a chat completion.
 response = await service.chat(request)
 
 print(response.content)           # "The capital is Paris."
-print(response.model)              # "anthropic:claude-3-5-sonnet"
+print(response.model)              # "anthropic:claude-sonnet-4-5-20250929"
 print(response.total_tokens)       # 45
 print(response.finish_reason)      # "stop"
 print(response.usage)              # {"prompt_tokens": 20, "completion_tokens": 25}
@@ -390,7 +396,7 @@ request = LLMRequest(
 ```python
 # Direct provider:model format (escape hatch)
 request = LLMRequest(
-    model="anthropic:claude-3-5-sonnet",
+    model="anthropic:claude-sonnet-4-5-20250929",
     messages=[Message(role="user", content="Hello")]
 )
 
@@ -516,7 +522,7 @@ request = LLMRequest(
 ```python
 # DO THIS - use your semantic alias
 request = LLMRequest(
-    model="chatbot",  # or "anthropic:claude-3-5-sonnet" for direct reference
+    model="chatbot",  # or "anthropic:claude-sonnet-4-5-20250929" for direct reference
     messages=[Message(role="user", content="Hello")]
 )
 ```
@@ -553,8 +559,8 @@ See **llmring-lockfile** skill for full profile documentation.
 | Provider | Initialization | Example |
 |----------|---------------|---------|
 | **OpenAI** | Set `OPENAI_API_KEY` | `model="openai:gpt-4o"` |
-| **Anthropic** | Set `ANTHROPIC_API_KEY` | `model="anthropic:claude-3-5-sonnet"` |
-| **Google** | Set `GOOGLE_GEMINI_API_KEY` | `model="google:gemini-1.5-pro"` |
+| **Anthropic** | Set `ANTHROPIC_API_KEY` | `model="anthropic:claude-sonnet-4-5-20250929"` |
+| **Google** | Set `GOOGLE_GEMINI_API_KEY` | `model="google:gemini-2.5-pro"` |
 | **Ollama** | Runs automatically | `model="ollama:llama3"` |
 
 All providers work with the same unified API - no code changes needed to switch providers.

@@ -111,7 +111,7 @@ async def example_different_providers():
     # providers = [
     #     ("openai:gpt-4o-mini", "OPENAI_API_KEY"),
     #     ("anthropic:claude-3-haiku-20240307", "ANTHROPIC_API_KEY"),
-    #     ("google:gemini-1.5-flash", "GOOGLE_API_KEY"),
+    #     ("google:gemini-2.5-flash", "GOOGLE_API_KEY"),
     # ]
 
     for model, env_var in providers:

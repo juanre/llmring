@@ -397,7 +397,7 @@ alias = "summarizer"
 models = [
     "anthropic:claude-3-5-haiku-20241022",
     "openai:gpt-4o-mini",
-    "google:gemini-1.5-flash"
+    "google:gemini-2.5-flash"
 ]
 ```
 
@@ -420,7 +420,7 @@ result = lib.summarize("Some text")
 # [profiles.default]
 # [[profiles.default.bindings]]
 # alias = "summarizer"
-# models = ["anthropic:claude-3-5-sonnet-20241022", "openai:gpt-4o"]
+# models = ["anthropic:claude-sonnet-4-5-20250929", "openai:gpt-4o"]
 
 # Use custom lockfile
 lib = MyLibrary(lockfile_path="./my-llmring.lock")
@@ -478,7 +478,7 @@ name = "default"
 [[profiles.default.bindings]]
 alias = "summarizer"
 models = [
-    "anthropic:claude-3-5-sonnet-20241022",
+    "anthropic:claude-sonnet-4-5-20250929",
     "openai:gpt-4o"
 ]
 
@@ -487,7 +487,7 @@ models = [
 alias = "analyzer"
 models = [
     "openai:gpt-4o",
-    "google:gemini-1.5-pro"
+    "google:gemini-2.5-pro"
 ]
 ```
 
@@ -581,7 +581,7 @@ default_profile = "default"
 name = "default"
 [[profiles.default.bindings]]
 alias = "assistant"
-models = ["anthropic:claude-3-5-sonnet-20241022"]
+models = ["anthropic:claude-sonnet-4-5-20250929"]
 
 [profiles.dev]
 name = "dev"
@@ -601,7 +601,7 @@ models = ["ollama:llama3"]  # Local model for testing
 ```bash
 # Bind aliases to specific profiles
 llmring bind assistant "openai:gpt-4o-mini" --profile dev
-llmring bind assistant "anthropic:claude-3-5-sonnet-20241022" --profile prod
+llmring bind assistant "anthropic:claude-sonnet-4-5-20250929" --profile prod
 
 # List aliases in a profile
 llmring aliases --profile dev
@@ -637,9 +637,9 @@ name = "default"
 [[profiles.default.bindings]]
 alias = "assistant"
 models = [
-    "anthropic:claude-3-5-sonnet-20241022",  # Primary
+    "anthropic:claude-sonnet-4-5-20250929",  # Primary
     "openai:gpt-4o",                         # First fallback
-    "google:gemini-1.5-pro"                  # Second fallback
+    "google:gemini-2.5-pro"                  # Second fallback
 ]
 ```
 
@@ -652,7 +652,7 @@ While aliases are recommended, you can still use direct `provider:model` referen
 ```python
 # Direct model reference (escape hatch)
 request = LLMRequest(
-    model="anthropic:claude-3-5-sonnet",  # Direct provider:model reference
+    model="anthropic:claude-sonnet-4-5-20250929",  # Direct provider:model reference
     messages=[Message(role="user", content="Hello")]
 )
 

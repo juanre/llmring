@@ -40,16 +40,20 @@ This skill covers:
 # REQUIRED: Create lockfile in your project
 llmring lock init
 
-# View current aliases
-llmring aliases
+# BEFORE binding aliases, check available models:
+llmring list --provider openai
+llmring list --provider anthropic
+llmring list --provider google
 
-# Bind semantic aliases for your use case
+# THEN bind semantic aliases using CURRENT model names:
 llmring bind summarizer "anthropic:claude-3-5-haiku-20241022"
 llmring bind analyzer "openai:gpt-4o"
 
-# Or use conversational configuration (recommended)
+# Or use conversational configuration (recommended - knows current models)
 llmring lock chat
 ```
+
+**⚠️ Important:** Always check `llmring list --provider <name>` for current model names before binding. Model names change frequently (e.g., claude-sonnet-4-5-20250929 → claude-sonnet-4-5-20250929).
 
 **Using aliases in code:**
 
@@ -120,14 +124,14 @@ models = ["openai:gpt-4o-mini"]
 [[profiles.default.bindings]]
 alias = "analyzer"
 models = [
-    "anthropic:claude-3-5-sonnet-20241022",   # Primary
+    "anthropic:claude-sonnet-4-5-20250929",   # Primary
     "openai:gpt-4o",                           # Fallback
-    "google:gemini-1.5-pro"                    # Second fallback
+    "google:gemini-2.5-pro"                    # Second fallback
 ]
 
 [[profiles.default.bindings]]
 alias = "code-reviewer"
-models = ["anthropic:claude-3-5-sonnet-20241022"]
+models = ["anthropic:claude-sonnet-4-5-20250929"]
 
 [profiles.dev]
 name = "dev"
@@ -141,7 +145,7 @@ name = "prod"
 
 [[profiles.prod.bindings]]
 alias = "assistant"
-models = ["anthropic:claude-3-5-sonnet"]  # Higher quality for production
+models = ["anthropic:claude-sonnet-4-5-20250929"]  # Higher quality for production
 ```
 
 ## CLI Commands
@@ -175,7 +179,7 @@ Bind an alias to one or more models.
 llmring bind fast "openai:gpt-4o-mini"
 
 # Bind with fallbacks
-llmring bind balanced "anthropic:claude-3-5-sonnet,openai:gpt-4o"
+llmring bind balanced "anthropic:claude-sonnet-4-5-20250929,openai:gpt-4o"
 
 # Bind to specific profile
 llmring bind assistant "openai:gpt-4o-mini" --profile dev
@@ -205,7 +209,7 @@ llmring aliases --verbose
 **Output:**
 ```
 fast → openai:gpt-4o-mini
-balanced → anthropic:claude-3-5-sonnet (+ 2 fallbacks)
+balanced → anthropic:claude-sonnet-4-5-20250929 (+ 2 fallbacks)
 deep → anthropic:claude-opus-4
 ```
 
@@ -363,7 +367,7 @@ models = ["openai:gpt-4o-mini"]  # Cheap
 name = "staging"
 [[profiles.staging.bindings]]
 alias = "assistant"
-models = ["anthropic:claude-3-5-sonnet"]  # Mid-tier
+models = ["anthropic:claude-sonnet-4-5-20250929"]  # Mid-tier
 
 [profiles.prod]
 name = "prod"
@@ -371,7 +375,7 @@ name = "prod"
 alias = "assistant"
 models = [
     "anthropic:claude-opus-4",    # Best quality
-    "anthropic:claude-3-5-sonnet"  # Fallback
+    "anthropic:claude-sonnet-4-5-20250929"  # Fallback
 ]
 ```
 
@@ -439,9 +443,9 @@ Aliases can specify multiple models for automatic failover.
 [[profiles.default.bindings]]
 alias = "balanced"
 models = [
-    "anthropic:claude-3-5-sonnet",   # Try first
+    "anthropic:claude-sonnet-4-5-20250929",   # Try first
     "openai:gpt-4o",                  # If first fails
-    "google:gemini-1.5-pro"           # If both fail
+    "google:gemini-2.5-pro"           # If both fail
 ]
 ```
 
@@ -454,9 +458,9 @@ async with LLMRing() as service:
         messages=[Message(role="user", content="Hello")]
     )
 
-    # Tries anthropic:claude-3-5-sonnet
+    # Tries anthropic:claude-sonnet-4-5-20250929
     # If rate limited or unavailable → tries openai:gpt-4o
-    # If that fails → tries google:gemini-1.5-pro
+    # If that fails → tries google:gemini-2.5-pro
     response = await service.chat(request)
 ```
 
@@ -624,7 +628,7 @@ llmring bind assistant "anthropic:claude-opus-4" --profile prod
 ```bash
 # Meaningful names instead of model IDs
 llmring bind summarizer "openai:gpt-4o-mini"
-llmring bind analyst "anthropic:claude-3-5-sonnet"
+llmring bind analyst "anthropic:claude-sonnet-4-5-20250929"
 llmring bind coder "openai:gpt-4o"
 ```
 
@@ -648,7 +652,7 @@ models = ["openai:gpt-4o"]
 [profiles.eu-central]
 [[profiles.eu-central.bindings]]
 alias = "assistant"
-models = ["anthropic:claude-3-5-sonnet"]  # Better EU availability
+models = ["anthropic:claude-sonnet-4-5-20250929"]  # Better EU availability
 ```
 
 ## Common Mistakes
@@ -679,7 +683,7 @@ request = LLMRequest(
 # DON'T DO THIS - single point of failure
 [[profiles.default.bindings]]
 alias = "assistant"
-models = ["anthropic:claude-3-5-sonnet"]
+models = ["anthropic:claude-sonnet-4-5-20250929"]
 ```
 
 **Right: Include Fallbacks**
@@ -689,9 +693,9 @@ models = ["anthropic:claude-3-5-sonnet"]
 [[profiles.default.bindings]]
 alias = "assistant"
 models = [
-    "anthropic:claude-3-5-sonnet",
+    "anthropic:claude-sonnet-4-5-20250929",
     "openai:gpt-4o",
-    "google:gemini-1.5-pro"
+    "google:gemini-2.5-pro"
 ]
 ```
 

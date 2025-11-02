@@ -38,7 +38,7 @@ Assistant: I'll search for models that support function calling and have good co
 [Calls filter_models_by_requirements with requires_functions=true]
 
 Here are the top models for coding:
-1. anthropic:claude-3-5-sonnet - 200K context, excellent code understanding
+1. anthropic:claude-sonnet-4-5-20250929 - 200K context, excellent code understanding
 2. openai:gpt-4o - 128K context, strong function calling
 3. openai:gpt-4o-mini - 128K context, cost-effective with function support
 ```
@@ -49,7 +49,7 @@ Here are the top models for coding:
 You: Show me my current aliases
 Assistant: Here are your current aliases:
 - fast → openai:gpt-4o-mini
-- deep → anthropic:claude-3-5-sonnet
+- deep → anthropic:claude-sonnet-4-5-20250929
 - balanced → openai:gpt-4o
 ```
 

@@ -8,6 +8,7 @@ line and programmatically in Python code.
 
 import asyncio
 from pathlib import Path
+
 from llmring.mcp.client.chat.app import MCPChatApp
 from llmring.mcp.server import MCPServer
 from llmring.mcp.server.transport.stdio import StdioTransport
@@ -16,24 +17,16 @@ from llmring.mcp.server.transport.stdio import StdioTransport
 # Example 1: Creating a simple MCP server for the chat client
 def create_example_server():
     """Create a simple MCP server with custom tools."""
-    server = MCPServer(
-        name="Example Tools Server",
-        version="1.0.0"
-    )
+    server = MCPServer(name="Example Tools Server", version="1.0.0")
 
     # Register some example tools
-    @server.function_registry.register(
-        name="get_time",
-        description="Get the current time"
-    )
+    @server.function_registry.register(name="get_time", description="Get the current time")
     def get_time() -> dict:
         from datetime import datetime
+
         return {"time": datetime.now().isoformat()}
 
-    @server.function_registry.register(
-        name="calculate",
-        description="Perform a calculation"
-    )
+    @server.function_registry.register(name="calculate", description="Perform a calculation")
     def calculate(expression: str) -> dict:
         try:
             # Note: Use ast.literal_eval in production for safety
@@ -42,19 +35,12 @@ def create_example_server():
         except Exception as e:
             return {"error": str(e)}
 
-    @server.function_registry.register(
-        name="save_note",
-        description="Save a note to memory"
-    )
+    @server.function_registry.register(name="save_note", description="Save a note to memory")
     def save_note(title: str, content: str) -> dict:
         # In a real application, this would persist to a database
         return {
             "success": True,
-            "note": {
-                "title": title,
-                "content": content,
-                "saved_at": datetime.now().isoformat()
-            }
+            "note": {"title": title, "content": content, "saved_at": datetime.now().isoformat()},
         }
 
     return server
@@ -68,7 +54,7 @@ async def programmatic_chat_example():
     app = MCPChatApp(
         mcp_server_url="stdio://python -m llmring.mcp.server.lockfile_server",
         llm_model="fast",  # Use the fast model for quick responses
-        enable_telemetry=False
+        enable_telemetry=False,
     )
 
     try:
@@ -87,7 +73,7 @@ async def programmatic_chat_example():
 
         # Demonstrate tool usage
         response = await app.send_message(
-            "Add an alias called 'coder' for anthropic:claude-3-5-sonnet"
+            "Add an alias called 'coder' for anthropic:claude-sonnet-4-5-20250929"
         )
         print(f"Assistant: {response}")
 
@@ -116,7 +102,7 @@ async def interactive_chat_example():
     app = MCPChatApp(
         mcp_server_url="stdio://python -m llmring.mcp.server.lockfile_server",
         llm_model="advisor",
-        enable_telemetry=False
+        enable_telemetry=False,
     )
 
     await app.initialize_async()
@@ -138,7 +124,8 @@ def main():
         asyncio.run(run_example_server())
     else:
         # Show usage examples
-        print("""
+        print(
+            """
 MCP Chat Client Examples
 ========================
 
@@ -190,7 +177,8 @@ All conversations are saved in ~/.llmring/mcp_chat/
 - conversation_*.json: Individual conversations
 - sessions.json: Session metadata
 - command_history.txt: Command line history
-        """)
+        """
+        )
 
         # Run the programmatic example
         print("\nRunning programmatic example...")

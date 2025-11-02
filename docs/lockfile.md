@@ -48,13 +48,13 @@ anthropic = 14
 [[profiles.default.bindings]]
 alias = "assistant"
 models = [
-    "anthropic:claude-3-5-sonnet",
+    "anthropic:claude-sonnet-4-5-20250929",
     "openai:gpt-4o",
 ]
 
 [[profiles.default.bindings]]
 alias = "vision"
-models = ["google:gemini-1.5-pro"]
+models = ["google:gemini-2.5-pro"]
 
 [profiles.dev]
 name = "dev"
@@ -96,13 +96,13 @@ models = ["ollama:llama3"]
         {
           "alias": "assistant",
           "models": [
-            "anthropic:claude-3-5-sonnet",
+            "anthropic:claude-sonnet-4-5-20250929",
             "openai:gpt-4o"
           ]
         },
         {
           "alias": "vision",
-          "models": ["google:gemini-1.5-pro"]
+          "models": ["google:gemini-2.5-pro"]
         }
       ]
     },
@@ -173,7 +173,7 @@ This starts an MCP chat session that:
 
 ```bash
 llmring aliases --profile prod
-llmring bind assistant "anthropic:claude-3-5-sonnet,openai:gpt-4o" --profile prod
+llmring bind assistant "anthropic:claude-sonnet-4-5-20250929,openai:gpt-4o" --profile prod
 llmring lock validate
 llmring lock bump-registry
 ```
@@ -190,7 +190,7 @@ from llmring.lockfile_core import Lockfile
 
 lockfile = Lockfile.load("llmring.lock")
 prod = lockfile.get_profile("prod")
-prod.set_binding("assistant", ["anthropic:claude-3-5-sonnet", "openai:gpt-4o"])
+prod.set_binding("assistant", ["anthropic:claude-sonnet-4-5-20250929", "openai:gpt-4o"])
 lockfile.save()
 ```
 

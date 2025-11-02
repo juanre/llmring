@@ -199,7 +199,7 @@ from llmring import LLMRing, LLMRequest, Message
 async with LLMRing() as service:
     # Using unified API
     request = LLMRequest(
-        model="anthropic:claude-3-5-sonnet",
+        model="anthropic:claude-sonnet-4-5-20250929",
         messages=[
             Message(
                 role="system",
@@ -215,7 +215,7 @@ async with LLMRing() as service:
     # Or use raw SDK
     anthropic_client = service.get_provider("anthropic").client
     response = await anthropic_client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-5-20250929",
         max_tokens=100,
         system=[{
             "type": "text",
@@ -240,7 +240,7 @@ from llmring import LLMRing, LLMRequest, Message
 async with LLMRing() as service:
     # Using unified API with extra_params
     request = LLMRequest(
-        model="anthropic:claude-3-7-sonnet-20250219",
+        model="anthropic:claude-sonnet-4-5-20250929",
         messages=[Message(role="user", content="Complex reasoning problem...")],
         max_tokens=16000,
         extra_params={
@@ -260,7 +260,7 @@ async with LLMRing() as service:
     anthropic_client = service.get_provider("anthropic").client
 
     response = await anthropic_client.messages.create(
-        model="claude-3-7-sonnet-20250219",
+        model="claude-sonnet-4-5-20250929",
         max_tokens=16000,
         thinking={
             "type": "enabled",
@@ -292,7 +292,7 @@ async with LLMRing() as service:
 
     # Use 2M+ token context
     response = google_client.models.generate_content(
-        model="gemini-1.5-pro",
+        model="gemini-2.5-pro",
         contents="Very long document with millions of tokens...",
         generation_config={
             "temperature": 0.7,
@@ -308,7 +308,7 @@ async with LLMRing() as service:
     img = Image.open("image.jpg")
 
     response = google_client.models.generate_content(
-        model="gemini-1.5-flash",
+        model="gemini-2.5-flash",
         contents=["What's in this image?", img]
     )
 ```
@@ -382,12 +382,12 @@ async with LLMRing() as service:
 
     # Anthropic
     response = await service.chat(
-        LLMRequest(model="anthropic:claude-3-5-sonnet", messages=messages)
+        LLMRequest(model="anthropic:claude-sonnet-4-5-20250929", messages=messages)
     )
 
     # Google
     response = await service.chat(
-        LLMRequest(model="google:gemini-1.5-pro", messages=messages)
+        LLMRequest(model="google:gemini-2.5-pro", messages=messages)
     )
 
     # Ollama
@@ -405,9 +405,9 @@ Use lockfile for automatic provider failover:
 [[profiles.default.bindings]]
 alias = "reliable"
 models = [
-    "anthropic:claude-3-5-sonnet",  # Try first
+    "anthropic:claude-sonnet-4-5-20250929",  # Try first
     "openai:gpt-4o",                 # If rate limited
-    "google:gemini-1.5-pro",         # If both fail
+    "google:gemini-2.5-pro",         # If both fail
     "ollama:llama3"                  # Local fallback
 ]
 ```
@@ -442,7 +442,7 @@ async with LLMRing() as service:
     except Exception as e:
         # Fall back to more capable model
         response = await service.chat(
-            LLMRequest(model="anthropic:claude-3-5-sonnet", messages=messages)
+            LLMRequest(model="anthropic:claude-sonnet-4-5-20250929", messages=messages)
         )
 ```
 
@@ -459,7 +459,7 @@ from llmring.exceptions import (
 async with LLMRing() as service:
     try:
         request = LLMRequest(
-            model="anthropic:claude-3-5-sonnet",
+            model="anthropic:claude-sonnet-4-5-20250929",
             messages=[Message(role="user", content="Hello")]
         )
         response = await service.chat(request)
@@ -566,7 +566,7 @@ try:
     response = await service.chat(request)
 except ProviderRateLimitError as e:
     # Try different provider
-    request.model = "google:gemini-1.5-pro"
+    request.model = "google:gemini-2.5-pro"
     response = await service.chat(request)
 except ProviderTimeoutError:
     # Retry or use different provider

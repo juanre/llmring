@@ -10,7 +10,6 @@ import os
 
 from llmring import log_llm_call, log_llm_stream
 
-
 # -----------------------------------------------------------------------------
 # Example 1: Logging OpenAI SDK calls
 # -----------------------------------------------------------------------------
@@ -38,9 +37,7 @@ async def example_openai_logging():
 
     # Use the function normally - logging happens automatically
     response = await chat_with_gpt(
-        messages=[
-            {"role": "user", "content": "What is the capital of France?"}
-        ]
+        messages=[{"role": "user", "content": "What is the capital of France?"}]
     )
 
     print(f"OpenAI response: {response.choices[0].message.content}")
@@ -63,7 +60,7 @@ async def example_anthropic_logging():
         provider="anthropic",
         log_metadata=True,  # Log metadata only (not full conversations)
     )
-    async def chat_with_claude(messages, model="claude-3-5-sonnet-20241022"):
+    async def chat_with_claude(messages, model="claude-sonnet-4-5-20250929"):
         """Your existing Anthropic chat function."""
         return await client.messages.create(
             model=model,
@@ -72,9 +69,7 @@ async def example_anthropic_logging():
         )
 
     response = await chat_with_claude(
-        messages=[
-            {"role": "user", "content": "What is the capital of Germany?"}
-        ]
+        messages=[{"role": "user", "content": "What is the capital of Germany?"}]
     )
 
     print(f"Anthropic response: {response.content[0].text}")
@@ -104,11 +99,7 @@ async def example_auto_detection():
             messages=messages,
         )
 
-    response = await generic_chat(
-        messages=[
-            {"role": "user", "content": "What is 2+2?"}
-        ]
-    )
+    response = await generic_chat(messages=[{"role": "user", "content": "What is 2+2?"}])
 
     print(f"Response: {response.choices[0].message.content}")
     print("✓ Provider auto-detected and logged")
@@ -142,9 +133,7 @@ async def example_streaming_logging():
 
     print("Streaming response: ", end="", flush=True)
     async for chunk in stream_chat(
-        messages=[
-            {"role": "user", "content": "Write a haiku about Python."}
-        ]
+        messages=[{"role": "user", "content": "Write a haiku about Python."}]
     ):
         if chunk.choices[0].delta.content:
             print(chunk.choices[0].delta.content, end="", flush=True)
@@ -177,9 +166,7 @@ async def example_metadata_only():
         )
 
     response = await chat_metadata_only(
-        messages=[
-            {"role": "user", "content": "This is a private message."}
-        ]
+        messages=[{"role": "user", "content": "This is a private message."}]
     )
 
     print(f"Response received (not logged): {response.choices[0].message.content}")
@@ -228,9 +215,7 @@ async def example_multiple_functions():
     prod_response = await production_chat(
         messages=[{"role": "user", "content": "Production query"}]
     )
-    test_response = await testing_chat(
-        messages=[{"role": "user", "content": "Test query"}]
-    )
+    test_response = await testing_chat(messages=[{"role": "user", "content": "Test query"}])
 
     print("✓ Both functions logged with different configurations")
 

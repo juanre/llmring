@@ -122,10 +122,10 @@ Different models have different pricing:
 |----------|-------|-------------------|---------------------|
 | OpenAI | gpt-4o | $5.00 | $15.00 |
 | OpenAI | gpt-4o-mini | $0.15 | $0.60 |
-| Anthropic | claude-3-5-sonnet | $3.00 | $15.00 |
+| Anthropic | claude-sonnet-4-5-20250929 | $3.00 | $15.00 |
 | Anthropic | claude-3-5-haiku | $1.00 | $5.00 |
-| Google | gemini-1.5-pro | $3.50 | $10.50 |
-| Google | gemini-1.5-flash | $0.075 | $0.30 |
+| Google | gemini-2.5-pro | $3.50 | $10.50 |
+| Google | gemini-2.5-flash | $0.075 | $0.30 |
 
 *Note: Prices may vary. Use `llmring info <model>` for current pricing.*
 

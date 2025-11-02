@@ -163,7 +163,7 @@ Assistant: I'll help you configure an accurate coding assistant. Based on the re
 I recommend using Claude 3.5 Sonnet as the primary model with GPT-4o as fallback.
 
 [Calling tool: add_alias]
-Added alias 'coder' with models: anthropic:claude-3-5-sonnet, openai:gpt-4o
+Added alias 'coder' with models: anthropic:claude-sonnet-4-5-20250929, openai:gpt-4o
 
 This configuration prioritizes accuracy while providing fallback for availability.
 Monthly cost estimate: ~$50-100 for moderate usage.
