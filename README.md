@@ -394,7 +394,11 @@ name = "default"
 
 [[profiles.default.bindings]]
 alias = "summarizer"
-models = ["anthropic:claude-3-haiku"]  # Cheap default for library users
+models = [
+    "anthropic:claude-3-5-haiku-20241022",
+    "openai:gpt-4o-mini",
+    "google:gemini-1.5-flash"
+]
 ```
 
 ### User Override Pattern
@@ -416,11 +420,11 @@ result = lib.summarize("Some text")
 # [profiles.default]
 # [[profiles.default.bindings]]
 # alias = "summarizer"
-# models = ["anthropic:claude-3-5-sonnet"]  # Better quality
+# models = ["anthropic:claude-3-5-sonnet-20241022", "openai:gpt-4o"]
 
 # Use custom lockfile
 lib = MyLibrary(lockfile_path="./my-llmring.lock")
-result = lib.summarize("Some text")  # Uses Claude 3.5 Sonnet
+result = lib.summarize("Some text")
 ```
 
 ### Library Composition
@@ -473,12 +477,18 @@ name = "default"
 # Library A's requirement (we choose which model)
 [[profiles.default.bindings]]
 alias = "summarizer"
-models = ["anthropic:claude-3-5-sonnet"]  # Override Library A's haiku with sonnet
+models = [
+    "anthropic:claude-3-5-sonnet-20241022",
+    "openai:gpt-4o"
+]
 
 # Library B's requirement
 [[profiles.default.bindings]]
 alias = "analyzer"
-models = ["openai:gpt-4o"]
+models = [
+    "openai:gpt-4o",
+    "google:gemini-1.5-pro"
+]
 ```
 
 **Users can override the entire chain:**
@@ -571,7 +581,7 @@ default_profile = "default"
 name = "default"
 [[profiles.default.bindings]]
 alias = "assistant"
-models = ["anthropic:claude-3-5-sonnet"]  # Production quality
+models = ["anthropic:claude-3-5-sonnet-20241022"]
 
 [profiles.dev]
 name = "dev"
@@ -591,7 +601,7 @@ models = ["ollama:llama3"]  # Local model for testing
 ```bash
 # Bind aliases to specific profiles
 llmring bind assistant "openai:gpt-4o-mini" --profile dev
-llmring bind assistant "anthropic:claude-3-5-sonnet" --profile prod
+llmring bind assistant "anthropic:claude-3-5-sonnet-20241022" --profile prod
 
 # List aliases in a profile
 llmring aliases --profile dev
@@ -627,9 +637,9 @@ name = "default"
 [[profiles.default.bindings]]
 alias = "assistant"
 models = [
-    "anthropic:claude-3-5-sonnet",  # Primary
-    "openai:gpt-4o",                # First fallback
-    "google:gemini-1.5-pro"         # Second fallback
+    "anthropic:claude-3-5-sonnet-20241022",  # Primary
+    "openai:gpt-4o",                         # First fallback
+    "google:gemini-1.5-pro"                  # Second fallback
 ]
 ```
 
