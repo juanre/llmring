@@ -327,7 +327,7 @@ Key features:
 
 ## Using LLMRing in Libraries
 
-If you're building a library that uses LLMRing, follow this pattern to ship with sensible defaults while allowing users to override your model choices:
+If you're building a library that uses LLMRing, follow this pattern to ship with defaults while allowing users to override your model choices:
 
 ### Library Pattern
 
@@ -535,7 +535,7 @@ include src/my_library/*.lock
 
 ### Library Best Practices
 
-1. **Ship with sensible defaults** - Use cheap, fast models in bundled lockfile
+1. **Ship with bundled lockfile** - Include your defaults in the package
 2. **Accept `lockfile_path` parameter** - Let users override everything
 3. **Validate early** - Use `require_aliases()` in `__init__`
 4. **Document requirements** - List required aliases in README

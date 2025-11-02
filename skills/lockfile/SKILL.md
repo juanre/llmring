@@ -493,7 +493,7 @@ async with LLMRing(lockfile_path="./my-llmring.lock") as service:
 If building a library that uses LLMRing, follow this pattern:
 
 **Pattern:**
-1. Ship with bundled `llmring.lock` (cheap defaults)
+1. Ship with bundled `llmring.lock`
 2. Accept `lockfile_path` parameter for user override
 3. Validate required aliases in `__init__`
 4. Document required aliases in README
@@ -579,7 +579,6 @@ lib = MyLibrary(lockfile_path="./my-models.lock")
 ```
 
 **Best Practices:**
-- Use cheap defaults in bundled lockfile
 - Validate with `require_aliases()` in `__init__`
 - Document required aliases clearly
 - Pass lockfile down when using other llmring libraries
