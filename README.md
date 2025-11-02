@@ -325,6 +325,223 @@ Key features:
 - Cost analysis and recommendations
 - Environment-specific configurations for dev/staging/prod
 
+## Using LLMRing in Libraries
+
+If you're building a library that uses LLMRing, follow this pattern to ship with sensible defaults while allowing users to override your model choices:
+
+### Library Pattern
+
+**Libraries should:**
+1. Ship with a bundled `llmring.lock` in their package
+2. Accept optional `lockfile_path` parameter
+3. Validate required aliases on initialization
+4. Document which aliases they require
+
+**This allows:**
+- Library works out of the box with defaults
+- Users can override with their own lockfile
+- Clear errors if user's lockfile is incomplete
+
+### Simple Library Example
+
+```python
+# my-library/src/my_library/__init__.py
+from pathlib import Path
+from llmring import LLMRing
+
+# Library's bundled lockfile (shipped with package)
+DEFAULT_LOCKFILE = Path(__file__).parent / "llmring.lock"
+REQUIRED_ALIASES = ["summarizer"]
+
+class MyLibrary:
+    """Example library using llmring with configurable lockfile."""
+
+    def __init__(self, lockfile_path=None):
+        """Initialize library with optional custom lockfile.
+
+        Args:
+            lockfile_path: Path to lockfile. If None, uses library's bundled lockfile.
+                          Users can override to control model choices.
+
+        Raises:
+            ValueError: If lockfile missing required aliases
+        """
+        # Use provided lockfile or library's default
+        lockfile = lockfile_path or DEFAULT_LOCKFILE
+
+        # Initialize LLMRing with explicit lockfile
+        self.ring = LLMRing(lockfile_path=lockfile)
+
+        # Validate required aliases exist (fail fast with clear error)
+        self.ring.require_aliases(REQUIRED_ALIASES, context="my-library")
+
+    def summarize(self, text: str) -> str:
+        """Summarize text using 'summarizer' alias."""
+        response = self.ring.chat("summarizer", messages=[
+            {"role": "user", "content": f"Summarize: {text}"}
+        ])
+        return response.content
+```
+
+**Library's lockfile** (`my-library/src/my_library/llmring.lock`):
+
+```toml
+version = "1.0"
+default_profile = "default"
+
+[profiles.default]
+name = "default"
+
+[[profiles.default.bindings]]
+alias = "summarizer"
+models = ["anthropic:claude-3-haiku"]  # Cheap default for library users
+```
+
+### User Override Pattern
+
+**Users can use library defaults:**
+
+```python
+from my_library import MyLibrary
+
+# Uses library's bundled lockfile automatically
+lib = MyLibrary()
+result = lib.summarize("Some text")
+```
+
+**Or override with their own lockfile:**
+
+```python
+# Create custom lockfile: ./my-llmring.lock
+# [profiles.default]
+# [[profiles.default.bindings]]
+# alias = "summarizer"
+# models = ["anthropic:claude-3-5-sonnet"]  # Better quality
+
+# Use custom lockfile
+lib = MyLibrary(lockfile_path="./my-llmring.lock")
+result = lib.summarize("Some text")  # Uses Claude 3.5 Sonnet
+```
+
+### Library Composition
+
+When Library B uses Library A, pass the same lockfile to both:
+
+```python
+# library-b/src/library_b/__init__.py
+from pathlib import Path
+from llmring import LLMRing
+from library_a import LibraryA
+
+DEFAULT_LOCKFILE = Path(__file__).parent / "llmring.lock"
+REQUIRED_ALIASES = ["analyzer"]
+
+class LibraryB:
+    def __init__(self, lockfile_path=None):
+        """Initialize Library B (which uses Library A).
+
+        Args:
+            lockfile_path: Lockfile controlling models for both libraries.
+                          Must include aliases required by both Library A and Library B.
+        """
+        lockfile = lockfile_path or DEFAULT_LOCKFILE
+
+        # Pass lockfile to Library A (controls Library A's model choices)
+        self.lib_a = LibraryA(lockfile_path=lockfile)
+
+        # Initialize our own LLMRing with same lockfile
+        self.ring = LLMRing(lockfile_path=lockfile)
+        self.ring.require_aliases(REQUIRED_ALIASES, context="library-b")
+
+    def analyze(self, text: str):
+        # Use Library A (which uses our lockfile)
+        summary = self.lib_a.summarize(text)
+
+        # Do our own analysis
+        analysis = self.ring.chat("analyzer", messages=[...])
+
+        return {"summary": summary, "analysis": analysis}
+```
+
+**Library B's lockfile must include aliases for both libraries:**
+
+```toml
+# library-b/src/library_b/llmring.lock
+[profiles.default]
+name = "default"
+
+# Library A's requirement (we choose which model)
+[[profiles.default.bindings]]
+alias = "summarizer"
+models = ["anthropic:claude-3-5-sonnet"]  # Override Library A's haiku with sonnet
+
+# Library B's requirement
+[[profiles.default.bindings]]
+alias = "analyzer"
+models = ["openai:gpt-4o"]
+```
+
+**Users can override the entire chain:**
+
+```python
+# User's lockfile with their preferred models for BOTH libraries
+lib_b = LibraryB(lockfile_path="./user-models.lock")
+# This lockfile controls both Library A and Library B
+```
+
+### Validation Helpers
+
+LLMRing provides validation helpers for library authors:
+
+```python
+from llmring import LLMRing
+
+ring = LLMRing(lockfile_path="./my.lock")
+
+# Check if alias exists (returns bool, never raises)
+if ring.has_alias("summarizer"):
+    # Safe to use
+    response = ring.chat("summarizer", messages=[...])
+
+# Validate required aliases (raises ValueError with helpful message if missing)
+ring.require_aliases(
+    ["summarizer", "analyzer"],
+    context="my-library"  # Included in error message
+)
+# Raises: "Lockfile missing required aliases for my-library: analyzer.
+#          Lockfile path: /path/to/lockfile.lock
+#          Please ensure your lockfile defines these aliases."
+```
+
+### Packaging Lockfiles
+
+Include lockfiles in your package distribution:
+
+**pyproject.toml:**
+
+```toml
+[tool.hatch.build]
+include = [
+    "src/my_library/**/*.py",
+    "src/my_library/**/*.lock",  # Include lockfiles
+]
+```
+
+**Or with setuptools in MANIFEST.in:**
+
+```
+include src/my_library/*.lock
+```
+
+### Library Best Practices
+
+1. **Ship with sensible defaults** - Use cheap, fast models in bundled lockfile
+2. **Accept `lockfile_path` parameter** - Let users override everything
+3. **Validate early** - Use `require_aliases()` in `__init__`
+4. **Document requirements** - List required aliases in README
+5. **Use semantic names** - Aliases like "summarizer" are clearer than model IDs
+6. **Pass lockfile down** - When using other libraries, pass your lockfile to them
+
 ### Profiles: Environment-Specific Configurations
 
 LLMRing supports **profiles** to manage different model configurations for different environments (dev, staging, prod, etc.):

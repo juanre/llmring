@@ -488,6 +488,102 @@ async with LLMRing(lockfile_path="./my-llmring.lock") as service:
     pass
 ```
 
+## Using LLMRing in Libraries
+
+If building a library that uses LLMRing, follow this pattern:
+
+**Pattern:**
+1. Ship with bundled `llmring.lock` (cheap defaults)
+2. Accept `lockfile_path` parameter for user override
+3. Validate required aliases in `__init__`
+4. Document required aliases in README
+
+**Simple Library Example:**
+
+```python
+from pathlib import Path
+from llmring import LLMRing
+
+DEFAULT_LOCKFILE = Path(__file__).parent / "llmring.lock"
+REQUIRED_ALIASES = ["summarizer"]
+
+class MyLibrary:
+    def __init__(self, lockfile_path=None):
+        """Initialize with optional custom lockfile.
+
+        Args:
+            lockfile_path: Optional path to custom lockfile.
+                          If None, uses library's bundled lockfile.
+
+        Raises:
+            ValueError: If lockfile missing required aliases
+        """
+        lockfile = lockfile_path or DEFAULT_LOCKFILE
+        self.ring = LLMRing(lockfile_path=lockfile)
+
+        # Validate required aliases (fail fast with clear error)
+        self.ring.require_aliases(REQUIRED_ALIASES, context="my-library")
+
+    def summarize(self, text: str) -> str:
+        return self.ring.chat("summarizer", messages=[...]).content
+```
+
+**Validation Helpers:**
+
+```python
+from llmring import LLMRing
+
+ring = LLMRing(lockfile_path="./my.lock")
+
+# Check if alias exists (returns bool, never raises)
+if ring.has_alias("summarizer"):
+    response = ring.chat("summarizer", messages=[...])
+
+# Validate required aliases (raises ValueError if missing)
+ring.require_aliases(
+    ["summarizer", "analyzer"],
+    context="my-library"  # Included in error message
+)
+# Error: "Lockfile missing required aliases for my-library: analyzer.
+#         Lockfile path: /path/to/lockfile.lock
+#         Please ensure your lockfile defines these aliases."
+```
+
+**Library Composition:**
+
+When Library B uses Library A, pass lockfile to both:
+
+```python
+class LibraryB:
+    def __init__(self, lockfile_path=None):
+        lockfile = lockfile_path or DEFAULT_LOCKFILE
+
+        # Pass lockfile to Library A (gives us control)
+        self.lib_a = LibraryA(lockfile_path=lockfile)
+
+        # Use same lockfile for our own LLMRing
+        self.ring = LLMRing(lockfile_path=lockfile)
+        self.ring.require_aliases(REQUIRED_ALIASES, context="library-b")
+```
+
+**User Override:**
+
+```python
+from my_library import MyLibrary
+
+# Use library defaults
+lib = MyLibrary()
+
+# Override with custom lockfile
+lib = MyLibrary(lockfile_path="./my-models.lock")
+```
+
+**Best Practices:**
+- Use cheap defaults in bundled lockfile
+- Validate with `require_aliases()` in `__init__`
+- Document required aliases clearly
+- Pass lockfile down when using other llmring libraries
+
 ## Common Patterns
 
 ### Development vs Production
