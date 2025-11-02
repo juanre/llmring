@@ -538,7 +538,7 @@ request = LLMRequest(
 ```python
 # DO THIS - easy to switch providers
 request = LLMRequest(
-    model="balanced",  # Defined in lockfile
+    model="assistant",  # Your semantic alias defined in lockfile
     messages=[...]
 )
 ```

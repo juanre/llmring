@@ -64,7 +64,7 @@ tools = [{
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="tool-user",  # Your alias for tool-using tasks
         messages=[Message(role="user", content="What's the weather in NYC?")],
         tools=tools
     )
@@ -150,14 +150,14 @@ from llmring import LLMRequest, Message
 
 # Let model decide
 request = LLMRequest(
-    model="balanced",
+    model="tool-user",  # Your alias for tool-using tasks
     messages=[Message(role="user", content="What's the weather?")],
     tools=[get_weather_tool]
 )
 
 # Force tool use
 request = LLMRequest(
-    model="balanced",
+    model="tool-user",  # Your alias for tool-using tasks
     messages=[Message(role="user", content="Check NYC weather")],
     tools=[get_weather_tool],
     tool_choice="required"  # Must use a tool
@@ -165,7 +165,7 @@ request = LLMRequest(
 
 # Force specific tool
 request = LLMRequest(
-    model="balanced",
+    model="tool-user",  # Your alias for tool-using tasks
     messages=[Message(role="user", content="Get weather")],
     tools=[get_weather_tool, search_tool],
     tool_choice={
@@ -176,7 +176,7 @@ request = LLMRequest(
 
 # Disable tools
 request = LLMRequest(
-    model="balanced",
+    model="tool-user",  # Your alias for tool-using tasks
     messages=[Message(role="user", content="Just chat")],
     tools=[get_weather_tool],
     tool_choice="none"  # Don't use tools
@@ -284,7 +284,7 @@ async with LLMRing() as service:
     ]
 
     # First request: Model decides to use tool
-    request = LLMRequest(model="balanced", messages=messages, tools=tools)
+    request = LLMRequest(model="tool-user",  # Your alias for tool-using tasks messages=messages, tools=tools)
     response = await service.chat(request)
 
     # Add assistant's tool call to history
@@ -311,7 +311,7 @@ async with LLMRing() as service:
             ))
 
     # Second request: Model uses tool results to answer
-    request = LLMRequest(model="balanced", messages=messages, tools=tools)
+    request = LLMRequest(model="tool-user",  # Your alias for tool-using tasks messages=messages, tools=tools)
     response = await service.chat(request)
 
     print(response.content)
@@ -358,7 +358,7 @@ tools = [
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="tool-user",  # Your alias for tool-using tasks
         messages=[Message(role="user", content="Weather in Paris and latest news")],
         tools=tools
     )
@@ -391,7 +391,7 @@ async with LLMRing() as service:
 
     # Loop until model stops calling tools
     while True:
-        request = LLMRequest(model="balanced", messages=messages, tools=tools)
+        request = LLMRequest(model="tool-user",  # Your alias for tool-using tasks messages=messages, tools=tools)
         response = await service.chat(request)
 
         # Add assistant response
@@ -434,7 +434,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="tool-user",  # Your alias for tool-using tasks
         messages=[Message(role="user", content="Weather in NYC and Paris")],
         tools=tools
     )
@@ -456,7 +456,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="tool-user",  # Your alias for tool-using tasks
         messages=[Message(role="user", content="What's the weather?")],
         tools=tools
     )

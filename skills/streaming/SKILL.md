@@ -89,7 +89,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="chatbot",  # Your streaming alias
         messages=[Message(role="user", content="Write a haiku")]
     )
 
@@ -148,7 +148,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="chatbot",  # Your streaming alias
         messages=[Message(role="user", content="Explain quantum computing")]
     )
 
@@ -200,7 +200,7 @@ import sys
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="chatbot",  # Your streaming alias
         messages=[Message(role="user", content="Describe the ocean")]
     )
 
@@ -224,7 +224,7 @@ from llmring import LLMRing, LLMRequest, Message
 async with LLMRing() as service:
     # Higher temperature for creative streaming
     request = LLMRequest(
-        model="balanced",
+        model="chatbot",  # Your streaming alias
         messages=[Message(role="user", content="Write a creative story")],
         temperature=1.2
     )
@@ -362,7 +362,7 @@ import asyncio
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="chatbot",  # Your streaming alias
         messages=[Message(role="user", content="Write a paragraph")]
     )
 

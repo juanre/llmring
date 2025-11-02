@@ -144,7 +144,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="responder",  # Your alias for responses
         messages=[
             Message(role="user", content="What is 2+2?")
         ],

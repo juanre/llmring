@@ -450,7 +450,7 @@ models = [
 ```python
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="assistant",  # Your semantic alias
         messages=[Message(role="user", content="Hello")]
     )
 

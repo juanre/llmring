@@ -40,7 +40,7 @@ from llmring import LLMRing, LLMRequest, Message
 async with LLMRing() as service:
     # Define JSON schema
     request = LLMRequest(
-        model="balanced",
+        model="extractor",  # Your alias for structured extraction
         messages=[Message(role="user", content="Generate a person")],
         response_format={
             "type": "json_schema",
@@ -95,7 +95,7 @@ response_format = {
 from llmring import LLMRequest, Message
 
 request = LLMRequest(
-    model="balanced",
+    model="extractor",  # Your alias for structured extraction
     messages=[Message(role="user", content="Generate data")],
     response_format={
         "type": "json_schema",
@@ -236,7 +236,7 @@ from llmring import LLMRing, LLMRequest, Message
 async with LLMRing() as service:
     # Extract contact info from text
     request = LLMRequest(
-        model="balanced",
+        model="extractor",  # Your alias for structured extraction
         messages=[Message(
             role="user",
             content="Extract contact info: John Smith, age 35, email john@example.com"
@@ -271,7 +271,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="extractor",  # Your alias for structured extraction
         messages=[Message(
             role="user",
             content="List 5 programming languages with their release years"
@@ -313,7 +313,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="extractor",  # Your alias for structured extraction
         messages=[Message(
             role="user",
             content="Classify sentiment: This product is amazing!"
@@ -354,7 +354,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="extractor",  # Your alias for structured extraction
         messages=[Message(
             role="user",
             content="Generate a blog post with title, author info, and tags"
@@ -402,7 +402,7 @@ from llmring import LLMRing, LLMRequest, Message
 async with LLMRing() as service:
     # Enforce specific values
     request = LLMRequest(
-        model="balanced",
+        model="extractor",  # Your alias for structured extraction
         messages=[Message(
             role="user",
             content="What's the priority of this bug?"
@@ -438,7 +438,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="extractor",  # Your alias for structured extraction
         messages=[Message(role="user", content="Generate JSON data")],
         response_format={
             "type": "json_schema",
@@ -605,7 +605,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     request = LLMRequest(
-        model="balanced",
+        model="extractor",  # Your alias for structured extraction
         messages=[Message(role="user", content="Analyze this data")],
         tools=[...],  # Define tools
         response_format={  # Also request structured output
