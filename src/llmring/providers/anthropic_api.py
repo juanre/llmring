@@ -6,19 +6,21 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from datetime import datetime
+from pathlib import Path
+from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
 
 from anthropic import AsyncAnthropic
 from anthropic.types import Message as AnthropicMessage
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
-from llmring.exceptions import CircuitBreakerError, ProviderAuthenticationError
+from llmring.exceptions import CircuitBreakerError, FileSizeError, ProviderAuthenticationError
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
 from llmring.providers.error_handler import ProviderErrorHandler
 from llmring.registry import RegistryClient
-from llmring.schemas import LLMResponse, Message, StreamChunk
+from llmring.schemas import FileMetadata, FileUploadResponse, LLMResponse, Message, StreamChunk
 from llmring.utils import strip_provider_prefix
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
@@ -757,3 +759,246 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         except ImportError:
             # Fall back to rough estimation - around 4 characters per token
             return len(text) // 4 + 1
+
+    async def upload_file(
+        self,
+        file: Union[str, Path, BinaryIO],
+        purpose: str = "analysis",
+        filename: Optional[str] = None,
+        **kwargs,
+    ) -> FileUploadResponse:
+        """
+        Upload file to Anthropic Files API.
+
+        Args:
+            file: File path, Path object, or file-like object
+            purpose: Purpose of the file (e.g., "analysis", "code_execution")
+            filename: Optional filename (required for file-like objects)
+            **kwargs: Additional provider-specific parameters
+
+        Returns:
+            FileUploadResponse with file_id, size, etc.
+
+        Raises:
+            FileSizeError: If file exceeds 500MB limit
+            ProviderAuthenticationError: If authentication fails
+            ProviderResponseError: If upload fails
+        """
+        # Anthropic max file size is 500MB
+        MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB in bytes
+
+        # Handle file path or file-like object
+        if isinstance(file, (str, Path)):
+            file_path = Path(file)
+            if not file_path.exists():
+                raise FileNotFoundError(f"File not found: {file_path}")
+
+            # Check file size
+            file_size = file_path.stat().st_size
+            if file_size > MAX_FILE_SIZE:
+                raise FileSizeError(
+                    f"File size {file_size} bytes exceeds Anthropic limit of {MAX_FILE_SIZE} bytes",
+                    file_size=file_size,
+                    max_size=MAX_FILE_SIZE,
+                    provider="anthropic",
+                    filename=str(file_path),
+                )
+
+            # Open and read file
+            with open(file_path, "rb") as f:
+                file_content = f.read()
+            actual_filename = filename or file_path.name
+        else:
+            # File-like object
+            if filename is None:
+                raise ValueError("filename parameter is required for file-like objects")
+
+            # Read content
+            file_content = file.read()
+            file_size = len(file_content)
+
+            # Check size
+            if file_size > MAX_FILE_SIZE:
+                raise FileSizeError(
+                    f"File size {file_size} bytes exceeds Anthropic limit of {MAX_FILE_SIZE} bytes",
+                    file_size=file_size,
+                    max_size=MAX_FILE_SIZE,
+                    provider="anthropic",
+                    filename=filename,
+                )
+
+            actual_filename = filename
+
+        # Upload using Anthropic SDK
+        # Note: The SDK doesn't have a native files API yet, so use httpx directly
+        try:
+            import httpx
+
+            # Create files API client with beta header
+            async with httpx.AsyncClient(
+                headers={
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-beta": "files-api-2025-04-14",
+                    "x-api-key": self.api_key,
+                },
+                timeout=60.0,
+            ) as client:
+                # Upload file
+                files = {"file": (actual_filename, file_content)}
+                response = await client.post(
+                    "https://api.anthropic.com/v1/files",
+                    files=files,
+                )
+                response.raise_for_status()
+                result = response.json()
+
+            # Parse response and add purpose to metadata since API doesn't return it
+            metadata = dict(result)
+            metadata["_llmring_purpose"] = purpose
+
+            return FileUploadResponse(
+                file_id=result["id"],
+                provider="anthropic",
+                filename=actual_filename,
+                size_bytes=result.get("size_bytes", file_size),
+                created_at=datetime.fromisoformat(result["created_at"].replace("Z", "+00:00")),
+                purpose=purpose,
+                metadata=metadata,
+            )
+
+        except Exception as e:
+            await self._error_handler.handle_error(e, "files")
+
+    async def list_files(
+        self, purpose: Optional[str] = None, limit: int = 100
+    ) -> List[FileMetadata]:
+        """
+        List uploaded files.
+
+        Args:
+            purpose: Optional filter by purpose
+            limit: Maximum number of files to return (default 100)
+
+        Returns:
+            List of FileMetadata objects
+        """
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(
+                headers={
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-beta": "files-api-2025-04-14",
+                    "x-api-key": self.api_key,
+                },
+                timeout=60.0,
+            ) as client:
+                # Build query params
+                params = {"limit": limit}
+                if purpose:
+                    params["purpose"] = purpose
+
+                response = await client.get(
+                    "https://api.anthropic.com/v1/files",
+                    params=params,
+                )
+                response.raise_for_status()
+                result = response.json()
+
+            # Parse response
+            files = []
+            for file_data in result.get("data", []):
+                # Extract purpose from metadata if we stored it, otherwise use filter or unknown
+                stored_purpose = file_data.get("_llmring_purpose", purpose or "unknown")
+
+                files.append(
+                    FileMetadata(
+                        file_id=file_data["id"],
+                        provider="anthropic",
+                        filename=file_data.get("filename"),
+                        size_bytes=file_data.get("size_bytes", 0),
+                        created_at=datetime.fromisoformat(
+                            file_data["created_at"].replace("Z", "+00:00")
+                        ),
+                        purpose=stored_purpose,
+                        status=file_data.get("status", "ready"),
+                        metadata=file_data,
+                    )
+                )
+
+            return files
+
+        except Exception as e:
+            await self._error_handler.handle_error(e, "files")
+
+    async def get_file(self, file_id: str) -> FileMetadata:
+        """
+        Get file metadata.
+
+        Args:
+            file_id: File ID to retrieve
+
+        Returns:
+            FileMetadata object
+        """
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(
+                headers={
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-beta": "files-api-2025-04-14",
+                    "x-api-key": self.api_key,
+                },
+                timeout=60.0,
+            ) as client:
+                response = await client.get(f"https://api.anthropic.com/v1/files/{file_id}")
+                response.raise_for_status()
+                file_data = response.json()
+
+            # Parse response
+            # Extract purpose from metadata if we stored it
+            stored_purpose = file_data.get("_llmring_purpose", "unknown")
+
+            return FileMetadata(
+                file_id=file_data["id"],
+                provider="anthropic",
+                filename=file_data.get("filename"),
+                size_bytes=file_data.get("size_bytes", 0),
+                created_at=datetime.fromisoformat(file_data["created_at"].replace("Z", "+00:00")),
+                purpose=stored_purpose,
+                status=file_data.get("status", "ready"),
+                metadata=file_data,
+            )
+
+        except Exception as e:
+            await self._error_handler.handle_error(e, "files")
+
+    async def delete_file(self, file_id: str) -> bool:
+        """
+        Delete uploaded file.
+
+        Args:
+            file_id: File ID to delete
+
+        Returns:
+            True on success
+        """
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(
+                headers={
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-beta": "files-api-2025-04-14",
+                    "x-api-key": self.api_key,
+                },
+                timeout=60.0,
+            ) as client:
+                response = await client.delete(f"https://api.anthropic.com/v1/files/{file_id}")
+                response.raise_for_status()
+
+            return True
+
+        except Exception as e:
+            await self._error_handler.handle_error(e, "files")
