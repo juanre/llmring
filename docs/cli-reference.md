@@ -441,6 +441,111 @@ Next model lookups will fetch fresh data from the registry
 
 ---
 
+## Server Management
+
+### `llmring server init`
+
+Bootstrap local environment variables for a running llmring-server instance.
+
+```bash
+# With docker compose running in ../llmring-server
+llmring server init --env-file .env.llmring
+source .env.llmring
+```
+
+**Options:**
+- `--server URL` – Override server URL (default: detect from env or http://localhost:8000)
+- `--api-key KEY` – Provide an explicit API key (default: auto-generate)
+- `--env-file PATH` – Output path for env file (default: ./.env.llmring)
+- `--force` – Overwrite existing env file
+- `--skip-health-check` – Skip connectivity validation (useful if the server is not running yet)
+
+### `llmring server status`
+
+Display current server configuration and run health checks.
+
+```bash
+llmring server status --env-file .env.llmring
+```
+
+Output includes the detected server URL, API key presence, health endpoint response, and API key validation against `/api/v1/stats`.
+
+### `llmring server key create`
+
+Generate a new API key. Use `--update-env` to write it into an env file.
+
+```bash
+llmring server key create --update-env --env-file .env.llmring
+```
+
+### `llmring server key rotate`
+
+Rotate the key stored in the env file and export it to the current shell.
+
+```bash
+llmring server key rotate --env-file .env.llmring
+source .env.llmring
+```
+
+### `llmring server key list`
+
+Show active key information from the current environment and env file.
+
+```bash
+llmring server key list --env-file .env.llmring
+```
+
+---
+
+### `llmring server stats`
+
+Summarise usage for the current API key. By default output is human-readable; add `--json` for structured output.
+
+```bash
+llmring server stats --group-by week --json
+```
+
+**Options:**
+- `--start-date`, `--end-date` – ISO timestamps or dates (defaults: last 30 days)
+- `--group-by` – `day | week | month`
+- `--json` – Emit raw JSON
+
+### `llmring server logs`
+
+Fetch raw usage log entries. Supports table (default), JSON, or CSV output.
+
+```bash
+# Recent entries in table form
+llmring server logs --limit 20
+
+# Export as CSV
+llmring server logs --output csv --output-file usage.csv
+```
+
+**Options:**
+- `--limit`, `--offset` – Pagination controls (limit capped at 500)
+- `--alias`, `--model`, `--origin` – Filters
+- `--start-date`, `--end-date` – ISO timestamps or dates
+- `--output [table|json|csv]` – Output format (`--json` is shorthand)
+- `--output-file` – Write JSON/CSV output to file instead of stdout
+
+### `llmring server conversations`
+
+List stored conversations or inspect a single conversation with message history.
+
+```bash
+llmring server conversations
+llmring server conversations --conversation-id 1234-uuid --messages --json
+```
+
+**Options:**
+- `--limit`, `--offset` – Pagination for listing mode
+- `--conversation-id` – Retrieve a specific conversation
+- `--messages` – Include message history when fetching a single conversation
+- `--json` – Emit raw JSON (list or conversation detail)
+
+---
+
 ## Server Integration
 
 ### `llmring register`

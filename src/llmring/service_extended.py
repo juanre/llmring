@@ -15,7 +15,6 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from llmring.schemas import LLMRequest, LLMResponse
-from llmring.server_client import ServerClient
 from llmring.service import LLMRing
 
 logger = logging.getLogger(__name__)
@@ -62,6 +61,11 @@ class LLMRingSession(LLMRing):
 
         # Note: server_client is now inherited from parent (LLMRing)
         # No need to initialize separately
+        if self.enable_conversations and not self.server_client:
+            logger.warning(
+                "Conversation tracking requested but no llmring-server configured. "
+                "Conversation APIs will be no-ops until a server client is provided."
+            )
 
     async def create_conversation(
         self,

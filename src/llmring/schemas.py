@@ -17,6 +17,31 @@ class Message(BaseModel):
     )
 
 
+class FileUploadResponse(BaseModel):
+    """Response from file upload."""
+
+    file_id: str
+    provider: str
+    filename: Optional[str] = None
+    size_bytes: int
+    created_at: datetime
+    purpose: str
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class FileMetadata(BaseModel):
+    """File metadata."""
+
+    file_id: str
+    provider: str
+    filename: Optional[str] = None
+    size_bytes: int
+    created_at: datetime
+    purpose: str
+    status: Literal["uploaded", "processing", "ready", "error", "expired"]
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
 class LLMRequest(BaseModel):
     """A request to an LLM provider."""
 
@@ -27,8 +52,8 @@ class LLMRequest(BaseModel):
     reasoning_tokens: Optional[int] = Field(
         None,
         description="Token budget for reasoning models' internal thinking. "
-                    "If not specified for reasoning models, defaults to min_recommended_reasoning_tokens from registry. "
-                    "For non-reasoning models, this parameter is ignored."
+        "If not specified for reasoning models, defaults to min_recommended_reasoning_tokens from registry. "
+        "For non-reasoning models, this parameter is ignored.",
     )
     response_format: Optional[Dict[str, Any]] = None
     tools: Optional[List[Dict[str, Any]]] = None
@@ -37,6 +62,7 @@ class LLMRequest(BaseModel):
     cache: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
     json_response: Optional[bool] = None
+    files: Optional[List[str]] = None  # List of file_ids
     extra_params: Dict[str, Any] = Field(default_factory=dict)  # Provider-specific parameters
 
 

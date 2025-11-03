@@ -80,6 +80,8 @@ class TestFixedMethods:
                 and "not found" not in error_str
                 and "405" not in error_str
                 and "method not allowed" not in error_str
+                and "401" not in error_str
+                and "unauthorized" not in error_str
             ):
                 # Re-raise if it's not a connection/404/405 error
                 raise

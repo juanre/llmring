@@ -26,6 +26,17 @@ from llmring.services.validation_service import ValidationService
 from llmring.utils import parse_model_string
 from llmring.validation import InputValidator
 
+DEFAULT_SAAS_URL = "https://api.llmring.ai"
+_TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+
+
+def _env_flag_enabled(value: Optional[str]) -> bool:
+    """Determine if an environment string represents a truthy value."""
+    if value is None:
+        return False
+    return value.strip().lower() in _TRUTHY_ENV_VALUES
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,10 +77,27 @@ class LLMRing:
         # O(1) alias lookup: provider -> alias -> concrete model name
         self._alias_to_model: Dict[str, Dict[str, str]] = {}
 
+        # Resolve server configuration (explicit args override environment)
+        prefer_saas = _env_flag_enabled(os.getenv("LLMRING_PREFER_SAAS"))
+        env_server_url = os.getenv("LLMRING_SERVER_URL")
+        env_api_key = os.getenv("LLMRING_API_KEY")
+
+        resolved_server_url = server_url if server_url is not None else env_server_url
+        resolved_api_key = api_key if api_key is not None else env_api_key
+
+        used_saas_fallback = False
+        if not resolved_server_url and prefer_saas:
+            resolved_server_url = DEFAULT_SAAS_URL
+            used_saas_fallback = True
+            if not resolved_api_key:
+                logger.warning(
+                    "LLMRING_PREFER_SAAS is set but no API key provided. "
+                    "Configure LLMRING_API_KEY to enable SaaS logging."
+                )
+
         # Logging configuration
-        # Validate: logging requires server_url
-        if (log_metadata or log_conversations) and not server_url:
-            logger.warning("Logging enabled but no server_url provided. Logging will be disabled.")
+        if (log_metadata or log_conversations) and not resolved_server_url:
+            logger.warning("Logging enabled but no server URL provided. Logging will be disabled.")
             log_metadata = False
             log_conversations = False
 
@@ -97,13 +125,14 @@ class LLMRing:
         # Server client for usage logging (optional)
         self.server_client: Optional[Any] = None
         self.logging_service: Optional[LoggingService] = None
+        self.server_url: Optional[str] = None
 
-        if server_url or api_key:
+        if resolved_server_url:
             from llmring.server_client import ServerClient
 
-            self.server_client = ServerClient(
-                base_url=server_url or "https://api.llmring.ai", api_key=api_key
-            )
+            cleaned_url = resolved_server_url.rstrip("/")
+            self.server_url = cleaned_url
+            self.server_client = ServerClient(base_url=cleaned_url, api_key=resolved_api_key)
 
             # Initialize logging service if logging is enabled
             if self.log_metadata or self.log_conversations:
@@ -114,9 +143,21 @@ class LLMRing:
                     origin=self.origin,
                 )
 
+            connection_label = cleaned_url
+            if used_saas_fallback:
+                connection_label = f"{cleaned_url} [saas fallback]"
             logger.info(
-                f"Connected to llmring-server at {server_url or 'api.llmring.ai'} "
-                f"(metadata={self.log_metadata}, conversations={self.log_conversations})"
+                "Connected to llmring-server at %s (metadata=%s, conversations=%s)",
+                connection_label,
+                self.log_metadata,
+                self.log_conversations,
+            )
+        elif prefer_saas:
+            logger.info("LLMRING_PREFER_SAAS is set but no server connection was established.")
+        elif env_server_url or env_api_key:
+            logger.warning(
+                "Server configuration detected but client could not be initialized. "
+                "Verify LLMRING_SERVER_URL and LLMRING_API_KEY values."
             )
 
         # Load lockfile with explicit resolution strategy

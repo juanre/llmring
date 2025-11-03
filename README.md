@@ -751,6 +751,47 @@ GOOGLE_GEMINI_API_KEY=AIza...
 OLLAMA_BASE_URL=http://localhost:11434  # Default
 ```
 
+### Self-Hosted Quickstart
+
+```bash
+# 1. Start the local llmring-server stack (Postgres + server + Redis)
+cd ../llmring-server
+docker compose -f docker-compose.dev.yml up --build
+
+# 2. Bootstrap local credentials from your application repo
+cd ../llmring
+llmring server init --env-file .env.llmring
+
+# 3. Load the environment variables in your shell
+source .env.llmring
+
+# 4. Verify everything works
+llmring stats --json
+```
+
+Command hints:
+
+- `llmring server status` – Inspect current configuration and test connectivity
+- `llmring server key rotate` – Generate a new API key and refresh `.env.llmring`
+- `llmring server key list` – Show active key information from the environment and env file
+
+### Inspect Usage Data
+
+```bash
+# Summaries (JSON with --json)
+llmring server stats --json
+
+# Raw logs (table, JSON or CSV)
+llmring server logs --limit 20 --output json
+
+# Conversation archive
+llmring server conversations
+llmring server conversations --conversation-id <uuid> --messages
+```
+
+All commands honour `LLMRING_SERVER_URL` and `LLMRING_API_KEY`; run
+`llmring server init` first so they target your self-hosted container.
+
 ### Conversational Setup
 
 ```bash
