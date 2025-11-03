@@ -7,6 +7,7 @@ import base64
 import json
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
 
@@ -20,7 +21,7 @@ from llmring.net.retry import retry_async
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
 from llmring.providers.error_handler import ProviderErrorHandler
 from llmring.registry import RegistryClient
-from llmring.schemas import LLMResponse, Message, StreamChunk
+from llmring.schemas import FileMetadata, FileUploadResponse, LLMResponse, Message, StreamChunk
 from llmring.utils import strip_provider_prefix
 
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
@@ -1249,10 +1250,6 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             ProviderAuthenticationError: If authentication fails
             ProviderResponseError: If cache creation fails
         """
-        from datetime import datetime
-
-        from llmring.schemas import FileUploadResponse
-
         # Read file content (text only for caching)
         if isinstance(file, (str, Path)):
             file_path = Path(file)
@@ -1354,10 +1351,6 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         Returns:
             List of FileMetadata objects representing caches
         """
-        from datetime import datetime
-
-        from llmring.schemas import FileMetadata
-
         try:
             # List caches using Google SDK
             # Run synchronous SDK call in thread pool
@@ -1412,10 +1405,6 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         Returns:
             FileMetadata object
         """
-        from datetime import datetime
-
-        from llmring.schemas import FileMetadata
-
         try:
             # Get cache using Google SDK
             # Run synchronous SDK call in thread pool
