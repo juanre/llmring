@@ -17,7 +17,7 @@ from llmring.providers.google_api import GoogleProvider
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.registry import RegistryClient, RegistryModel
-from llmring.schemas import LLMRequest, LLMResponse, StreamChunk
+from llmring.schemas import FileMetadata, FileUploadResponse, LLMRequest, LLMResponse, StreamChunk
 from llmring.services.alias_resolver import AliasResolver
 from llmring.services.cost_calculator import CostCalculator
 from llmring.services.logging_service import LoggingService
@@ -1102,6 +1102,219 @@ class LLMRing:
             )
 
         return model_info
+
+    def _detect_provider_from_file_id(self, file_id: str) -> Optional[str]:
+        """
+        Detect provider from file_id format.
+
+        Args:
+            file_id: File ID to analyze
+
+        Returns:
+            Provider name or None if cannot be determined
+        """
+        if file_id.startswith("file_"):
+            return "anthropic"
+        elif file_id.startswith("file-"):
+            return "openai"
+        elif file_id.startswith("cachedContents/"):
+            return "google"
+        return None
+
+    def _select_provider_for_upload(self, purpose: str) -> str:
+        """
+        Select provider for file upload based on purpose or current model.
+
+        Args:
+            purpose: Upload purpose
+
+        Returns:
+            Provider name
+
+        Raises:
+            ProviderNotFoundError: If no suitable provider is available
+        """
+        # Try to get provider from current model in lockfile
+        if self.lockfile:
+            try:
+                # Get default alias resolution to find current provider
+                profile = self.lockfile.default_profile
+                # Try common alias names
+                for alias in ["default", "fast", "balanced", "powerful"]:
+                    if self.lockfile.has_alias(alias, profile):
+                        resolved = self.resolve_alias(alias, profile)
+                        provider, _ = parse_model_string(resolved)
+                        if provider in self.providers:
+                            logger.debug(
+                                f"Auto-selected provider '{provider}' from alias '{alias}'"
+                            )
+                            return provider
+            except Exception as e:
+                logger.debug(f"Could not determine provider from lockfile: {e}")
+
+        # Fall back to first available provider that supports files
+        # Prefer anthropic > openai > google
+        for provider in ["anthropic", "openai", "google"]:
+            if provider in self.providers:
+                logger.debug(f"Auto-selected first available provider: '{provider}'")
+                return provider
+
+        raise ProviderNotFoundError(
+            "No provider available for file upload. "
+            f"Available providers: {list(self.providers.keys())}"
+        )
+
+    async def upload_file(
+        self,
+        file: Union[str, Path, Any],
+        purpose: str = "analysis",
+        provider: Optional[str] = None,
+        ttl_seconds: int = 3600,
+        filename: Optional[str] = None,
+        **kwargs,
+    ) -> FileUploadResponse:
+        """
+        Upload file to provider.
+
+        Args:
+            file: File path, Path object, or file-like object
+            purpose: Purpose of the file (e.g., "analysis", "cache")
+            provider: Provider to use (auto-detected if not specified)
+            ttl_seconds: Time-to-live in seconds (Google only)
+            filename: Optional filename (required for file-like objects)
+            **kwargs: Additional provider-specific parameters
+
+        Returns:
+            FileUploadResponse with file_id and metadata
+
+        Raises:
+            ProviderNotFoundError: If provider not found or cannot be auto-detected
+        """
+        # Determine provider
+        if provider:
+            target_provider = provider
+        else:
+            target_provider = self._select_provider_for_upload(purpose)
+
+        # Get provider instance
+        provider_obj = self.get_provider(target_provider)
+
+        # Upload file
+        response = await provider_obj.upload_file(
+            file=file,
+            purpose=purpose,
+            ttl_seconds=ttl_seconds,
+            filename=filename,
+            **kwargs,
+        )
+
+        return response
+
+    async def list_files(
+        self,
+        provider: Optional[str] = None,
+        purpose: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[FileMetadata]:
+        """
+        List files from provider.
+
+        Args:
+            provider: Provider to use (auto-detected if not specified)
+            purpose: Filter by purpose (optional)
+            limit: Maximum number of files to return (optional)
+
+        Returns:
+            List of FileMetadata objects
+
+        Raises:
+            ProviderNotFoundError: If provider not found or cannot be auto-detected
+        """
+        # Determine provider
+        if provider:
+            target_provider = provider
+        else:
+            target_provider = self._select_provider_for_upload(purpose or "analysis")
+
+        # Get provider instance
+        provider_obj = self.get_provider(target_provider)
+
+        # List files - only pass limit if specified
+        kwargs = {}
+        if purpose is not None:
+            kwargs["purpose"] = purpose
+        if limit is not None:
+            kwargs["limit"] = limit
+
+        files = await provider_obj.list_files(**kwargs)
+
+        return files
+
+    async def get_file(self, file_id: str, provider: Optional[str] = None) -> FileMetadata:
+        """
+        Get file metadata from provider.
+
+        Args:
+            file_id: File ID
+            provider: Provider to use (auto-detected from file_id if not specified)
+
+        Returns:
+            FileMetadata object
+
+        Raises:
+            ProviderNotFoundError: If provider not found or cannot be auto-detected
+        """
+        # Determine provider
+        if provider:
+            target_provider = provider
+        else:
+            target_provider = self._detect_provider_from_file_id(file_id)
+            if not target_provider:
+                raise ProviderNotFoundError(
+                    f"Cannot determine provider from file_id '{file_id}'. "
+                    "Please specify provider explicitly."
+                )
+
+        # Get provider instance
+        provider_obj = self.get_provider(target_provider)
+
+        # Get file metadata
+        metadata = await provider_obj.get_file(file_id)
+
+        return metadata
+
+    async def delete_file(self, file_id: str, provider: Optional[str] = None) -> bool:
+        """
+        Delete file from provider.
+
+        Args:
+            file_id: File ID
+            provider: Provider to use (auto-detected from file_id if not specified)
+
+        Returns:
+            True if deletion was successful
+
+        Raises:
+            ProviderNotFoundError: If provider not found or cannot be auto-detected
+        """
+        # Determine provider
+        if provider:
+            target_provider = provider
+        else:
+            target_provider = self._detect_provider_from_file_id(file_id)
+            if not target_provider:
+                raise ProviderNotFoundError(
+                    f"Cannot determine provider from file_id '{file_id}'. "
+                    "Please specify provider explicitly."
+                )
+
+        # Get provider instance
+        provider_obj = self.get_provider(target_provider)
+
+        # Delete file
+        success = await provider_obj.delete_file(file_id)
+
+        return success
 
     async def close(self):
         """Clean up resources."""
