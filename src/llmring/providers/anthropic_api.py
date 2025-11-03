@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
 
+import httpx
 from anthropic import AsyncAnthropic
 from anthropic.types import Message as AnthropicMessage
 
@@ -760,6 +761,22 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             # Fall back to rough estimation - around 4 characters per token
             return len(text) // 4 + 1
 
+    def _create_files_client(self) -> httpx.AsyncClient:
+        """
+        Create httpx client configured for Anthropic Files API.
+
+        Returns:
+            Configured AsyncClient instance
+        """
+        return httpx.AsyncClient(
+            headers={
+                "anthropic-version": "2023-06-01",
+                "anthropic-beta": "files-api-2025-04-14",
+                "x-api-key": self.api_key,
+            },
+            timeout=60.0,
+        )
+
     async def upload_file(
         self,
         file: Union[str, Path, BinaryIO],
@@ -829,20 +846,8 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
             actual_filename = filename
 
-        # Upload using Anthropic SDK
-        # Note: The SDK doesn't have a native files API yet, so use httpx directly
         try:
-            import httpx
-
-            # Create files API client with beta header
-            async with httpx.AsyncClient(
-                headers={
-                    "anthropic-version": "2023-06-01",
-                    "anthropic-beta": "files-api-2025-04-14",
-                    "x-api-key": self.api_key,
-                },
-                timeout=60.0,
-            ) as client:
+            async with self._create_files_client() as client:
                 # Upload file
                 files = {"file": (actual_filename, file_content)}
                 response = await client.post(
@@ -883,16 +888,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             List of FileMetadata objects
         """
         try:
-            import httpx
-
-            async with httpx.AsyncClient(
-                headers={
-                    "anthropic-version": "2023-06-01",
-                    "anthropic-beta": "files-api-2025-04-14",
-                    "x-api-key": self.api_key,
-                },
-                timeout=60.0,
-            ) as client:
+            async with self._create_files_client() as client:
                 # Build query params
                 params = {"limit": limit}
                 if purpose:
@@ -908,8 +904,8 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             # Parse response
             files = []
             for file_data in result.get("data", []):
-                # Extract purpose from metadata if we stored it, otherwise use filter or unknown
-                stored_purpose = file_data.get("_llmring_purpose", purpose or "unknown")
+                # Extract purpose from metadata if we stored it, otherwise use unknown
+                stored_purpose = file_data.get("_llmring_purpose", "unknown")
 
                 files.append(
                     FileMetadata(
@@ -921,7 +917,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                             file_data["created_at"].replace("Z", "+00:00")
                         ),
                         purpose=stored_purpose,
-                        status=file_data.get("status", "ready"),
+                        status=file_data.get("status", "uploaded"),
                         metadata=file_data,
                     )
                 )
@@ -942,16 +938,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             FileMetadata object
         """
         try:
-            import httpx
-
-            async with httpx.AsyncClient(
-                headers={
-                    "anthropic-version": "2023-06-01",
-                    "anthropic-beta": "files-api-2025-04-14",
-                    "x-api-key": self.api_key,
-                },
-                timeout=60.0,
-            ) as client:
+            async with self._create_files_client() as client:
                 response = await client.get(f"https://api.anthropic.com/v1/files/{file_id}")
                 response.raise_for_status()
                 file_data = response.json()
@@ -967,7 +954,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                 size_bytes=file_data.get("size_bytes", 0),
                 created_at=datetime.fromisoformat(file_data["created_at"].replace("Z", "+00:00")),
                 purpose=stored_purpose,
-                status=file_data.get("status", "ready"),
+                status=file_data.get("status", "uploaded"),
                 metadata=file_data,
             )
 
@@ -985,16 +972,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             True on success
         """
         try:
-            import httpx
-
-            async with httpx.AsyncClient(
-                headers={
-                    "anthropic-version": "2023-06-01",
-                    "anthropic-beta": "files-api-2025-04-14",
-                    "x-api-key": self.api_key,
-                },
-                timeout=60.0,
-            ) as client:
+            async with self._create_files_client() as client:
                 response = await client.delete(f"https://api.anthropic.com/v1/files/{file_id}")
                 response.raise_for_status()
 

@@ -196,17 +196,93 @@ async def test_upload_file_size_limit():
 
     provider = AnthropicProvider()
     try:
-        # Create a temporary large file (>500MB would be impractical for tests)
-        # Instead, we'll test the validation logic directly
-        # This test verifies the method signature and error handling exist
+        import io
 
-        # For now, verify the method exists and can be called
-        # Real size validation would need a very large file
-        # The implementation should check file size before uploading
+        # Create a BytesIO object with actual content > 500MB
+        # We'll use 501MB of data (minimum to trigger the error)
+        # To avoid memory issues, we'll create a sparse representation
+        size_mb = 501
+        large_content = b"x" * (size_mb * 1024 * 1024)
+        large_file = io.BytesIO(large_content)
 
-        # This is a placeholder - in real scenario would create large temp file
-        # For now, just verify method exists
-        assert hasattr(provider, "upload_file")
+        # Verify FileSizeError is raised with correct details
+        with pytest.raises(FileSizeError) as exc_info:
+            await provider.upload_file(
+                file=large_file,
+                purpose="analysis",
+                filename="large_file.txt",
+            )
+
+        # Verify error details
+        error = exc_info.value
+        assert error.file_size == size_mb * 1024 * 1024
+        assert error.max_size == 500 * 1024 * 1024
+        assert "exceeds Anthropic limit" in str(error)
+        assert str(error.file_size) in str(error)
+        assert str(error.max_size) in str(error)
+
+    finally:
+        await provider.aclose()
+
+
+@pytest.mark.asyncio
+async def test_get_file_invalid_id():
+    """Test that get_file with invalid file_id raises appropriate error."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not set")
+
+    provider = AnthropicProvider()
+    try:
+        # Try to get a file with an invalid ID
+        from llmring.exceptions import ProviderResponseError
+
+        with pytest.raises(ProviderResponseError):
+            await provider.get_file("file_invalid_nonexistent_id")
+
+    finally:
+        await provider.aclose()
+
+
+@pytest.mark.asyncio
+async def test_delete_file_invalid_id():
+    """Test that delete_file with invalid file_id raises appropriate error."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not set")
+
+    provider = AnthropicProvider()
+    try:
+        # Try to delete a file with an invalid ID
+        from llmring.exceptions import ProviderResponseError
+
+        with pytest.raises(ProviderResponseError):
+            await provider.delete_file("file_invalid_nonexistent_id")
+
+    finally:
+        await provider.aclose()
+
+
+@pytest.mark.asyncio
+async def test_file_not_found():
+    """Test that accessing a deleted file raises appropriate error."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not set")
+
+    provider = AnthropicProvider()
+    try:
+        # Upload a file
+        upload_response = await provider.upload_file(
+            file="tests/fixtures/sample.txt",
+            purpose="analysis",
+        )
+
+        # Delete it
+        await provider.delete_file(upload_response.file_id)
+
+        # Try to get the deleted file - should raise error
+        from llmring.exceptions import ProviderResponseError
+
+        with pytest.raises(ProviderResponseError):
+            await provider.get_file(upload_response.file_id)
 
     finally:
         await provider.aclose()
