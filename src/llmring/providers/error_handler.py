@@ -240,6 +240,10 @@ class ProviderErrorHandler:
         """Detect errors for OpenAI and Anthropic SDKs."""
         # These providers have explicit exception classes
         if "NotFoundError" in exception_type:
+            # Check if it's a file error, not a model error
+            error_msg = str(exception).lower()
+            if "file" in error_msg:
+                return "bad_request"  # Treat file not found as bad request
             return "model_not_found"
         elif "AuthenticationError" in exception_type:
             return "authentication"

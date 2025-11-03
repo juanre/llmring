@@ -8,7 +8,9 @@ import copy
 import logging
 import os
 import tempfile
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from datetime import datetime
+from pathlib import Path
+from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
 
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
@@ -16,6 +18,7 @@ from openai.types.chat import ChatCompletion
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
 from llmring.exceptions import (
     CircuitBreakerError,
+    FileSizeError,
     ProviderAuthenticationError,
     ProviderResponseError,
 )
@@ -28,7 +31,7 @@ from llmring.net.safe_fetcher import fetch_bytes as safe_fetch_bytes
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
 from llmring.providers.error_handler import ProviderErrorHandler
 from llmring.registry import RegistryClient
-from llmring.schemas import LLMResponse, Message, StreamChunk
+from llmring.schemas import FileMetadata, FileUploadResponse, LLMResponse, Message, StreamChunk
 from llmring.utils import strip_provider_prefix
 from llmring.validation import InputValidator
 
@@ -564,7 +567,11 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
             if model_config["is_reasoning"]:
                 # For reasoning models, separate reasoning and output tokens
-                reasoning_budget = reasoning_tokens if reasoning_tokens is not None else model_config["min_recommended_reasoning_tokens"]
+                reasoning_budget = (
+                    reasoning_tokens
+                    if reasoning_tokens is not None
+                    else model_config["min_recommended_reasoning_tokens"]
+                )
                 total_tokens = reasoning_budget + max_tokens
                 request_params["max_completion_tokens"] = total_tokens
 
@@ -1037,7 +1044,11 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
             if model_config["is_reasoning"]:
                 # For reasoning models, separate reasoning and output tokens
-                reasoning_budget = reasoning_tokens if reasoning_tokens is not None else model_config["min_recommended_reasoning_tokens"]
+                reasoning_budget = (
+                    reasoning_tokens
+                    if reasoning_tokens is not None
+                    else model_config["min_recommended_reasoning_tokens"]
+                )
                 total_tokens = reasoning_budget + max_tokens
                 request_params["max_completion_tokens"] = total_tokens
 
@@ -1136,3 +1147,229 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         except Exception as e:
             await self._error_handler.handle_error(e, model)
+
+    async def upload_file(
+        self,
+        file: Union[str, Path, BinaryIO],
+        purpose: str = "analysis",
+        filename: Optional[str] = None,
+        **kwargs,
+    ) -> FileUploadResponse:
+        """
+        Upload file to OpenAI Files API.
+
+        Args:
+            file: File path, Path object, or file-like object
+            purpose: Purpose of the file (e.g., "analysis", "code_execution", "assistant")
+            filename: Optional filename (required for file-like objects)
+            **kwargs: Additional provider-specific parameters
+
+        Returns:
+            FileUploadResponse with file_id, size, etc.
+
+        Raises:
+            FileSizeError: If file exceeds 512MB limit
+            ProviderAuthenticationError: If authentication fails
+            ProviderResponseError: If upload fails
+        """
+        # OpenAI max file size is 512MB for assistants
+        MAX_FILE_SIZE = 512 * 1024 * 1024  # 512MB in bytes
+
+        # Map llmring purpose to OpenAI purpose
+        # OpenAI uses "assistants" for most file purposes
+        openai_purpose_map = {
+            "code_execution": "assistants",
+            "assistant": "assistants",
+            "analysis": "assistants",
+            "cache": "assistants",
+        }
+        openai_purpose = openai_purpose_map.get(purpose, "assistants")
+
+        # Handle file path or file-like object
+        if isinstance(file, (str, Path)):
+            file_path = Path(file)
+            if not file_path.exists():
+                raise FileNotFoundError(f"File not found: {file_path}")
+
+            # Check file size
+            file_size = file_path.stat().st_size
+            if file_size > MAX_FILE_SIZE:
+                raise FileSizeError(
+                    f"File size {file_size} bytes exceeds OpenAI limit of {MAX_FILE_SIZE} bytes",
+                    file_size=file_size,
+                    max_size=MAX_FILE_SIZE,
+                    provider="openai",
+                    filename=str(file_path),
+                )
+
+            # Upload file using OpenAI SDK
+            with open(file_path, "rb") as f:
+                file_obj = await self.client.files.create(file=f, purpose=openai_purpose)
+
+            actual_filename = filename or file_path.name
+            actual_size = file_size
+        else:
+            # File-like object
+            if filename is None:
+                raise ValueError("filename parameter is required for file-like objects")
+
+            # Read content to check size
+            current_pos = file.tell() if hasattr(file, "tell") else 0
+            file_content = file.read()
+            file_size = len(file_content)
+
+            # Reset file position if possible
+            if hasattr(file, "seek"):
+                file.seek(current_pos)
+
+            # Check size
+            if file_size > MAX_FILE_SIZE:
+                raise FileSizeError(
+                    f"File size {file_size} bytes exceeds OpenAI limit of {MAX_FILE_SIZE} bytes",
+                    file_size=file_size,
+                    max_size=MAX_FILE_SIZE,
+                    provider="openai",
+                    filename=filename,
+                )
+
+            # Upload using SDK - it expects a file-like object
+            if hasattr(file, "seek"):
+                file.seek(current_pos)
+            file_obj = await self.client.files.create(file=file, purpose=openai_purpose)
+
+            actual_filename = filename
+            actual_size = file_size
+
+        try:
+            # Parse response
+            return FileUploadResponse(
+                file_id=file_obj.id,
+                provider="openai",
+                filename=actual_filename,
+                size_bytes=actual_size,
+                created_at=datetime.fromtimestamp(file_obj.created_at),
+                purpose=purpose,
+                metadata={
+                    "openai_purpose": openai_purpose,
+                    "status": file_obj.status if hasattr(file_obj, "status") else "uploaded",
+                },
+            )
+
+        except Exception as e:
+            await self._error_handler.handle_error(e, "files")
+
+    async def list_files(
+        self, purpose: Optional[str] = None, limit: int = 100
+    ) -> List[FileMetadata]:
+        """
+        List uploaded files.
+
+        Args:
+            purpose: Optional filter by purpose (OpenAI doesn't filter on API side,
+                     so we filter client-side)
+            limit: Maximum number of files to return (default 100)
+
+        Returns:
+            List of FileMetadata objects
+        """
+        try:
+            # OpenAI SDK returns a paginated list
+            response = await self.client.files.list()
+
+            # Parse response
+            files = []
+            for file_obj in response.data:
+                # OpenAI returns "purpose" field directly
+                file_purpose = file_obj.purpose
+
+                # Map OpenAI purpose back to llmring purpose
+                # (This is a best-effort mapping since OpenAI doesn't have fine-grained purposes)
+                llmring_purpose_map = {
+                    "assistants": "assistant",
+                    "fine-tune": "fine-tune",
+                    "batch": "batch",
+                }
+                mapped_purpose = llmring_purpose_map.get(file_purpose, file_purpose)
+
+                # Filter by purpose if requested
+                if purpose and mapped_purpose != purpose:
+                    continue
+
+                files.append(
+                    FileMetadata(
+                        file_id=file_obj.id,
+                        provider="openai",
+                        filename=file_obj.filename,
+                        size_bytes=file_obj.bytes,
+                        created_at=datetime.fromtimestamp(file_obj.created_at),
+                        purpose=mapped_purpose,
+                        status="uploaded",  # OpenAI doesn't expose status in list
+                        metadata={
+                            "openai_purpose": file_purpose,
+                        },
+                    )
+                )
+
+                # Limit results
+                if len(files) >= limit:
+                    break
+
+            return files
+
+        except Exception as e:
+            await self._error_handler.handle_error(e, "files")
+
+    async def get_file(self, file_id: str) -> FileMetadata:
+        """
+        Get file metadata.
+
+        Args:
+            file_id: File ID to retrieve
+
+        Returns:
+            FileMetadata object
+        """
+        try:
+            file_obj = await self.client.files.retrieve(file_id=file_id)
+
+            # Map OpenAI purpose back to llmring purpose
+            file_purpose = file_obj.purpose
+            llmring_purpose_map = {
+                "assistants": "assistant",
+                "fine-tune": "fine-tune",
+                "batch": "batch",
+            }
+            mapped_purpose = llmring_purpose_map.get(file_purpose, file_purpose)
+
+            return FileMetadata(
+                file_id=file_obj.id,
+                provider="openai",
+                filename=file_obj.filename,
+                size_bytes=file_obj.bytes,
+                created_at=datetime.fromtimestamp(file_obj.created_at),
+                purpose=mapped_purpose,
+                status="uploaded",  # OpenAI doesn't expose detailed status
+                metadata={
+                    "openai_purpose": file_purpose,
+                },
+            )
+
+        except Exception as e:
+            await self._error_handler.handle_error(e, "files")
+
+    async def delete_file(self, file_id: str) -> bool:
+        """
+        Delete uploaded file.
+
+        Args:
+            file_id: File ID to delete
+
+        Returns:
+            True on success
+        """
+        try:
+            await self.client.files.delete(file_id=file_id)
+            return True
+
+        except Exception as e:
+            await self._error_handler.handle_error(e, "files")
