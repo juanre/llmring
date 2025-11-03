@@ -272,6 +272,269 @@ request = LLMRequest(
 )
 ```
 
+## File Uploads
+
+Upload files once and reference them across multiple requests for efficient file handling:
+
+```python
+from llmring import LLMRing, LLMRequest, Message
+
+async with LLMRing() as service:
+    # Upload file once
+    file_resp = await service.upload_file("data.csv", purpose="code_execution")
+
+    # Use many times with different prompts
+    request = LLMRequest(
+        model="anthropic:claude-3-5-haiku-20241022",
+        messages=[Message(role="user", content="Analyze this data")],
+        files=[file_resp.file_id],
+        tools=[{"type": "code_execution"}]
+    )
+
+    response = await service.chat(request)
+
+    # Manage files
+    files = await service.list_files()
+    metadata = await service.get_file(file_resp.file_id)
+    await service.delete_file(file_resp.file_id)
+```
+
+**Provider Support:**
+
+| Provider | Upload | Use in Chat | Notes |
+|----------|--------|-------------|-------|
+| **Anthropic** | ✅ Files API | ✅ Document blocks | 500MB limit, code execution |
+| **OpenAI** | ✅ Files API | ⚠️ Assistants only | 512MB limit, not in Chat Completions |
+| **Google** | ✅ Context Caching | ✅ Cached content | Text-only, TTL-based |
+
+See [File Uploads Documentation](docs/file-uploads.md) for complete guide.
+
+## Current Limitations & Workarounds
+
+LLMRing provides a unified interface for core LLM functionality. Some advanced provider-specific features require workarounds or direct SDK access.
+
+### ✅ Fully Supported (Unified API)
+
+- **Chat completions** - Single and multi-turn conversations
+- **Streaming** - Server-sent events (SSE) for incremental responses
+- **Tool calling** - Function calling with native provider support
+- **Structured output** - JSON schema across all providers
+- **Vision & multimodal** - Images, documents, PDFs
+- **File uploads** - Upload-once-reference-many pattern (v1.4.0+)
+- **Provider fallback** - Automatic failover between models
+- **Cost tracking** - Token usage and cost calculation
+
+### ⚠️ Requires Workarounds
+
+#### 1. Provider-Specific Parameters
+
+**Status:** ✅ Works via `extra_params` (needs better documentation)
+
+Access provider-specific features using the `extra_params` field:
+
+```python
+from llmring import LLMRing, LLMRequest, Message
+
+async with LLMRing() as service:
+    # OpenAI: logprobs, seed, frequency_penalty, etc.
+    request = LLMRequest(
+        model="openai:gpt-4o",
+        messages=[Message(role="user", content="Hello")],
+        extra_params={
+            "logprobs": True,
+            "top_logprobs": 5,
+            "seed": 12345,
+            "frequency_penalty": 0.5
+        }
+    )
+
+    # Google: safety settings, top_k, candidate_count
+    request = LLMRequest(
+        model="google:gemini-2.5-flash",
+        messages=[Message(role="user", content="Hello")],
+        extra_params={
+            "safety_settings": [{
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            }],
+            "top_k": 40,
+            "candidate_count": 3
+        }
+    )
+
+    # Anthropic: thinking budget, top_k
+    request = LLMRequest(
+        model="anthropic:claude-sonnet-4-5-20250929",
+        messages=[Message(role="user", content="Hello")],
+        extra_params={
+            "thinking": {
+                "type": "enabled",
+                "budget_tokens": 5000
+            },
+            "top_k": 40
+        }
+    )
+
+    response = await service.chat(request)
+```
+
+**Common Parameters:**
+
+| Parameter | OpenAI | Anthropic | Google | Description |
+|-----------|--------|-----------|--------|-------------|
+| `logprobs` | ✅ | ❌ | ❌ | Log probabilities for tokens |
+| `top_logprobs` | ✅ | ❌ | ❌ | Number of top logprobs to return |
+| `seed` | ✅ | ❌ | ❌ | Deterministic sampling |
+| `frequency_penalty` | ✅ | ❌ | ❌ | Penalize repeated tokens |
+| `presence_penalty` | ✅ | ❌ | ❌ | Penalize token presence |
+| `thinking` | ❌ | ✅ | ❌ | Extended thinking budget |
+| `top_k` | ❌ | ✅ | ✅ | Top-k sampling |
+| `safety_settings` | ❌ | ❌ | ✅ | Content filtering |
+| `candidate_count` | ❌ | ❌ | ✅ | Number of response candidates |
+
+See provider documentation for complete parameter lists:
+- [OpenAI API Reference](https://platform.openai.com/docs/api-reference/chat/create)
+- [Anthropic API Reference](https://docs.anthropic.com/en/api/messages)
+- [Google Gemini API Reference](https://ai.google.dev/api/generate-content)
+
+#### 2. Direct SDK Access
+
+**Status:** ✅ Works via `get_provider().client`
+
+For features not exposed by llmring, access the raw provider SDK:
+
+```python
+from llmring import LLMRing
+
+async with LLMRing() as service:
+    # Get underlying SDK clients
+    anthropic_client = service.get_provider("anthropic").client  # anthropic.AsyncAnthropic
+    openai_client = service.get_provider("openai").client        # openai.AsyncOpenAI
+    google_client = service.get_provider("google").client         # google.genai.Client
+    ollama_client = service.get_provider("ollama").client         # ollama.AsyncClient
+
+    # Use any SDK feature directly
+    # Example: Anthropic with all SDK parameters
+    response = await anthropic_client.messages.create(
+        model="claude-sonnet-4-5-20250929",
+        max_tokens=1000,
+        messages=[{"role": "user", "content": "Hello"}],
+        system=[{
+            "type": "text",
+            "text": "You are helpful",
+            "cache_control": {"type": "ephemeral"}
+        }],
+        thinking={
+            "type": "enabled",
+            "budget_tokens": 10000
+        }
+    )
+
+    # Example: OpenAI with logprobs and seed
+    response = await openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": "Hello"}],
+        logprobs=True,
+        top_logprobs=10,
+        seed=42,
+        parallel_tool_calls=False
+    )
+```
+
+**When to use direct SDK access:**
+- Experimental/beta features
+- Complex provider-specific workflows
+- Features requiring different API endpoints
+- Provider-specific frameworks (Agents SDK, etc.)
+
+### ❌ Not Currently Supported
+
+#### Real-time Audio/Video Streaming
+
+**Status:** Not supported (WebSocket transport not implemented)
+
+**Providers:**
+- ✅ OpenAI Realtime API - WebSocket-based voice/video streaming
+- ✅ Google Live API - Multimodal real-time streaming
+- ❌ Anthropic - No real-time API yet
+
+**Workaround:** Use provider SDK directly
+
+```python
+# OpenAI Realtime API example
+from openai import AsyncOpenAI
+
+client = AsyncOpenAI(api_key="your-key")
+
+async with client.beta.realtime.connect(model="gpt-4o-realtime") as connection:
+    await connection.session.update(session={'modalities': ['text', 'audio']})
+
+    await connection.send_audio(audio_bytes)
+
+    async for event in connection:
+        if event.type == "response.audio.delta":
+            # Handle streaming audio
+            play_audio(event.delta)
+```
+
+**Future plans:** Real-time streaming is planned for llmring v2.0 (Q2 2026)
+
+#### OpenAI Agents SDK
+
+**Status:** Out of scope (framework-level abstraction)
+
+The OpenAI Agents SDK is a separate framework (like LangChain) built on top of the OpenAI API. Use it directly with llmring's OpenAI client:
+
+```python
+from openai_agents import Agent
+from llmring import LLMRing
+
+service = LLMRing()
+openai_client = service.get_provider("openai").client
+
+# Use Agents SDK with llmring's client
+agent = Agent(
+    name="assistant",
+    client=openai_client,
+    instructions="You are a helpful assistant",
+    tools=[...]
+)
+
+result = await agent.run("Hello")
+```
+
+**Why not unified?** Agent frameworks (OpenAI Agents SDK, LangChain, CrewAI, etc.) are high-level abstractions for orchestration, state management, and multi-agent workflows. llmring focuses on the lower-level API layer.
+
+---
+
+## When to Use What?
+
+### Use llmring's Unified API for:
+- ✅ Multi-provider applications
+- ✅ Provider fallback strategies
+- ✅ Cost optimization across providers
+- ✅ Standard chat/tool calling workflows
+- ✅ Rapid prototyping and MVPs
+
+### Use `extra_params` for:
+- ⚠️ Provider-specific parameter tuning
+- ⚠️ Well-documented provider features
+- ⚠️ One-off provider requirements
+
+### Use Direct SDK Access for:
+- ❌ Experimental/beta features
+- ❌ Real-time audio/video
+- ❌ Complex provider-specific workflows
+- ❌ Provider-specific frameworks
+
+---
+
+## Feedback & Contributions
+
+Have a feature request or found a workaround we should document?
+- Open an issue: [github.com/juanre/llmring/issues](https://github.com/juanre/llmring/issues)
+- Contribute: [github.com/juanre/llmring/blob/main/CONTRIBUTING.md](https://github.com/juanre/llmring/blob/main/CONTRIBUTING.md)
+
 ### Model Aliases and Lockfiles
 
 LLMRing uses lockfiles to map semantic aliases to models, with support for fallback pools and environment-specific profiles:
