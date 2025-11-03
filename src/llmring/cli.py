@@ -641,108 +641,18 @@ async def cmd_info(args):
 
 async def cmd_stats(args):
     """Show usage statistics from server."""
-    import os
-
-    from llmring.server_client import ServerClient
-
-    server_url = os.getenv("LLMRING_SERVER_URL", "http://localhost:8000")
-    api_key = os.getenv("LLMRING_API_KEY")
-
-    if not api_key:
-        print("❌ Error: LLMRING_API_KEY environment variable required for stats.")
-        print("\nUsage statistics require connection to llmring-server.")
-        print("Set LLMRING_API_KEY to your API key and optionally LLMRING_SERVER_URL.")
-        return 1
-
-    try:
-        client = ServerClient(server_url=server_url, api_key=api_key)
-
-        # Fetch receipts from server
-        result = await client.list_receipts(limit=1000)
-        receipts = result.get("receipts", [])
-        total = result.get("total", 0)
-
-        if not receipts:
-            print("No usage statistics available.")
-            print("\nGenerate receipts with: llmring receipts generate --since-last")
-            return 0
-
-        print(f"Usage statistics ({total} receipts):")
-        print("-" * 40)
-
-        total_cost = sum(r.get("total_cost", 0) for r in receipts)
-        total_tokens = sum(r.get("total_tokens", 0) for r in receipts)
-
-        print(f"Total receipts: {total}")
-        print(f"Total tokens: {total_tokens:,}")
-        print(f"Total cost: ${total_cost:.6f}")
-
-        if args.verbose and receipts:
-            print("\nRecent receipts:")
-            for r in receipts[:10]:
-                timestamp = r.get("timestamp", "unknown")
-                alias = r.get("alias", "unknown")
-                provider = r.get("provider", "unknown")
-                model = r.get("model", "unknown")
-                cost = r.get("total_cost", 0)
-                print(f"  {timestamp}: {alias} → {provider}:{model} (${cost:.6f})")
-
-        return 0
-
-    except Exception as e:
-        print(f"❌ Error fetching statistics: {e}")
-        print("\nEnsure llmring-server is running and LLMRING_API_KEY is valid.")
-        return 1
+    print("❌ The 'stats' command has been removed.")
+    print("\nThis command was dependent on the receipts feature, which has been removed.")
+    print("Usage statistics and cost tracking will be reimplemented in a future version.")
+    return 1
 
 
 async def cmd_export(args):
-    """Export receipts from server to JSON file."""
-    import json
-    import os
-    from datetime import UTC, datetime
-
-    from llmring.server_client import ServerClient
-
-    server_url = os.getenv("LLMRING_SERVER_URL", "http://localhost:8000")
-    api_key = os.getenv("LLMRING_API_KEY")
-
-    if not api_key:
-        print("❌ Error: LLMRING_API_KEY environment variable required for export.")
-        print("\nReceipt export requires connection to llmring-server.")
-        print("Set LLMRING_API_KEY to your API key and optionally LLMRING_SERVER_URL.")
-        return 1
-
-    try:
-        client = ServerClient(server_url=server_url, api_key=api_key)
-
-        # Fetch all receipts from server
-        result = await client.list_receipts(limit=10000)
-        receipts = result.get("receipts", [])
-
-        if not receipts:
-            print("No receipts to export.")
-            print("\nGenerate receipts with: llmring receipts generate --since-last")
-            return 0
-
-        # Export receipts as JSON
-        export_data = {
-            "exported_at": datetime.now(UTC).isoformat(),
-            "server_url": server_url,
-            "total_receipts": len(receipts),
-            "receipts": receipts,
-        }
-
-        output_file = args.output or "llmring_receipts.json"
-        with open(output_file, "w") as f:
-            json.dump(export_data, f, indent=2)
-
-        print(f"✅ Exported {len(receipts)} receipts to {output_file}")
-        return 0
-
-    except Exception as e:
-        print(f"❌ Error exporting receipts: {e}")
-        print("\nEnsure llmring-server is running and LLMRING_API_KEY is valid.")
-        return 1
+    """Export data from server to file."""
+    print("❌ The 'export' command has been removed.")
+    print("\nThis command was dependent on the receipts feature, which has been removed.")
+    print("Data export functionality will be reimplemented in a future version.")
+    return 1
 
 
 async def cmd_cache_clear(args):
@@ -877,76 +787,6 @@ async def cmd_register(args):
     )
 
     return 0
-
-
-# ============================================================================
-# Receipts CLI Commands (Phase 7.5)
-# ============================================================================
-
-
-async def cmd_receipts_generate(args):
-    """Generate a receipt on-demand."""
-    import os
-    from uuid import UUID
-
-    from llmring.server_client import ServerClient
-
-    server_url = os.getenv("LLMRING_SERVER_URL", "http://localhost:8000")
-    api_key = os.getenv("LLMRING_API_KEY")
-
-    if not api_key:
-        print("❌ Error: LLMRING_API_KEY environment variable required.")
-        print("Set LLMRING_API_KEY to generate receipts.")
-        return 1
-
-    try:
-        client = ServerClient(server_url=server_url, api_key=api_key)
-
-        # Build request based on arguments
-        request_data = {}
-
-        if args.conversation:
-            request_data["conversation_id"] = args.conversation
-        elif args.start and args.end:
-            request_data["start_date"] = args.start
-            request_data["end_date"] = args.end
-        elif args.log_ids:
-            request_data["log_ids"] = [UUID(lid) for lid in args.log_ids]
-        elif args.since_last:
-            request_data["since_last_receipt"] = True
-        else:
-            print(
-                "❌ Error: Must specify one of: --conversation, --start/--end, --log-ids, --since-last"
-            )
-            return 1
-
-        if args.description:
-            request_data["description"] = args.description
-        if args.tags:
-            request_data["tags"] = args.tags
-
-        # Generate receipt
-        result = await client.generate_receipt(**request_data)
-
-        receipt = result.get("receipt", {})
-        certified_count = result.get("certified_count", 0)
-
-        print(f"✅ Receipt generated successfully!")
-        print(f"Receipt ID: {receipt.get('receipt_id')}")
-        print(f"Certified logs: {certified_count}")
-        print(f"Total cost: ${receipt.get('total_cost', 0):.6f}")
-
-        if receipt.get("receipt_type") == "batch":
-            summary = receipt.get("batch_summary", {})
-            print(f"\nBatch Summary:")
-            print(f"  Total calls: {summary.get('total_calls', 0)}")
-            print(f"  Total tokens: {summary.get('total_tokens', 0):,}")
-            print(f"  Date range: {summary.get('start_date')} to {summary.get('end_date')}")
-
-        return 0
-    except Exception as e:
-        print(f"❌ Error generating receipt: {e}")
-        return 1
 
 
 # ============================================================================
@@ -1316,241 +1156,6 @@ async def cmd_mcp_apply(args):
     except Exception as e:
         print(f"❌ Error applying manifest: {e}")
         return 1
-    except Exception as e:
-        print(f"❌ Error generating receipt: {e}")
-        return 1
-
-
-async def cmd_receipts_list(args):
-    """List all receipts."""
-    import os
-
-    from llmring.server_client import ServerClient
-
-    server_url = os.getenv("LLMRING_SERVER_URL", "http://localhost:8000")
-    api_key = os.getenv("LLMRING_API_KEY")
-
-    if not api_key:
-        print("❌ Error: LLMRING_API_KEY environment variable required.")
-        return 1
-
-    try:
-        client = ServerClient(server_url=server_url, api_key=api_key)
-
-        result = await client.list_receipts(limit=args.limit, offset=args.offset)
-        receipts = result.get("receipts", [])
-        total = result.get("total", 0)
-
-        if not receipts:
-            print("No receipts found.")
-            print("\nGenerate receipts with: llmring receipts generate --since-last")
-            return 0
-
-        print(f"Receipts ({len(receipts)} of {total} total):")
-        print("-" * 80)
-
-        for r in receipts:
-            receipt_id = r.get("receipt_id", "unknown")
-            timestamp = r.get("timestamp", "unknown")
-            receipt_type = r.get("receipt_type", "single")
-            total_cost = r.get("total_cost", 0)
-
-            print(f"\n{receipt_id}")
-            print(f"  Type: {receipt_type}")
-            print(f"  Date: {timestamp}")
-            print(f"  Cost: ${total_cost:.6f}")
-
-            if receipt_type == "batch":
-                summary = r.get("batch_summary", {})
-                print(f"  Calls: {summary.get('total_calls', 0)}")
-
-        return 0
-
-    except Exception as e:
-        print(f"❌ Error listing receipts: {e}")
-        return 1
-
-
-async def cmd_receipts_get(args):
-    """Get a specific receipt by ID."""
-    import json
-    import os
-
-    from llmring.server_client import ServerClient
-
-    server_url = os.getenv("LLMRING_SERVER_URL", "http://localhost:8000")
-    api_key = os.getenv("LLMRING_API_KEY")
-
-    if not api_key:
-        print("❌ Error: LLMRING_API_KEY environment variable required.")
-        return 1
-
-    try:
-        client = ServerClient(server_url=server_url, api_key=api_key)
-
-        receipt = await client.get_receipt(args.receipt_id)
-
-        if args.json:
-            print(json.dumps(receipt, indent=2))
-        else:
-            print(f"Receipt: {receipt.get('receipt_id')}")
-            print(f"Type: {receipt.get('receipt_type', 'single')}")
-            print(f"Timestamp: {receipt.get('timestamp')}")
-            print(f"Provider: {receipt.get('provider')}")
-            print(f"Model: {receipt.get('model')}")
-            print(f"Total cost: ${receipt.get('total_cost', 0):.6f}")
-            print(f"Signature: {receipt.get('signature')}")
-
-        return 0
-
-    except Exception as e:
-        print(f"❌ Error fetching receipt: {e}")
-        return 1
-
-
-async def cmd_receipts_preview(args):
-    """Preview what a receipt would certify without generating it."""
-    import json
-    import os
-
-    from llmring.server_client import ServerClient
-
-    server_url = os.getenv("LLMRING_SERVER_URL", "http://localhost:8000")
-    api_key = os.getenv("LLMRING_API_KEY")
-
-    if not api_key:
-        print("❌ Error: LLMRING_API_KEY environment variable required.")
-        return 1
-
-    try:
-        client = ServerClient(server_url=server_url, api_key=api_key)
-
-        # Build request based on arguments
-        request_data = {}
-
-        if args.start and args.end:
-            request_data["start_date"] = args.start
-            request_data["end_date"] = args.end
-        elif args.since_last:
-            request_data["since_last_receipt"] = True
-        else:
-            print("❌ Error: Must specify --start/--end or --since-last")
-            return 1
-
-        # Preview receipt
-        preview = await client.preview_receipt(**request_data)
-
-        print("📋 Receipt Preview:")
-        print(f"  Total logs: {preview.get('total_logs', 0)}")
-        print(f"  Total cost: ${preview.get('total_cost', 0):.6f}")
-        print(f"  Total tokens: {preview.get('total_tokens', 0):,}")
-        print(f"  Date range: {preview.get('start_date')} to {preview.get('end_date')}")
-        print(f"  Receipt type: {preview.get('receipt_type', 'unknown')}")
-
-        if args.verbose:
-            print("\nBreakdown by model:")
-            for model, stats in preview.get("by_model", {}).items():
-                print(f"  {model}: {stats.get('calls')} calls, ${stats.get('cost', 0):.6f}")
-
-        return 0
-
-    except Exception as e:
-        print(f"❌ Error previewing receipt: {e}")
-        return 1
-
-
-async def cmd_receipts_uncertified(args):
-    """List logs that haven't been certified by any receipt."""
-    import os
-
-    from llmring.server_client import ServerClient
-
-    server_url = os.getenv("LLMRING_SERVER_URL", "http://localhost:8000")
-    api_key = os.getenv("LLMRING_API_KEY")
-
-    if not api_key:
-        print("❌ Error: LLMRING_API_KEY environment variable required.")
-        return 1
-
-    try:
-        client = ServerClient(server_url=server_url, api_key=api_key)
-
-        result = await client.get_uncertified_logs(limit=args.limit, offset=args.offset)
-        logs = result.get("logs", [])
-        total = result.get("total", 0)
-
-        if not logs:
-            print("✅ All logs have been certified!")
-            return 0
-
-        print(f"Uncertified logs ({len(logs)} of {total} total):")
-        print("-" * 80)
-
-        for log in logs:
-            log_id = log.get("id", "unknown")
-            log_type = log.get("type", "unknown")
-            timestamp = log.get("timestamp", "unknown")
-            cost = log.get("cost", 0)
-
-            print(f"{log_id} ({log_type}) - {timestamp} - ${cost:.6f}")
-
-        print(f"\nGenerate receipt with: llmring receipts generate --since-last")
-
-        return 0
-
-    except Exception as e:
-        print(f"❌ Error fetching uncertified logs: {e}")
-        return 1
-
-
-async def cmd_receipts_verify(args):
-    """Verify a receipt from a JSON file."""
-    import json
-    import os
-
-    from llmring.server_client import ServerClient
-
-    server_url = os.getenv("LLMRING_SERVER_URL", "http://localhost:8000")
-    api_key = os.getenv("LLMRING_API_KEY")
-
-    try:
-        # Load receipt from file
-        with open(args.receipt_file, "r") as f:
-            receipt_data = json.load(f)
-
-        # If the file contains an export with multiple receipts, verify the first one
-        if "receipts" in receipt_data and isinstance(receipt_data["receipts"], list):
-            if not receipt_data["receipts"]:
-                print("❌ No receipts found in file.")
-                return 1
-            receipt_data = receipt_data["receipts"][0]
-
-        # Verify via server endpoint (public, no auth required)
-        client = ServerClient(server_url=server_url, api_key=api_key)
-
-        # The verify endpoint is public, so we can call it without auth
-        result = await client.post("/api/v1/receipts/verify", json=receipt_data)
-
-        is_valid = result.get("valid", False)
-        receipt_id = result.get("receipt_id", "unknown")
-
-        if is_valid:
-            print(f"✅ Receipt {receipt_id} is VALID")
-            print(f"   Algorithm: {result.get('algorithm', 'unknown')}")
-            return 0
-        else:
-            print(f"❌ Receipt {receipt_id} is INVALID")
-            return 1
-
-    except FileNotFoundError:
-        print(f"❌ Error: File not found: {args.receipt_file}")
-        return 1
-    except json.JSONDecodeError:
-        print(f"❌ Error: Invalid JSON in file: {args.receipt_file}")
-        return 1
-    except Exception as e:
-        print(f"❌ Error verifying receipt: {e}")
-        return 1
 
 
 def cmd_providers(args):
@@ -1704,8 +1309,8 @@ def main():
     stats_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # Export command
-    export_parser = subparsers.add_parser("export", help="Export receipts to file")
-    export_parser.add_argument("--output", help="Output file (default: llmring_receipts.json)")
+    export_parser = subparsers.add_parser("export", help="Export data to file")
+    export_parser.add_argument("--output", help="Output file")
     export_parser.add_argument(
         "--format", choices=["json", "csv"], default="json", help="Export format"
     )
@@ -1715,66 +1320,6 @@ def main():
     cache_subparsers = cache_parser.add_subparsers(dest="cache_command", help="Cache commands")
     cache_subparsers.add_parser("clear", help="Clear the registry cache")
     cache_info_parser = cache_subparsers.add_parser("info", help="Show cache information")
-
-    # Receipts management commands (Phase 7.5)
-    receipts_parser = subparsers.add_parser(
-        "receipts", help="On-demand receipt generation and management"
-    )
-    receipts_subparsers = receipts_parser.add_subparsers(
-        dest="receipts_command", help="Receipts commands"
-    )
-
-    # receipts generate
-    generate_parser = receipts_subparsers.add_parser(
-        "generate", help="Generate a receipt on-demand"
-    )
-    generate_parser.add_argument(
-        "--conversation", help="Generate receipt for a specific conversation ID"
-    )
-    generate_parser.add_argument("--start", help="Start date for batch receipt (YYYY-MM-DD)")
-    generate_parser.add_argument("--end", help="End date for batch receipt (YYYY-MM-DD)")
-    generate_parser.add_argument("--log-ids", nargs="+", help="List of log IDs to certify")
-    generate_parser.add_argument(
-        "--since-last", action="store_true", help="Certify all logs since last receipt"
-    )
-    generate_parser.add_argument("--description", help="User-provided description for the receipt")
-    generate_parser.add_argument("--tags", nargs="+", help="Tags for categorization")
-
-    # receipts list
-    list_receipts_parser = receipts_subparsers.add_parser("list", help="List all receipts")
-    list_receipts_parser.add_argument(
-        "--limit", type=int, default=100, help="Number of receipts to fetch"
-    )
-    list_receipts_parser.add_argument("--offset", type=int, default=0, help="Offset for pagination")
-
-    # receipts get
-    get_receipt_parser = receipts_subparsers.add_parser("get", help="Get a specific receipt by ID")
-    get_receipt_parser.add_argument("receipt_id", help="Receipt ID to fetch")
-    get_receipt_parser.add_argument("--json", action="store_true", help="Output as JSON")
-
-    # receipts preview
-    preview_parser = receipts_subparsers.add_parser(
-        "preview", help="Preview what a receipt would certify"
-    )
-    preview_parser.add_argument("--start", help="Start date (YYYY-MM-DD)")
-    preview_parser.add_argument("--end", help="End date (YYYY-MM-DD)")
-    preview_parser.add_argument(
-        "--since-last", action="store_true", help="Preview logs since last receipt"
-    )
-    preview_parser.add_argument("--verbose", action="store_true", help="Show detailed breakdown")
-
-    # receipts uncertified
-    uncertified_parser = receipts_subparsers.add_parser(
-        "uncertified", help="List logs without receipts"
-    )
-    uncertified_parser.add_argument(
-        "--limit", type=int, default=100, help="Number of logs to fetch"
-    )
-    uncertified_parser.add_argument("--offset", type=int, default=0, help="Offset for pagination")
-
-    # receipts verify
-    verify_parser = receipts_subparsers.add_parser("verify", help="Verify a receipt from JSON file")
-    verify_parser.add_argument("receipt_file", help="Path to receipt JSON file")
 
     # MCP management commands (servers, tools)
     mcp_parser = subparsers.add_parser(
@@ -1913,24 +1458,6 @@ def main():
 
         if args.cache_command in cache_commands:
             return asyncio.run(cache_commands[args.cache_command](args))
-
-    # Handle receipts subcommands (Phase 7.5)
-    if args.command == "receipts":
-        if not args.receipts_command:
-            receipts_parser.print_help()
-            return 1
-
-        receipts_commands = {
-            "generate": cmd_receipts_generate,
-            "list": cmd_receipts_list,
-            "get": cmd_receipts_get,
-            "preview": cmd_receipts_preview,
-            "uncertified": cmd_receipts_uncertified,
-            "verify": cmd_receipts_verify,
-        }
-
-        if args.receipts_command in receipts_commands:
-            return asyncio.run(receipts_commands[args.receipts_command](args))
 
     # Handle mcp subcommands
     if args.command == "mcp":

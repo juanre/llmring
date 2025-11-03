@@ -391,54 +391,7 @@ Recent requests:
   2024-01-15 10:28: balanced → anthropic:claude-sonnet-4-5-20250929 ($0.012450)
 ```
 
-**Note:** Full statistics require server connection. See [Receipts Documentation](receipts.md) for details.
-
----
-
-### `llmring export`
-
-Export receipts to file.
-
-```bash
-# Export as JSON (default)
-llmring export
-
-# Specify output file
-llmring export --output my_receipts.json
-
-# CSV format
-llmring export --format csv --output receipts.csv
-```
-
-**Options:**
-- `--output FILE` - Output file (default: llmring_receipts.json)
-- `--format FORMAT` - Export format: json or csv (default: json)
-
-**Example output:**
-```
-✅ Exported 15 receipts to llmring_receipts.json
-```
-
-**JSON format:**
-```json
-{
-  "exported_at": "2024-01-15T10:30:00Z",
-  "receipts": [
-    {
-      "receipt_id": "abc123",
-      "timestamp": "2024-01-15T10:30:00Z",
-      "alias": "fast",
-      "profile": "default",
-      "provider": "openai",
-      "model": "gpt-4o-mini",
-      "prompt_tokens": 10,
-      "completion_tokens": 20,
-      "total_tokens": 30,
-      "total_cost": 0.000045
-    }
-  ]
-}
-```
+**Note:** Full statistics require server connection.
 
 ---
 
@@ -511,7 +464,6 @@ LLMRing SaaS features coming soon:
   • Central binding management
   • Usage analytics and cost tracking
   • Team collaboration
-  • Signed receipts for compliance
 ```
 
 ---
@@ -654,5 +606,4 @@ llmring chat "test" --verbose --json
 
 - [Lockfile Documentation](lockfile.md) - Comprehensive lockfile guide
 - [MCP Integration](mcp.md) - Conversational configuration
-- [Receipts & Cost Tracking](receipts.md) - Cost management
 - [API Reference](api-reference.md) - Programmatic usage

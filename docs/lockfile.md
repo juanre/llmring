@@ -194,7 +194,7 @@ prod.set_binding("assistant", ["anthropic:claude-sonnet-4-5-20250929", "openai:g
 lockfile.save()
 ```
 
-`Lockfile.calculate_digest()` returns the SHA256 hash used in receipt signatures. `Lockfile.find_package_directory()` helps installers place lockfiles inside `src/<package>/`.
+`Lockfile.calculate_digest()` returns the SHA256 hash for versioning and integrity. `Lockfile.find_package_directory()` helps installers place lockfiles inside `src/<package>/`.
 
 ## Best Practices
 

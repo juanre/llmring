@@ -444,14 +444,6 @@ class MCPClientInfoService:
                 "privacy_notes": "System prompts are SHA-256 hashed for privacy, includes token counts and costs",
             },
             {
-                "table": "receipts",
-                "endpoint": "/receipts",
-                "purpose": "Cryptographic receipts for usage verification",
-                "user_identifiable_fields": ["project_id"],
-                "retention": "Configurable (default: indefinite)",
-                "privacy_notes": "Contains signed usage receipts for audit purposes",
-            },
-            {
                 "table": "registry",
                 "endpoint": "/registry",
                 "purpose": "LLM model registry with cost and capability information",

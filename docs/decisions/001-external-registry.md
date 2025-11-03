@@ -178,7 +178,6 @@ registry = ModelRegistryClient(
 ## Related Decisions
 
 - [ADR 002: Lockfile Format](./002-lockfile-format.md) - Uses registry for model validation
-- [ADR 003: Receipt Signing](./003-receipt-signing.md) - Receipts include registry version
 
 ## References
 

@@ -51,7 +51,7 @@ class LLMRing:
             origin: Origin identifier for tracking
             registry_url: Optional custom registry URL
             lockfile_path: Optional path to lockfile
-            server_url: Optional llmring-server URL for usage logging and receipts
+            server_url: Optional llmring-server URL for usage logging
             api_key: API key for llmring-server or llmring-api
             log_metadata: Enable logging of usage metadata (tokens, cost, model) to server
             log_conversations: Enable logging of full conversations (messages + responses) to server
@@ -94,7 +94,7 @@ class LLMRing:
         # Validation service
         self._validation_service = ValidationService(self.registry)
 
-        # Server client for usage logging and receipts (optional)
+        # Server client for usage logging (optional)
         self.server_client: Optional[Any] = None
         self.logging_service: Optional[LoggingService] = None
 
@@ -440,7 +440,7 @@ class LLMRing:
         ]
         InputValidator.validate_message_content(messages_dict)
 
-        # Store original alias for receipt
+        # Store original alias for logging
         original_alias = request.model or ""
 
         # Resolve alias if needed
@@ -579,7 +579,7 @@ class LLMRing:
         ]
         InputValidator.validate_message_content(messages_dict)
 
-        # Store original alias for receipt
+        # Store original alias for logging
         original_alias = request.model or ""
 
         # Resolve alias if needed
@@ -655,7 +655,7 @@ class LLMRing:
                 extra_params=adapted_request.extra_params,
             )
 
-            # Track usage for receipt generation
+            # Track usage for logging
             accumulated_usage = None
 
             # Stream chunks to client

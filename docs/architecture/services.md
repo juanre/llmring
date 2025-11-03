@@ -8,9 +8,8 @@
 2. [AliasResolver](#aliasresolver)
 3. [SchemaAdapter](#schemaadapter)
 4. [CostCalculator](#costcalculator)
-5. [ReceiptManager](#receiptmanager)
-6. [ValidationService](#validationservice)
-7. [Service Interaction Patterns](#service-interaction-patterns)
+5. [ValidationService](#validationservice)
+6. [Service Interaction Patterns](#service-interaction-patterns)
 
 ---
 
@@ -36,7 +35,6 @@ src/llmring/services/
 ├── alias_resolver.py      # Alias resolution from lockfiles
 ├── schema_adapter.py      # Schema adaptation for providers
 ├── cost_calculator.py     # Cost calculation from registry
-├── receipt_manager.py     # Receipt generation and management
 └── validation_service.py  # Request validation
 ```
 
@@ -352,129 +350,6 @@ See `tests/unit/test_cost_calculator.py` (13 tests):
 
 ---
 
-## ReceiptManager
-
-**File**: `src/llmring/services/receipt_manager.py`
-
-### Purpose
-
-Generates cryptographically signed receipts for LLM requests. Receipts provide tamper-proof records of usage, costs, and model versions.
-
-### Responsibilities
-
-- Generate receipts for completed requests
-- Sign receipts with Ed25519 private key
-- Store receipts in memory
-- Resolve profile names (explicit > env > lockfile > default)
-- Handle streaming vs non-streaming receipts
-
-### Key Methods
-
-#### `generate_receipt(response, original_alias, provider, model, cost_info, profile) -> Optional[Receipt]`
-
-Generates a signed receipt for a non-streaming request.
-
-**Algorithm**:
-1. Extract usage from response
-2. Resolve profile name (explicit > `LLMRING_PROFILE` > lockfile default > "default")
-3. Create Receipt object with metadata
-4. Sign receipt with Ed25519 key
-5. Store receipt
-6. Return receipt
-
-**Example**:
-```python
-manager = ReceiptManager(lockfile)
-
-response = await provider.chat(request)
-cost_info = await calculator.calculate_cost(response, registry_model)
-
-receipt = await manager.generate_receipt(
-    response=response,
-    original_alias="gpt4",
-    provider="openai",
-    model="gpt-4-turbo",
-    cost_info=cost_info,
-    profile="production"
-)
-
-print(receipt.signature)  # Ed25519 signature
-print(receipt.total_cost)  # 0.0075
-print(receipt.profile)     # "production"
-```
-
-#### `generate_streaming_receipt(usage, original_alias, provider, model, cost_info, profile) -> Optional[Receipt]`
-
-Generates a receipt for streaming requests (usage accumulated during stream).
-
-**Similar to `generate_receipt()` but takes `usage` dict instead of `response`.**
-
-#### `get_receipts() -> List[Receipt]`
-
-Returns copies of all stored receipts.
-
-**Note**: Returns copies to prevent external mutation.
-
-#### `clear_receipts()`
-
-Clears all stored receipts.
-
-**Use Case**: Testing or memory management.
-
-### Profile Resolution Priority
-
-1. **Explicit profile parameter**: `generate_receipt(..., profile="prod")`
-2. **Environment variable**: `LLMRING_PROFILE=staging`
-3. **Lockfile default**: `default_profile = "production"`
-4. **Fallback**: `"default"`
-
-### Receipt Structure
-
-See `src/llmring/receipt.py`:
-
-```python
-@dataclass
-class Receipt:
-    id: str                    # UUID
-    timestamp: datetime        # ISO 8601
-    model: str                 # "gpt-4-turbo"
-    profile: str               # "production"
-    original_alias: str        # "gpt4"
-    input_tokens: int          # 100
-    output_tokens: int         # 150
-    total_tokens: int          # 250
-    input_cost: float          # 0.003
-    output_cost: float         # 0.0045
-    total_cost: float          # 0.0075
-    signature: str             # Ed25519 hex signature
-    public_key: str            # Ed25519 public key
-```
-
-### Cryptographic Signing
-
-Uses **Ed25519** for signatures:
-- Private key from `LLMRING_SIGNING_KEY` environment variable
-- If not set, receipts generated without signatures
-- Public key included in receipt for verification
-
-**Verification**:
-```python
-from llmring.receipt import verify_receipt
-
-is_valid = verify_receipt(receipt)
-# True if signature matches, False otherwise
-```
-
-### Testing
-
-See `tests/unit/test_receipt_manager.py` (19 tests):
-- Receipt generation for various scenarios
-- Profile resolution priority
-- Signature generation
-- Error handling
-
----
-
 ## ValidationService
 
 **File**: `src/llmring/services/validation_service.py`
@@ -621,9 +496,6 @@ response = await self._schema_adapter.post_process_structured_output(response, .
 
 # 7. Calculate cost
 cost = await self._cost_calculator.calculate_cost(response, model)
-
-# 8. Generate receipt
-receipt = await self._receipt_manager.generate_receipt(...)
 ```
 
 ### Pattern 2: Conditional Service Usage
@@ -644,10 +516,6 @@ Some services mutate state:
 # CostCalculator adds cost to response
 calculator.add_cost_to_response(response, cost_info)
 # response.cost now set
-
-# ReceiptManager stores receipts
-receipt = await manager.generate_receipt(...)
-# receipt stored in manager._receipts list
 ```
 
 ### Pattern 4: Service Chaining
@@ -658,9 +526,6 @@ Services depend on results from other services:
 # CostCalculator needs registry model
 registry_model = await calculator._get_registry_model(provider, model)
 cost_info = await calculator.calculate_cost(response, registry_model)
-
-# ReceiptManager needs cost info
-receipt = await manager.generate_receipt(..., cost_info=cost_info)
 ```
 
 ### Pattern 5: Service Initialization
@@ -673,7 +538,6 @@ class LLMRing:
         self._alias_resolver = AliasResolver(lockfile)
         self._schema_adapter = SchemaAdapter()
         self._cost_calculator = CostCalculator(registry)
-        self._receipt_manager = ReceiptManager(lockfile)
         self._validation_service = ValidationService(registry, token_counter)
 ```
 
@@ -708,10 +572,6 @@ CostCalculator
 ├── Depends on: ModelRegistryClient
 └── No service dependencies
 
-ReceiptManager
-├── Depends on: Lockfile
-└── No service dependencies
-
 ValidationService
 ├── Depends on: ModelRegistryClient
 ├── Depends on: TokenCounter
@@ -737,7 +597,7 @@ Services should not call other services directly. Orchestration happens in `LLMR
 class CostCalculator:
     async def calculate_cost(self, response, model):
         # Don't do this!
-        receipt = self.receipt_manager.generate_receipt(...)
+        validation = self.validation_service.validate(...)
 ```
 
 **Good**:
@@ -745,8 +605,8 @@ class CostCalculator:
 class LLMRing:
     async def chat(self, request):
         # Orchestrate service calls
+        await self._validation_service.validate(request)
         cost = await self._cost_calculator.calculate_cost(response, model)
-        receipt = await self._receipt_manager.generate_receipt(..., cost_info=cost)
 ```
 
 ### 3. Immutable by Default

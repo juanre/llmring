@@ -10,7 +10,7 @@ A Python library for LLM integration with unified interface and MCP support. Sup
 - Unified Structured Output: JSON schema works across all providers with automatic adaptation
 - Conversational Configuration: MCP chat interface for natural language lockfile setup
 - Aliases: Semantic aliases (`deep`, `fast`, `balanced`) with registry-based recommendations
-- Cost Tracking: Cost calculation with on-demand receipt generation
+- Cost Tracking: Token usage and cost calculation
 - Registry Integration: Centralized model capabilities and pricing
 - Fallback Models: Automatic failover to alternative models
 - Type Safety: Typed exceptions and error handling
@@ -798,8 +798,6 @@ response = await llm.chat([
 - **[Structured Output](docs/structured-output.md)** - Unified JSON schema support
 - **[File Utilities](docs/file-utilities.md)** - Vision and multimodal file handling
 - **[CLI Reference](docs/cli-reference.md)** - Command-line interface guide
-- **[Receipts & Cost Tracking](docs/receipts.md)** - On-demand receipt generation and cost tracking
-- **[Migration to On-Demand Receipts](docs/migration-to-on-demand-receipts.md)** - Upgrade guide from automatic to on-demand receipts
 - **[Examples](examples/)** - Working code examples:
   - [Quick Start](examples/quick_start.py) - Basic usage patterns
   - [MCP Chat](examples/mcp_chat_example.py) - MCP integration
@@ -846,7 +844,7 @@ except ProviderRateLimitError as e:
 - Unified Interface: Switch providers without code changes
 - Performance: Streaming, prompt caching, optimized requests
 - Reliability: Circuit breakers, retries, typed error handling
-- Observability: Cost tracking, on-demand receipt generation, batch certification
+- Observability: Cost tracking and usage monitoring
 - Flexibility: Provider-specific features and raw SDK access
 - Standards: Type-safe, well-tested
 
@@ -869,4 +867,4 @@ See the `examples/` directory for complete working examples:
 - Tool calling and function execution
 - Provider-specific features
 - MCP integration
-- On-demand receipt generation and cost tracking
+- Cost tracking and usage monitoring

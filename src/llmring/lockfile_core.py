@@ -675,7 +675,7 @@ class Lockfile(BaseModel):
 
     def calculate_digest(self) -> str:
         """
-        Calculate SHA256 digest of the lockfile for receipts.
+        Calculate SHA256 digest of the lockfile for verification.
 
         Returns:
             Hex-encoded SHA256 digest

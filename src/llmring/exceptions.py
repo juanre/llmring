@@ -295,25 +295,6 @@ class MessageStorageError(MessageError):
     pass
 
 
-# Receipt Errors
-class ReceiptError(LLMRingError):
-    """Base error for receipt-related issues."""
-
-    pass
-
-
-class ReceiptSignatureError(ReceiptError):
-    """Receipt signature validation failed."""
-
-    pass
-
-
-class ReceiptStorageError(ReceiptError):
-    """Failed to store receipt."""
-
-    pass
-
-
 # MCP-specific Errors
 class MCPError(LLMRingError):
     """Base class for MCP-related errors."""

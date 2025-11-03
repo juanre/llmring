@@ -20,10 +20,10 @@ LLMRing is a lightweight, provider-agnostic LLM orchestration library. It provid
 ### Core Goals
 
 - **Provider Abstraction**: Single API for multiple LLM providers
-- **Cost Tracking**: Automatic cost calculation with cryptographic receipts
+- **Cost Tracking**: Automatic cost calculation and usage monitoring
 - **Alias Management**: Model aliases via lockfiles for reproducible deployments
 - **Type Safety**: Full type annotations and protocol-based design
-- **Security**: Input validation and signed receipts
+- **Security**: Input validation and secure API handling
 
 ---
 
@@ -42,7 +42,7 @@ LLMRing is a lightweight, provider-agnostic LLM orchestration library. It provid
 │  │  - Alias Resolution                                    │  │
 │  │  - Schema Adaptation                                   │  │
 │  │  - Cost Calculation                                    │  │
-│  │  - Usage Logging & Receipts                            │  │
+│  │  - Usage Logging                                       │  │
 │  │  - Validation                                          │  │
 │  └───────────────────────────────────────────────────────┘  │
 │                         │                                    │
@@ -91,7 +91,6 @@ LLMRing (service.py)
 │   ├── ModelRegistryClient - Fetches model metadata from registry
 │   ├── TokenCounter - Counts tokens for cost calculation
 │   ├── Lockfile - Manages model aliases and profiles
-│   ├── Receipt - Cryptographically signed usage receipts
 │   └── InputValidator - Security validation for user inputs
 │
 └── Schemas/
@@ -255,7 +254,7 @@ Clear boundaries between layers:
 - **User API Layer** (`LLMRing`): Public interface, orchestration
 - **Service Layer** (`services/`): Business logic, no provider details
 - **Provider Layer** (`providers/`): API-specific implementation
-- **Infrastructure Layer**: Registry, lockfiles, receipts
+- **Infrastructure Layer**: Registry, lockfiles, validation
 
 ### 4. Type Safety
 
@@ -325,14 +324,12 @@ Services don't know about provider details:
 
 **Responsibilities:**
 - External integrations (registry, lockfiles)
-- Cryptographic operations (receipts)
 - Token counting
 - Security validation
 
 **Examples:**
 - `ModelRegistryClient`: GitHub Pages registry fetching
 - `Lockfile`: TOML/JSON parsing, alias resolution
-- `Receipt`: Ed25519 signature generation/verification
 - `InputValidator`: Base64 size validation, URL validation
 
 ---
@@ -435,12 +432,6 @@ Two-stage approach:
 - Base64 data size limits (50MB encoded, 100MB decoded)
 - Message content size limits (1MB per message)
 - URL validation for registry (HTTPS or file:// only)
-
-### Cryptographic Receipts
-
-- Ed25519 signatures for tamper-proof receipts
-- Private key stored securely (environment variable)
-- Public key in receipt for verification
 
 ### Error Messages
 

@@ -21,7 +21,7 @@ class LoggingService:
     - Full conversations: logs messages + responses + metadata (includes usage logs)
 
     Note: log_conversations=True implies logging both conversation content AND usage metadata.
-    This ensures usage records exist for analytics, receipts, and cost tracking.
+    This ensures usage records exist for analytics and cost tracking.
     """
 
     def __init__(
@@ -245,9 +245,6 @@ class LoggingService:
                 f"Logged conversation to server: {provider}:{model} "
                 f"(conversation_id={self._conversation_id})"
             )
-
-            # Phase 7.5: Receipts are now generated on-demand via POST /api/v1/receipts/generate
-            # No automatic receipt generation in conversation logging
 
     def clear_conversation_id(self):
         """Clear the current conversation ID."""

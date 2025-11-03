@@ -2,6 +2,12 @@
 
 All notable changes to LLMRing will be documented in this file.
 
+## [Unreleased]
+
+### 🗑️ Removed
+
+- **Cryptographic receipts feature**: Removed the receipts system entirely. Signatures from the service provider don't prevent tampering by the service operator - users must trust the service regardless. The feature added significant complexity for questionable security value beyond compliance theater. Cost tracking and usage monitoring remain fully functional through the standard usage logging system.
+
 ## [1.2.0] - 2025-10-28
 
 ### 🚀 Features
