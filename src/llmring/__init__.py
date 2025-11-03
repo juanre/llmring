@@ -34,7 +34,7 @@ from .file_utils import (  # Core functions; Content creation; Convenience funct
 
 # Import logging decorators
 from .logging import log_llm_call, log_llm_stream
-from .schemas import LLMRequest, LLMResponse, Message
+from .schemas import FileMetadata, FileUploadResponse, LLMRequest, LLMResponse, Message
 
 # Import main components
 from .service import LLMRing
@@ -65,6 +65,8 @@ __all__ = [
     "LLMRequest",
     "LLMResponse",
     "Message",
+    "FileUploadResponse",
+    "FileMetadata",
     # File utilities
     "encode_file_to_base64",
     "create_data_url",

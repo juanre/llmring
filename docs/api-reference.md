@@ -77,6 +77,47 @@ response.tool_calls      # List[Dict]: Function calls if any
 response.parsed          # Any: Parsed structured output (if response_format used)
 ```
 
+### FileUploadResponse
+
+Response schema from file upload operations.
+
+```python
+from llmring import FileUploadResponse
+
+response = await service.upload_file(file_path, purpose="assistants")
+
+# Available fields:
+response.file_id         # str: Unique file identifier
+response.provider        # str: Provider name (e.g., "openai", "anthropic")
+response.filename        # str: Original filename
+response.size_bytes      # int: File size in bytes
+response.created_at      # datetime: Upload timestamp
+response.purpose         # str: File purpose
+response.metadata        # Dict: Provider-specific metadata
+```
+
+### FileMetadata
+
+Metadata schema for uploaded files.
+
+```python
+from llmring import FileMetadata
+
+metadata = await service.get_file_metadata(file_id)
+
+# Available fields:
+metadata.file_id         # str: Unique file identifier
+metadata.provider        # str: Provider name
+metadata.filename        # str: Original filename
+metadata.size_bytes      # int: File size in bytes
+metadata.created_at      # datetime: Upload timestamp
+metadata.purpose         # str: File purpose
+metadata.status          # str: "uploaded", "processing", "ready", "error", "expired"
+metadata.metadata        # Dict: Provider-specific metadata
+```
+
+See [File Uploads Documentation](file-uploads.md) for complete details on file upload operations.
+
 ## Provider-Specific Features
 
 ### OpenAI
