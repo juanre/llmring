@@ -140,8 +140,8 @@ async def test_cmd_server_conversations_detail(monkeypatch, capsys):
     def factory(**kwargs):
         dummy = DummyClient(
             responses={
-                "/conversations/abc": conversation,
-                "/conversations/abc/messages": conversation["messages"],
+                "/api/v1/conversations/abc": conversation,
+                "/api/v1/conversations/abc/messages": conversation["messages"],
             }
         )
         return dummy

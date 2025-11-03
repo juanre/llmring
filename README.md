@@ -774,6 +774,7 @@ Command hints:
 - `llmring server status` – Inspect current configuration and test connectivity
 - `llmring server key rotate` – Generate a new API key and refresh `.env.llmring`
 - `llmring server key list` – Show active key information from the environment and env file
+- `llmring lock init` – Create a default `llmring.lock` so aliases like `fast` are available
 
 ### Inspect Usage Data
 
