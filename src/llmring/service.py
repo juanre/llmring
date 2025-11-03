@@ -555,6 +555,7 @@ class LLMRing:
                 tool_choice=adapted_request.tool_choice,
                 json_response=adapted_request.json_response,
                 cache=adapted_request.cache,
+                files=adapted_request.files,
                 extra_params=adapted_request.extra_params,
             )
 
@@ -693,6 +694,7 @@ class LLMRing:
                 tool_choice=adapted_request.tool_choice,
                 json_response=adapted_request.json_response,
                 cache=adapted_request.cache,
+                files=adapted_request.files,
                 extra_params=adapted_request.extra_params,
             )
 

@@ -74,14 +74,14 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         self.default_model = model  # Will be derived from registry if None
 
         # Initialize the client with the SDK
-        # Include beta header for prompt caching (still needed as of 2025)
-        # Why: The anthropic-beta header is required to access prompt caching features.
-        # Anthropic uses beta headers to gate experimental features before they become
-        # generally available. This specific version (2024-07-31) enables prompt caching.
+        # Include beta headers for prompt caching and files API
+        # Why: The anthropic-beta header is required to access experimental features.
+        # Anthropic uses beta headers to gate features before they become generally available.
+        # We need both prompt caching (2024-07-31) and files API (2025-04-14) support.
         self.client = AsyncAnthropic(
             api_key=api_key,
             base_url=base_url,
-            default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+            default_headers={"anthropic-beta": "prompt-caching-2024-07-31,files-api-2025-04-14"},
         )
         self._cached_models = None  # Will be populated from registry
         self._breaker = CircuitBreaker()
@@ -180,6 +180,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """
@@ -196,6 +197,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
+            files: Optional list of file_ids to include in the request
             extra_params: Provider-specific parameters
 
         Returns:
@@ -212,6 +214,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             tool_choice=tool_choice,
             json_response=json_response,
             cache=cache,
+            files=files,
             extra_params=extra_params,
         )
 
@@ -227,6 +230,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """
@@ -243,6 +247,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
+            files: Optional list of file_ids to include in the request
             extra_params: Provider-specific parameters
 
         Returns:
@@ -263,6 +268,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             tool_choice=tool_choice,
             json_response=json_response,
             cache=cache,
+            files=files,
             extra_params=extra_params,
         )
 
@@ -277,6 +283,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """Stream a chat response from Anthropic."""
@@ -294,7 +301,9 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             pass  # Registry unavailable, continue anyway
 
         # Prepare messages and system prompt
-        anthropic_messages, system_message, system_cache_control = self._prepare_messages(messages)
+        anthropic_messages, system_message, system_cache_control = self._prepare_messages(
+            messages, files
+        )
 
         # Build request parameters
         request_params = {
@@ -422,7 +431,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             ) from e
 
     def _prepare_messages(
-        self, messages: List[Message]
+        self, messages: List[Message], files: Optional[List[str]] = None
     ) -> tuple[List[Dict], Optional[str], Optional[Dict]]:
         """Convert messages to Anthropic format and extract system message with cache control."""
         anthropic_messages = []
@@ -498,6 +507,24 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                             content[-1]["cache_control"] = msg.metadata["cache_control"]
 
                     anthropic_messages.append({"role": msg.role, "content": content})
+
+        # Add file references to the first user message if files are provided
+        if files and anthropic_messages:
+            # Find the first user message
+            for msg in anthropic_messages:
+                if msg["role"] == "user":
+                    # Ensure content is a list
+                    if isinstance(msg["content"], str):
+                        msg["content"] = [{"type": "text", "text": msg["content"]}]
+                    elif not isinstance(msg["content"], list):
+                        msg["content"] = [{"type": "text", "text": str(msg["content"])}]
+
+                    # Add document blocks for each file_id
+                    for file_id in files:
+                        msg["content"].append(
+                            {"type": "document", "source": {"type": "file", "file_id": file_id}}
+                        )
+                    break
 
         return anthropic_messages, system_message, system_cache_control
 
@@ -599,6 +626,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
@@ -616,7 +644,9 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             pass  # Registry unavailable, continue anyway
 
         # Convert messages to Anthropic format using _prepare_messages
-        anthropic_messages, system_message, system_cache_control = self._prepare_messages(messages)
+        anthropic_messages, system_message, system_cache_control = self._prepare_messages(
+            messages, files
+        )
 
         # Build the request parameters
         request_params = {

@@ -863,6 +863,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """
@@ -879,11 +880,24 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
+            files: Optional list of file_ids (not supported in Chat Completions API)
             extra_params: Provider-specific parameters
 
         Returns:
             LLM response with complete generated content
+
+        Raises:
+            ValueError: If files parameter is provided (not supported in Chat Completions API)
         """
+        # OpenAI Chat Completions API does not support file_ids
+        # Files are only supported in Assistants API
+        if files:
+            raise ValueError(
+                "OpenAI Chat Completions API does not support file uploads. "
+                "Files are only available in the Assistants API. "
+                "To use files with OpenAI, consider embedding the file content directly in your message."
+            )
+
         return await self._chat_non_streaming(
             messages=messages,
             model=model,
@@ -910,6 +924,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """
@@ -926,15 +941,27 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
+            files: Optional list of file_ids (not supported in Chat Completions API)
             extra_params: Provider-specific parameters
 
         Returns:
             Async iterator of stream chunks
 
+        Raises:
+            ValueError: If files parameter is provided (not supported in Chat Completions API)
+
         Example:
             >>> async for chunk in provider.chat_stream(messages, model="gpt-4o"):
             ...     print(chunk.content, end="", flush=True)
         """
+        # OpenAI Chat Completions API does not support file_ids
+        if files:
+            raise ValueError(
+                "OpenAI Chat Completions API does not support file uploads. "
+                "Files are only available in the Assistants API. "
+                "To use files with OpenAI, consider embedding the file content directly in your message."
+            )
+
         return self._stream_chat(
             messages=messages,
             model=model,

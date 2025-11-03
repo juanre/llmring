@@ -331,6 +331,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """
@@ -346,12 +347,29 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
-            cache: Optional cache configuration
+            cache: Optional cache configuration with cached_content name
+            files: Optional list of cached_content IDs (Google uses cache mechanism for files)
             extra_params: Provider-specific parameters
 
         Returns:
             LLM response with complete generated content
+
+        Note:
+            Google uses cached_content for file handling. The files parameter should contain
+            cached_content IDs (starting with "cachedContents/"). Use the cache parameter
+            with {"cached_content": "cachedContents/..."} or pass files directly.
         """
+        # Google uses cached_content for files, merge files into cache if provided
+        merged_cache = cache or {}
+        if files:
+            # Use the first file as cached_content (Google's file mechanism)
+            if len(files) > 1:
+                logger.warning(
+                    f"Google provider only supports one cached_content at a time. "
+                    f"Using first file: {files[0]}, ignoring others: {files[1:]}"
+                )
+            merged_cache["cached_content"] = files[0]
+
         return await self._chat_non_streaming(
             messages=messages,
             model=model,
@@ -362,7 +380,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools=tools,
             tool_choice=tool_choice,
             json_response=json_response,
-            cache=cache,
+            cache=merged_cache if merged_cache else None,
             extra_params=extra_params,
         )
 
@@ -378,6 +396,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """
@@ -393,7 +412,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
-            cache: Optional cache configuration
+            cache: Optional cache configuration with cached_content name
+            files: Optional list of cached_content IDs (Google uses cache mechanism for files)
             extra_params: Provider-specific parameters
 
         Returns:
@@ -403,6 +423,17 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             >>> async for chunk in provider.chat_stream(messages, model="gemini-2.5-pro"):
             ...     print(chunk.content, end="", flush=True)
         """
+        # Google uses cached_content for files, merge files into cache if provided
+        merged_cache = cache or {}
+        if files:
+            # Use the first file as cached_content (Google's file mechanism)
+            if len(files) > 1:
+                logger.warning(
+                    f"Google provider only supports one cached_content at a time. "
+                    f"Using first file: {files[0]}, ignoring others: {files[1:]}"
+                )
+            merged_cache["cached_content"] = files[0]
+
         return self._stream_chat(
             messages=messages,
             model=model,
@@ -413,7 +444,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools=tools,
             tool_choice=tool_choice,
             json_response=json_response,
-            cache=cache,
+            cache=merged_cache if merged_cache else None,
             extra_params=extra_params,
         )
 
