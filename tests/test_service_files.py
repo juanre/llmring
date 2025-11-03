@@ -296,14 +296,19 @@ async def test_provider_auto_detection_from_file_id_openai():
 @pytest.mark.asyncio
 async def test_provider_auto_detection_from_file_id_google():
     """Test that Google cache_id format is correctly detected."""
-    if not os.getenv("GOOGLE_API_KEY") and not os.getenv("GEMINI_API_KEY"):
-        pytest.skip("GOOGLE_API_KEY or GEMINI_API_KEY not set")
+    if not (
+        os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or os.getenv("GOOGLE_GEMINI_API_KEY")
+    ):
+        pytest.skip("GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GEMINI_API_KEY not set")
 
     ring = LLMRing()
     try:
         # Upload to Google (creates cache)
+        # Google requires minimum 4096 tokens for caching
         response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
+            file="tests/fixtures/google_large_doc.txt",
             provider="google",
             ttl_seconds=300,
         )

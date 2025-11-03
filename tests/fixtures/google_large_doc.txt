@@ -1,0 +1,1250 @@
+# Large Test Document for Google Context Caching
+
+This is a comprehensive test document designed to exceed Google's minimum
+token requirement of 4096 tokens for context caching. The document contains
+multiple sections with varying content to ensure realistic testing scenarios.
+
+## Section 1: Introduction to Artificial Intelligence
+
+Artificial intelligence (AI) is transforming the way we interact with technology.
+From natural language processing to computer vision, AI systems are becoming
+increasingly sophisticated. Machine learning algorithms can now recognize patterns
+in vast datasets, enabling applications that were once thought impossible.
+
+Deep learning, a subset of machine learning, uses neural networks with multiple
+layers to process information in ways that mimic human cognition. These networks
+can learn hierarchical representations of data, making them particularly effective
+for tasks like image recognition, speech synthesis, and language translation.
+
+## Section 2: The Evolution of Computing
+
+The history of computing spans centuries, from early mechanical calculators to
+modern quantum computers. Charles Babbage's Analytical Engine, conceived in the
+1830s, laid the groundwork for programmable computing. Ada Lovelace, working with
+Babbage, wrote what is considered the first computer program.
+
+The 20th century saw explosive growth in computing power. The invention of the
+transistor in 1947 revolutionized electronics, leading to the development of
+integrated circuits and microprocessors. Moore's Law, which predicted the doubling
+of transistors on integrated circuits approximately every two years, has held
+remarkably true for decades.
+
+## Section 3: Data Structures and Algorithms
+
+Understanding data structures and algorithms is fundamental to computer science.
+Arrays provide contiguous memory storage for elements of the same type, offering
+constant-time access but requiring expensive insertion and deletion operations.
+Linked lists, by contrast, allow efficient insertion and deletion but require
+sequential access to elements.
+
+Trees represent hierarchical data structures with a root node and child nodes.
+Binary search trees enable efficient searching, insertion, and deletion operations
+with average-case logarithmic time complexity. Balanced trees like AVL trees and
+red-black trees guarantee logarithmic performance by maintaining balance invariants.
+
+Hash tables provide near-constant time lookup by mapping keys to array indices
+through hash functions. Collision resolution strategies like chaining and open
+addressing handle cases where multiple keys hash to the same index. Well-designed
+hash functions distribute keys uniformly across the available space.
+
+Graphs model relationships between entities through vertices and edges. Graph
+algorithms like depth-first search and breadth-first search enable traversal and
+analysis of these relationships. Dijkstra's algorithm finds shortest paths in
+weighted graphs, while topological sorting orders vertices in directed acyclic graphs.
+
+## Section 4: Software Engineering Principles
+
+Software engineering encompasses the methodologies and practices for developing
+high-quality software systems. The software development lifecycle includes
+requirements gathering, design, implementation, testing, deployment, and maintenance.
+Agile methodologies like Scrum and Kanban emphasize iterative development and
+continuous feedback.
+
+Design patterns provide reusable solutions to common software design problems.
+Creational patterns like Factory and Singleton control object creation. Structural
+patterns like Adapter and Decorator modify object interfaces and add functionality.
+Behavioral patterns like Observer and Strategy define object interactions and
+algorithm families.
+
+Code quality depends on factors like readability, maintainability, and testability.
+Clean code principles advocate for meaningful names, small functions, and clear
+abstractions. SOLID principles guide object-oriented design: Single Responsibility,
+Open-Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion.
+
+Testing ensures software behaves correctly. Unit tests verify individual components
+in isolation. Integration tests check interactions between components. End-to-end
+tests validate entire system workflows. Test-driven development writes tests before
+implementation, ensuring code meets specifications from the start.
+
+## Section 5: Database Systems
+
+Database systems manage persistent data storage and retrieval. Relational databases
+organize data into tables with rows and columns, using SQL for querying. Normalization
+eliminates redundancy and maintains data integrity through normal forms. ACID properties
+(Atomicity, Consistency, Isolation, Durability) guarantee transaction reliability.
+
+NoSQL databases provide alternative data models for specific use cases. Document
+databases like MongoDB store semi-structured data as JSON-like documents. Key-value
+stores like Redis offer simple but extremely fast lookups. Column-family databases
+like Cassandra optimize for write-heavy workloads. Graph databases like Neo4j
+excel at traversing connected data.
+
+Database indexing accelerates query performance by creating auxiliary data structures.
+B-tree indexes support range queries efficiently. Hash indexes enable fast exact
+lookups. Full-text indexes facilitate search across text content. Choosing appropriate
+indexes requires understanding query patterns and balancing read versus write performance.
+
+Query optimization transforms declarative SQL into efficient execution plans. Cost-based
+optimizers estimate execution costs for different strategies, considering factors like
+table sizes, index availability, and join methods. Query hints allow manual tuning
+when automatic optimization proves insufficient.
+
+## Section 6: Distributed Systems
+
+Distributed systems coordinate multiple computers to achieve common goals. Challenges
+include network latency, partial failures, and maintaining consistency across nodes.
+The CAP theorem states that distributed systems cannot simultaneously guarantee
+Consistency, Availability, and Partition tolerance.
+
+Consensus algorithms enable distributed nodes to agree on values despite failures.
+Paxos and Raft provide fault-tolerant consensus through leader election and log
+replication. Byzantine fault tolerance handles malicious behavior, though at higher
+complexity and communication costs.
+
+Microservices architecture decomposes applications into small, independently deployable
+services. Each service owns its data and communicates through well-defined APIs. This
+approach enables team autonomy and technology diversity but introduces challenges in
+distributed debugging and transaction management.
+
+Service meshes like Istio and Linkerd provide infrastructure for service-to-service
+communication. They handle concerns like load balancing, encryption, authentication,
+and observability without requiring application code changes.
+
+## Section 7: Network Protocols
+
+Computer networks enable communication between devices. The OSI model defines seven
+layers: Physical, Data Link, Network, Transport, Session, Presentation, and Application.
+The simpler TCP/IP model combines some layers but captures the essential protocol
+stack used in the Internet.
+
+IP (Internet Protocol) routes packets across networks using addressing and routing
+tables. IPv4 uses 32-bit addresses, supporting approximately 4.3 billion addresses.
+IPv6 expands the address space to 128 bits, accommodating the growing number of
+Internet-connected devices.
+
+TCP (Transmission Control Protocol) provides reliable, ordered delivery of byte
+streams. It establishes connections through three-way handshakes, uses sequence
+numbers to detect missing packets, and implements congestion control to prevent
+network overload. UDP offers connectionless datagram delivery with lower overhead
+for applications that can tolerate packet loss.
+
+HTTP (Hypertext Transfer Protocol) enables web communication. HTTP/1.1 introduced
+persistent connections and chunked transfer encoding. HTTP/2 multiplexes multiple
+requests over single connections and compresses headers. HTTP/3 uses QUIC over UDP
+for improved performance and reduced latency.
+
+## Section 8: Security and Cryptography
+
+Computer security protects systems and data from unauthorized access and manipulation.
+The CIA triad defines core objectives: Confidentiality, Integrity, and Availability.
+Defense in depth applies multiple security layers, recognizing that no single
+measure provides complete protection.
+
+Cryptography secures communication through mathematical transformations. Symmetric
+encryption like AES uses the same key for encryption and decryption, offering high
+performance. Asymmetric encryption like RSA uses public-private key pairs, enabling
+secure key exchange and digital signatures without sharing secret keys.
+
+Hash functions like SHA-256 produce fixed-size digests from arbitrary input, with
+properties including collision resistance and irreversibility. Applications include
+password storage, data integrity verification, and blockchain mining.
+
+Authentication verifies identity through credentials like passwords, biometrics, or
+cryptographic keys. Multi-factor authentication combines multiple credential types,
+significantly improving security. OAuth and OpenID Connect enable federated
+authentication, allowing users to authenticate through third-party identity providers.
+
+## Section 9: Cloud Computing
+
+Cloud computing delivers computing resources as services over the Internet. Infrastructure
+as a Service (IaaS) provides virtual machines and networking. Platform as a Service (PaaS)
+offers development platforms and databases. Software as a Service (SaaS) delivers
+applications directly to users.
+
+Containers package applications with their dependencies, enabling consistent deployment
+across environments. Docker standardized container formats and tooling. Container
+orchestration platforms like Kubernetes automate deployment, scaling, and management
+of containerized applications across clusters.
+
+Serverless computing abstracts infrastructure management, charging only for actual
+resource consumption. Functions as a Service (FaaS) platforms like AWS Lambda execute
+code in response to events without requiring server provisioning. This model suits
+event-driven workloads and enables cost-effective scaling.
+
+Cloud storage services offer various consistency and durability guarantees. Object
+storage like S3 provides high durability through replication across multiple locations.
+Block storage offers low-latency access for database workloads. File storage enables
+shared access through standard filesystem protocols.
+
+## Section 10: Conclusion and Future Directions
+
+Technology continues evolving at an accelerating pace. Quantum computing promises to
+solve problems intractable for classical computers, though practical applications
+remain largely experimental. Neuromorphic computing mimics biological neural networks,
+potentially offering more efficient AI hardware.
+
+Edge computing moves computation closer to data sources, reducing latency and bandwidth
+requirements for IoT applications. 5G networks provide the low-latency, high-bandwidth
+connectivity needed for real-time edge processing.
+
+Artificial intelligence will likely become more integrated into everyday technology.
+Advances in natural language understanding, computer vision, and reasoning capabilities
+will enable more sophisticated applications. Ethical considerations around AI fairness,
+transparency, and accountability will become increasingly important as these systems
+gain more influence over decisions affecting people's lives.
+
+The next generation of developers will build on today's foundations while creating
+entirely new paradigms. Understanding core principles while remaining adaptable to
+change will be essential for success in this dynamic field.
+# Large Test Document for Google Context Caching
+
+This is a comprehensive test document designed to exceed Google's minimum
+token requirement of 4096 tokens for context caching. The document contains
+multiple sections with varying content to ensure realistic testing scenarios.
+
+## Section 1: Introduction to Artificial Intelligence
+
+Artificial intelligence (AI) is transforming the way we interact with technology.
+From natural language processing to computer vision, AI systems are becoming
+increasingly sophisticated. Machine learning algorithms can now recognize patterns
+in vast datasets, enabling applications that were once thought impossible.
+
+Deep learning, a subset of machine learning, uses neural networks with multiple
+layers to process information in ways that mimic human cognition. These networks
+can learn hierarchical representations of data, making them particularly effective
+for tasks like image recognition, speech synthesis, and language translation.
+
+## Section 2: The Evolution of Computing
+
+The history of computing spans centuries, from early mechanical calculators to
+modern quantum computers. Charles Babbage's Analytical Engine, conceived in the
+1830s, laid the groundwork for programmable computing. Ada Lovelace, working with
+Babbage, wrote what is considered the first computer program.
+
+The 20th century saw explosive growth in computing power. The invention of the
+transistor in 1947 revolutionized electronics, leading to the development of
+integrated circuits and microprocessors. Moore's Law, which predicted the doubling
+of transistors on integrated circuits approximately every two years, has held
+remarkably true for decades.
+
+## Section 3: Data Structures and Algorithms
+
+Understanding data structures and algorithms is fundamental to computer science.
+Arrays provide contiguous memory storage for elements of the same type, offering
+constant-time access but requiring expensive insertion and deletion operations.
+Linked lists, by contrast, allow efficient insertion and deletion but require
+sequential access to elements.
+
+Trees represent hierarchical data structures with a root node and child nodes.
+Binary search trees enable efficient searching, insertion, and deletion operations
+with average-case logarithmic time complexity. Balanced trees like AVL trees and
+red-black trees guarantee logarithmic performance by maintaining balance invariants.
+
+Hash tables provide near-constant time lookup by mapping keys to array indices
+through hash functions. Collision resolution strategies like chaining and open
+addressing handle cases where multiple keys hash to the same index. Well-designed
+hash functions distribute keys uniformly across the available space.
+
+Graphs model relationships between entities through vertices and edges. Graph
+algorithms like depth-first search and breadth-first search enable traversal and
+analysis of these relationships. Dijkstra's algorithm finds shortest paths in
+weighted graphs, while topological sorting orders vertices in directed acyclic graphs.
+
+## Section 4: Software Engineering Principles
+
+Software engineering encompasses the methodologies and practices for developing
+high-quality software systems. The software development lifecycle includes
+requirements gathering, design, implementation, testing, deployment, and maintenance.
+Agile methodologies like Scrum and Kanban emphasize iterative development and
+continuous feedback.
+
+Design patterns provide reusable solutions to common software design problems.
+Creational patterns like Factory and Singleton control object creation. Structural
+patterns like Adapter and Decorator modify object interfaces and add functionality.
+Behavioral patterns like Observer and Strategy define object interactions and
+algorithm families.
+
+Code quality depends on factors like readability, maintainability, and testability.
+Clean code principles advocate for meaningful names, small functions, and clear
+abstractions. SOLID principles guide object-oriented design: Single Responsibility,
+Open-Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion.
+
+Testing ensures software behaves correctly. Unit tests verify individual components
+in isolation. Integration tests check interactions between components. End-to-end
+tests validate entire system workflows. Test-driven development writes tests before
+implementation, ensuring code meets specifications from the start.
+
+## Section 5: Database Systems
+
+Database systems manage persistent data storage and retrieval. Relational databases
+organize data into tables with rows and columns, using SQL for querying. Normalization
+eliminates redundancy and maintains data integrity through normal forms. ACID properties
+(Atomicity, Consistency, Isolation, Durability) guarantee transaction reliability.
+
+NoSQL databases provide alternative data models for specific use cases. Document
+databases like MongoDB store semi-structured data as JSON-like documents. Key-value
+stores like Redis offer simple but extremely fast lookups. Column-family databases
+like Cassandra optimize for write-heavy workloads. Graph databases like Neo4j
+excel at traversing connected data.
+
+Database indexing accelerates query performance by creating auxiliary data structures.
+B-tree indexes support range queries efficiently. Hash indexes enable fast exact
+lookups. Full-text indexes facilitate search across text content. Choosing appropriate
+indexes requires understanding query patterns and balancing read versus write performance.
+
+Query optimization transforms declarative SQL into efficient execution plans. Cost-based
+optimizers estimate execution costs for different strategies, considering factors like
+table sizes, index availability, and join methods. Query hints allow manual tuning
+when automatic optimization proves insufficient.
+
+## Section 6: Distributed Systems
+
+Distributed systems coordinate multiple computers to achieve common goals. Challenges
+include network latency, partial failures, and maintaining consistency across nodes.
+The CAP theorem states that distributed systems cannot simultaneously guarantee
+Consistency, Availability, and Partition tolerance.
+
+Consensus algorithms enable distributed nodes to agree on values despite failures.
+Paxos and Raft provide fault-tolerant consensus through leader election and log
+replication. Byzantine fault tolerance handles malicious behavior, though at higher
+complexity and communication costs.
+
+Microservices architecture decomposes applications into small, independently deployable
+services. Each service owns its data and communicates through well-defined APIs. This
+approach enables team autonomy and technology diversity but introduces challenges in
+distributed debugging and transaction management.
+
+Service meshes like Istio and Linkerd provide infrastructure for service-to-service
+communication. They handle concerns like load balancing, encryption, authentication,
+and observability without requiring application code changes.
+
+## Section 7: Network Protocols
+
+Computer networks enable communication between devices. The OSI model defines seven
+layers: Physical, Data Link, Network, Transport, Session, Presentation, and Application.
+The simpler TCP/IP model combines some layers but captures the essential protocol
+stack used in the Internet.
+
+IP (Internet Protocol) routes packets across networks using addressing and routing
+tables. IPv4 uses 32-bit addresses, supporting approximately 4.3 billion addresses.
+IPv6 expands the address space to 128 bits, accommodating the growing number of
+Internet-connected devices.
+
+TCP (Transmission Control Protocol) provides reliable, ordered delivery of byte
+streams. It establishes connections through three-way handshakes, uses sequence
+numbers to detect missing packets, and implements congestion control to prevent
+network overload. UDP offers connectionless datagram delivery with lower overhead
+for applications that can tolerate packet loss.
+
+HTTP (Hypertext Transfer Protocol) enables web communication. HTTP/1.1 introduced
+persistent connections and chunked transfer encoding. HTTP/2 multiplexes multiple
+requests over single connections and compresses headers. HTTP/3 uses QUIC over UDP
+for improved performance and reduced latency.
+
+## Section 8: Security and Cryptography
+
+Computer security protects systems and data from unauthorized access and manipulation.
+The CIA triad defines core objectives: Confidentiality, Integrity, and Availability.
+Defense in depth applies multiple security layers, recognizing that no single
+measure provides complete protection.
+
+Cryptography secures communication through mathematical transformations. Symmetric
+encryption like AES uses the same key for encryption and decryption, offering high
+performance. Asymmetric encryption like RSA uses public-private key pairs, enabling
+secure key exchange and digital signatures without sharing secret keys.
+
+Hash functions like SHA-256 produce fixed-size digests from arbitrary input, with
+properties including collision resistance and irreversibility. Applications include
+password storage, data integrity verification, and blockchain mining.
+
+Authentication verifies identity through credentials like passwords, biometrics, or
+cryptographic keys. Multi-factor authentication combines multiple credential types,
+significantly improving security. OAuth and OpenID Connect enable federated
+authentication, allowing users to authenticate through third-party identity providers.
+
+## Section 9: Cloud Computing
+
+Cloud computing delivers computing resources as services over the Internet. Infrastructure
+as a Service (IaaS) provides virtual machines and networking. Platform as a Service (PaaS)
+offers development platforms and databases. Software as a Service (SaaS) delivers
+applications directly to users.
+
+Containers package applications with their dependencies, enabling consistent deployment
+across environments. Docker standardized container formats and tooling. Container
+orchestration platforms like Kubernetes automate deployment, scaling, and management
+of containerized applications across clusters.
+
+Serverless computing abstracts infrastructure management, charging only for actual
+resource consumption. Functions as a Service (FaaS) platforms like AWS Lambda execute
+code in response to events without requiring server provisioning. This model suits
+event-driven workloads and enables cost-effective scaling.
+
+Cloud storage services offer various consistency and durability guarantees. Object
+storage like S3 provides high durability through replication across multiple locations.
+Block storage offers low-latency access for database workloads. File storage enables
+shared access through standard filesystem protocols.
+
+## Section 10: Conclusion and Future Directions
+
+Technology continues evolving at an accelerating pace. Quantum computing promises to
+solve problems intractable for classical computers, though practical applications
+remain largely experimental. Neuromorphic computing mimics biological neural networks,
+potentially offering more efficient AI hardware.
+
+Edge computing moves computation closer to data sources, reducing latency and bandwidth
+requirements for IoT applications. 5G networks provide the low-latency, high-bandwidth
+connectivity needed for real-time edge processing.
+
+Artificial intelligence will likely become more integrated into everyday technology.
+Advances in natural language understanding, computer vision, and reasoning capabilities
+will enable more sophisticated applications. Ethical considerations around AI fairness,
+transparency, and accountability will become increasingly important as these systems
+gain more influence over decisions affecting people's lives.
+
+The next generation of developers will build on today's foundations while creating
+entirely new paradigms. Understanding core principles while remaining adaptable to
+change will be essential for success in this dynamic field.
+
+# Large Test Document for Google Context Caching
+
+This is a comprehensive test document designed to exceed Google's minimum
+token requirement of 4096 tokens for context caching. The document contains
+multiple sections with varying content to ensure realistic testing scenarios.
+
+## Section 1: Introduction to Artificial Intelligence
+
+Artificial intelligence (AI) is transforming the way we interact with technology.
+From natural language processing to computer vision, AI systems are becoming
+increasingly sophisticated. Machine learning algorithms can now recognize patterns
+in vast datasets, enabling applications that were once thought impossible.
+
+Deep learning, a subset of machine learning, uses neural networks with multiple
+layers to process information in ways that mimic human cognition. These networks
+can learn hierarchical representations of data, making them particularly effective
+for tasks like image recognition, speech synthesis, and language translation.
+
+## Section 2: The Evolution of Computing
+
+The history of computing spans centuries, from early mechanical calculators to
+modern quantum computers. Charles Babbage's Analytical Engine, conceived in the
+1830s, laid the groundwork for programmable computing. Ada Lovelace, working with
+Babbage, wrote what is considered the first computer program.
+
+The 20th century saw explosive growth in computing power. The invention of the
+transistor in 1947 revolutionized electronics, leading to the development of
+integrated circuits and microprocessors. Moore's Law, which predicted the doubling
+of transistors on integrated circuits approximately every two years, has held
+remarkably true for decades.
+
+## Section 3: Data Structures and Algorithms
+
+Understanding data structures and algorithms is fundamental to computer science.
+Arrays provide contiguous memory storage for elements of the same type, offering
+constant-time access but requiring expensive insertion and deletion operations.
+Linked lists, by contrast, allow efficient insertion and deletion but require
+sequential access to elements.
+
+Trees represent hierarchical data structures with a root node and child nodes.
+Binary search trees enable efficient searching, insertion, and deletion operations
+with average-case logarithmic time complexity. Balanced trees like AVL trees and
+red-black trees guarantee logarithmic performance by maintaining balance invariants.
+
+Hash tables provide near-constant time lookup by mapping keys to array indices
+through hash functions. Collision resolution strategies like chaining and open
+addressing handle cases where multiple keys hash to the same index. Well-designed
+hash functions distribute keys uniformly across the available space.
+
+Graphs model relationships between entities through vertices and edges. Graph
+algorithms like depth-first search and breadth-first search enable traversal and
+analysis of these relationships. Dijkstra's algorithm finds shortest paths in
+weighted graphs, while topological sorting orders vertices in directed acyclic graphs.
+
+## Section 4: Software Engineering Principles
+
+Software engineering encompasses the methodologies and practices for developing
+high-quality software systems. The software development lifecycle includes
+requirements gathering, design, implementation, testing, deployment, and maintenance.
+Agile methodologies like Scrum and Kanban emphasize iterative development and
+continuous feedback.
+
+Design patterns provide reusable solutions to common software design problems.
+Creational patterns like Factory and Singleton control object creation. Structural
+patterns like Adapter and Decorator modify object interfaces and add functionality.
+Behavioral patterns like Observer and Strategy define object interactions and
+algorithm families.
+
+Code quality depends on factors like readability, maintainability, and testability.
+Clean code principles advocate for meaningful names, small functions, and clear
+abstractions. SOLID principles guide object-oriented design: Single Responsibility,
+Open-Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion.
+
+Testing ensures software behaves correctly. Unit tests verify individual components
+in isolation. Integration tests check interactions between components. End-to-end
+tests validate entire system workflows. Test-driven development writes tests before
+implementation, ensuring code meets specifications from the start.
+
+## Section 5: Database Systems
+
+Database systems manage persistent data storage and retrieval. Relational databases
+organize data into tables with rows and columns, using SQL for querying. Normalization
+eliminates redundancy and maintains data integrity through normal forms. ACID properties
+(Atomicity, Consistency, Isolation, Durability) guarantee transaction reliability.
+
+NoSQL databases provide alternative data models for specific use cases. Document
+databases like MongoDB store semi-structured data as JSON-like documents. Key-value
+stores like Redis offer simple but extremely fast lookups. Column-family databases
+like Cassandra optimize for write-heavy workloads. Graph databases like Neo4j
+excel at traversing connected data.
+
+Database indexing accelerates query performance by creating auxiliary data structures.
+B-tree indexes support range queries efficiently. Hash indexes enable fast exact
+lookups. Full-text indexes facilitate search across text content. Choosing appropriate
+indexes requires understanding query patterns and balancing read versus write performance.
+
+Query optimization transforms declarative SQL into efficient execution plans. Cost-based
+optimizers estimate execution costs for different strategies, considering factors like
+table sizes, index availability, and join methods. Query hints allow manual tuning
+when automatic optimization proves insufficient.
+
+## Section 6: Distributed Systems
+
+Distributed systems coordinate multiple computers to achieve common goals. Challenges
+include network latency, partial failures, and maintaining consistency across nodes.
+The CAP theorem states that distributed systems cannot simultaneously guarantee
+Consistency, Availability, and Partition tolerance.
+
+Consensus algorithms enable distributed nodes to agree on values despite failures.
+Paxos and Raft provide fault-tolerant consensus through leader election and log
+replication. Byzantine fault tolerance handles malicious behavior, though at higher
+complexity and communication costs.
+
+Microservices architecture decomposes applications into small, independently deployable
+services. Each service owns its data and communicates through well-defined APIs. This
+approach enables team autonomy and technology diversity but introduces challenges in
+distributed debugging and transaction management.
+
+Service meshes like Istio and Linkerd provide infrastructure for service-to-service
+communication. They handle concerns like load balancing, encryption, authentication,
+and observability without requiring application code changes.
+
+## Section 7: Network Protocols
+
+Computer networks enable communication between devices. The OSI model defines seven
+layers: Physical, Data Link, Network, Transport, Session, Presentation, and Application.
+The simpler TCP/IP model combines some layers but captures the essential protocol
+stack used in the Internet.
+
+IP (Internet Protocol) routes packets across networks using addressing and routing
+tables. IPv4 uses 32-bit addresses, supporting approximately 4.3 billion addresses.
+IPv6 expands the address space to 128 bits, accommodating the growing number of
+Internet-connected devices.
+
+TCP (Transmission Control Protocol) provides reliable, ordered delivery of byte
+streams. It establishes connections through three-way handshakes, uses sequence
+numbers to detect missing packets, and implements congestion control to prevent
+network overload. UDP offers connectionless datagram delivery with lower overhead
+for applications that can tolerate packet loss.
+
+HTTP (Hypertext Transfer Protocol) enables web communication. HTTP/1.1 introduced
+persistent connections and chunked transfer encoding. HTTP/2 multiplexes multiple
+requests over single connections and compresses headers. HTTP/3 uses QUIC over UDP
+for improved performance and reduced latency.
+
+## Section 8: Security and Cryptography
+
+Computer security protects systems and data from unauthorized access and manipulation.
+The CIA triad defines core objectives: Confidentiality, Integrity, and Availability.
+Defense in depth applies multiple security layers, recognizing that no single
+measure provides complete protection.
+
+Cryptography secures communication through mathematical transformations. Symmetric
+encryption like AES uses the same key for encryption and decryption, offering high
+performance. Asymmetric encryption like RSA uses public-private key pairs, enabling
+secure key exchange and digital signatures without sharing secret keys.
+
+Hash functions like SHA-256 produce fixed-size digests from arbitrary input, with
+properties including collision resistance and irreversibility. Applications include
+password storage, data integrity verification, and blockchain mining.
+
+Authentication verifies identity through credentials like passwords, biometrics, or
+cryptographic keys. Multi-factor authentication combines multiple credential types,
+significantly improving security. OAuth and OpenID Connect enable federated
+authentication, allowing users to authenticate through third-party identity providers.
+
+## Section 9: Cloud Computing
+
+Cloud computing delivers computing resources as services over the Internet. Infrastructure
+as a Service (IaaS) provides virtual machines and networking. Platform as a Service (PaaS)
+offers development platforms and databases. Software as a Service (SaaS) delivers
+applications directly to users.
+
+Containers package applications with their dependencies, enabling consistent deployment
+across environments. Docker standardized container formats and tooling. Container
+orchestration platforms like Kubernetes automate deployment, scaling, and management
+of containerized applications across clusters.
+
+Serverless computing abstracts infrastructure management, charging only for actual
+resource consumption. Functions as a Service (FaaS) platforms like AWS Lambda execute
+code in response to events without requiring server provisioning. This model suits
+event-driven workloads and enables cost-effective scaling.
+
+Cloud storage services offer various consistency and durability guarantees. Object
+storage like S3 provides high durability through replication across multiple locations.
+Block storage offers low-latency access for database workloads. File storage enables
+shared access through standard filesystem protocols.
+
+## Section 10: Conclusion and Future Directions
+
+Technology continues evolving at an accelerating pace. Quantum computing promises to
+solve problems intractable for classical computers, though practical applications
+remain largely experimental. Neuromorphic computing mimics biological neural networks,
+potentially offering more efficient AI hardware.
+
+Edge computing moves computation closer to data sources, reducing latency and bandwidth
+requirements for IoT applications. 5G networks provide the low-latency, high-bandwidth
+connectivity needed for real-time edge processing.
+
+Artificial intelligence will likely become more integrated into everyday technology.
+Advances in natural language understanding, computer vision, and reasoning capabilities
+will enable more sophisticated applications. Ethical considerations around AI fairness,
+transparency, and accountability will become increasingly important as these systems
+gain more influence over decisions affecting people's lives.
+
+The next generation of developers will build on today's foundations while creating
+entirely new paradigms. Understanding core principles while remaining adaptable to
+change will be essential for success in this dynamic field.
+# Large Test Document for Google Context Caching
+
+This is a comprehensive test document designed to exceed Google's minimum
+token requirement of 4096 tokens for context caching. The document contains
+multiple sections with varying content to ensure realistic testing scenarios.
+
+## Section 1: Introduction to Artificial Intelligence
+
+Artificial intelligence (AI) is transforming the way we interact with technology.
+From natural language processing to computer vision, AI systems are becoming
+increasingly sophisticated. Machine learning algorithms can now recognize patterns
+in vast datasets, enabling applications that were once thought impossible.
+
+Deep learning, a subset of machine learning, uses neural networks with multiple
+layers to process information in ways that mimic human cognition. These networks
+can learn hierarchical representations of data, making them particularly effective
+for tasks like image recognition, speech synthesis, and language translation.
+
+## Section 2: The Evolution of Computing
+
+The history of computing spans centuries, from early mechanical calculators to
+modern quantum computers. Charles Babbage's Analytical Engine, conceived in the
+1830s, laid the groundwork for programmable computing. Ada Lovelace, working with
+Babbage, wrote what is considered the first computer program.
+
+The 20th century saw explosive growth in computing power. The invention of the
+transistor in 1947 revolutionized electronics, leading to the development of
+integrated circuits and microprocessors. Moore's Law, which predicted the doubling
+of transistors on integrated circuits approximately every two years, has held
+remarkably true for decades.
+
+## Section 3: Data Structures and Algorithms
+
+Understanding data structures and algorithms is fundamental to computer science.
+Arrays provide contiguous memory storage for elements of the same type, offering
+constant-time access but requiring expensive insertion and deletion operations.
+Linked lists, by contrast, allow efficient insertion and deletion but require
+sequential access to elements.
+
+Trees represent hierarchical data structures with a root node and child nodes.
+Binary search trees enable efficient searching, insertion, and deletion operations
+with average-case logarithmic time complexity. Balanced trees like AVL trees and
+red-black trees guarantee logarithmic performance by maintaining balance invariants.
+
+Hash tables provide near-constant time lookup by mapping keys to array indices
+through hash functions. Collision resolution strategies like chaining and open
+addressing handle cases where multiple keys hash to the same index. Well-designed
+hash functions distribute keys uniformly across the available space.
+
+Graphs model relationships between entities through vertices and edges. Graph
+algorithms like depth-first search and breadth-first search enable traversal and
+analysis of these relationships. Dijkstra's algorithm finds shortest paths in
+weighted graphs, while topological sorting orders vertices in directed acyclic graphs.
+
+## Section 4: Software Engineering Principles
+
+Software engineering encompasses the methodologies and practices for developing
+high-quality software systems. The software development lifecycle includes
+requirements gathering, design, implementation, testing, deployment, and maintenance.
+Agile methodologies like Scrum and Kanban emphasize iterative development and
+continuous feedback.
+
+Design patterns provide reusable solutions to common software design problems.
+Creational patterns like Factory and Singleton control object creation. Structural
+patterns like Adapter and Decorator modify object interfaces and add functionality.
+Behavioral patterns like Observer and Strategy define object interactions and
+algorithm families.
+
+Code quality depends on factors like readability, maintainability, and testability.
+Clean code principles advocate for meaningful names, small functions, and clear
+abstractions. SOLID principles guide object-oriented design: Single Responsibility,
+Open-Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion.
+
+Testing ensures software behaves correctly. Unit tests verify individual components
+in isolation. Integration tests check interactions between components. End-to-end
+tests validate entire system workflows. Test-driven development writes tests before
+implementation, ensuring code meets specifications from the start.
+
+## Section 5: Database Systems
+
+Database systems manage persistent data storage and retrieval. Relational databases
+organize data into tables with rows and columns, using SQL for querying. Normalization
+eliminates redundancy and maintains data integrity through normal forms. ACID properties
+(Atomicity, Consistency, Isolation, Durability) guarantee transaction reliability.
+
+NoSQL databases provide alternative data models for specific use cases. Document
+databases like MongoDB store semi-structured data as JSON-like documents. Key-value
+stores like Redis offer simple but extremely fast lookups. Column-family databases
+like Cassandra optimize for write-heavy workloads. Graph databases like Neo4j
+excel at traversing connected data.
+
+Database indexing accelerates query performance by creating auxiliary data structures.
+B-tree indexes support range queries efficiently. Hash indexes enable fast exact
+lookups. Full-text indexes facilitate search across text content. Choosing appropriate
+indexes requires understanding query patterns and balancing read versus write performance.
+
+Query optimization transforms declarative SQL into efficient execution plans. Cost-based
+optimizers estimate execution costs for different strategies, considering factors like
+table sizes, index availability, and join methods. Query hints allow manual tuning
+when automatic optimization proves insufficient.
+
+## Section 6: Distributed Systems
+
+Distributed systems coordinate multiple computers to achieve common goals. Challenges
+include network latency, partial failures, and maintaining consistency across nodes.
+The CAP theorem states that distributed systems cannot simultaneously guarantee
+Consistency, Availability, and Partition tolerance.
+
+Consensus algorithms enable distributed nodes to agree on values despite failures.
+Paxos and Raft provide fault-tolerant consensus through leader election and log
+replication. Byzantine fault tolerance handles malicious behavior, though at higher
+complexity and communication costs.
+
+Microservices architecture decomposes applications into small, independently deployable
+services. Each service owns its data and communicates through well-defined APIs. This
+approach enables team autonomy and technology diversity but introduces challenges in
+distributed debugging and transaction management.
+
+Service meshes like Istio and Linkerd provide infrastructure for service-to-service
+communication. They handle concerns like load balancing, encryption, authentication,
+and observability without requiring application code changes.
+
+## Section 7: Network Protocols
+
+Computer networks enable communication between devices. The OSI model defines seven
+layers: Physical, Data Link, Network, Transport, Session, Presentation, and Application.
+The simpler TCP/IP model combines some layers but captures the essential protocol
+stack used in the Internet.
+
+IP (Internet Protocol) routes packets across networks using addressing and routing
+tables. IPv4 uses 32-bit addresses, supporting approximately 4.3 billion addresses.
+IPv6 expands the address space to 128 bits, accommodating the growing number of
+Internet-connected devices.
+
+TCP (Transmission Control Protocol) provides reliable, ordered delivery of byte
+streams. It establishes connections through three-way handshakes, uses sequence
+numbers to detect missing packets, and implements congestion control to prevent
+network overload. UDP offers connectionless datagram delivery with lower overhead
+for applications that can tolerate packet loss.
+
+HTTP (Hypertext Transfer Protocol) enables web communication. HTTP/1.1 introduced
+persistent connections and chunked transfer encoding. HTTP/2 multiplexes multiple
+requests over single connections and compresses headers. HTTP/3 uses QUIC over UDP
+for improved performance and reduced latency.
+
+## Section 8: Security and Cryptography
+
+Computer security protects systems and data from unauthorized access and manipulation.
+The CIA triad defines core objectives: Confidentiality, Integrity, and Availability.
+Defense in depth applies multiple security layers, recognizing that no single
+measure provides complete protection.
+
+Cryptography secures communication through mathematical transformations. Symmetric
+encryption like AES uses the same key for encryption and decryption, offering high
+performance. Asymmetric encryption like RSA uses public-private key pairs, enabling
+secure key exchange and digital signatures without sharing secret keys.
+
+Hash functions like SHA-256 produce fixed-size digests from arbitrary input, with
+properties including collision resistance and irreversibility. Applications include
+password storage, data integrity verification, and blockchain mining.
+
+Authentication verifies identity through credentials like passwords, biometrics, or
+cryptographic keys. Multi-factor authentication combines multiple credential types,
+significantly improving security. OAuth and OpenID Connect enable federated
+authentication, allowing users to authenticate through third-party identity providers.
+
+## Section 9: Cloud Computing
+
+Cloud computing delivers computing resources as services over the Internet. Infrastructure
+as a Service (IaaS) provides virtual machines and networking. Platform as a Service (PaaS)
+offers development platforms and databases. Software as a Service (SaaS) delivers
+applications directly to users.
+
+Containers package applications with their dependencies, enabling consistent deployment
+across environments. Docker standardized container formats and tooling. Container
+orchestration platforms like Kubernetes automate deployment, scaling, and management
+of containerized applications across clusters.
+
+Serverless computing abstracts infrastructure management, charging only for actual
+resource consumption. Functions as a Service (FaaS) platforms like AWS Lambda execute
+code in response to events without requiring server provisioning. This model suits
+event-driven workloads and enables cost-effective scaling.
+
+Cloud storage services offer various consistency and durability guarantees. Object
+storage like S3 provides high durability through replication across multiple locations.
+Block storage offers low-latency access for database workloads. File storage enables
+shared access through standard filesystem protocols.
+
+## Section 10: Conclusion and Future Directions
+
+Technology continues evolving at an accelerating pace. Quantum computing promises to
+solve problems intractable for classical computers, though practical applications
+remain largely experimental. Neuromorphic computing mimics biological neural networks,
+potentially offering more efficient AI hardware.
+
+Edge computing moves computation closer to data sources, reducing latency and bandwidth
+requirements for IoT applications. 5G networks provide the low-latency, high-bandwidth
+connectivity needed for real-time edge processing.
+
+Artificial intelligence will likely become more integrated into everyday technology.
+Advances in natural language understanding, computer vision, and reasoning capabilities
+will enable more sophisticated applications. Ethical considerations around AI fairness,
+transparency, and accountability will become increasingly important as these systems
+gain more influence over decisions affecting people's lives.
+
+The next generation of developers will build on today's foundations while creating
+entirely new paradigms. Understanding core principles while remaining adaptable to
+change will be essential for success in this dynamic field.
+
+# Large Test Document for Google Context Caching
+
+This is a comprehensive test document designed to exceed Google's minimum
+token requirement of 4096 tokens for context caching. The document contains
+multiple sections with varying content to ensure realistic testing scenarios.
+
+## Section 1: Introduction to Artificial Intelligence
+
+Artificial intelligence (AI) is transforming the way we interact with technology.
+From natural language processing to computer vision, AI systems are becoming
+increasingly sophisticated. Machine learning algorithms can now recognize patterns
+in vast datasets, enabling applications that were once thought impossible.
+
+Deep learning, a subset of machine learning, uses neural networks with multiple
+layers to process information in ways that mimic human cognition. These networks
+can learn hierarchical representations of data, making them particularly effective
+for tasks like image recognition, speech synthesis, and language translation.
+
+## Section 2: The Evolution of Computing
+
+The history of computing spans centuries, from early mechanical calculators to
+modern quantum computers. Charles Babbage's Analytical Engine, conceived in the
+1830s, laid the groundwork for programmable computing. Ada Lovelace, working with
+Babbage, wrote what is considered the first computer program.
+
+The 20th century saw explosive growth in computing power. The invention of the
+transistor in 1947 revolutionized electronics, leading to the development of
+integrated circuits and microprocessors. Moore's Law, which predicted the doubling
+of transistors on integrated circuits approximately every two years, has held
+remarkably true for decades.
+
+## Section 3: Data Structures and Algorithms
+
+Understanding data structures and algorithms is fundamental to computer science.
+Arrays provide contiguous memory storage for elements of the same type, offering
+constant-time access but requiring expensive insertion and deletion operations.
+Linked lists, by contrast, allow efficient insertion and deletion but require
+sequential access to elements.
+
+Trees represent hierarchical data structures with a root node and child nodes.
+Binary search trees enable efficient searching, insertion, and deletion operations
+with average-case logarithmic time complexity. Balanced trees like AVL trees and
+red-black trees guarantee logarithmic performance by maintaining balance invariants.
+
+Hash tables provide near-constant time lookup by mapping keys to array indices
+through hash functions. Collision resolution strategies like chaining and open
+addressing handle cases where multiple keys hash to the same index. Well-designed
+hash functions distribute keys uniformly across the available space.
+
+Graphs model relationships between entities through vertices and edges. Graph
+algorithms like depth-first search and breadth-first search enable traversal and
+analysis of these relationships. Dijkstra's algorithm finds shortest paths in
+weighted graphs, while topological sorting orders vertices in directed acyclic graphs.
+
+## Section 4: Software Engineering Principles
+
+Software engineering encompasses the methodologies and practices for developing
+high-quality software systems. The software development lifecycle includes
+requirements gathering, design, implementation, testing, deployment, and maintenance.
+Agile methodologies like Scrum and Kanban emphasize iterative development and
+continuous feedback.
+
+Design patterns provide reusable solutions to common software design problems.
+Creational patterns like Factory and Singleton control object creation. Structural
+patterns like Adapter and Decorator modify object interfaces and add functionality.
+Behavioral patterns like Observer and Strategy define object interactions and
+algorithm families.
+
+Code quality depends on factors like readability, maintainability, and testability.
+Clean code principles advocate for meaningful names, small functions, and clear
+abstractions. SOLID principles guide object-oriented design: Single Responsibility,
+Open-Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion.
+
+Testing ensures software behaves correctly. Unit tests verify individual components
+in isolation. Integration tests check interactions between components. End-to-end
+tests validate entire system workflows. Test-driven development writes tests before
+implementation, ensuring code meets specifications from the start.
+
+## Section 5: Database Systems
+
+Database systems manage persistent data storage and retrieval. Relational databases
+organize data into tables with rows and columns, using SQL for querying. Normalization
+eliminates redundancy and maintains data integrity through normal forms. ACID properties
+(Atomicity, Consistency, Isolation, Durability) guarantee transaction reliability.
+
+NoSQL databases provide alternative data models for specific use cases. Document
+databases like MongoDB store semi-structured data as JSON-like documents. Key-value
+stores like Redis offer simple but extremely fast lookups. Column-family databases
+like Cassandra optimize for write-heavy workloads. Graph databases like Neo4j
+excel at traversing connected data.
+
+Database indexing accelerates query performance by creating auxiliary data structures.
+B-tree indexes support range queries efficiently. Hash indexes enable fast exact
+lookups. Full-text indexes facilitate search across text content. Choosing appropriate
+indexes requires understanding query patterns and balancing read versus write performance.
+
+Query optimization transforms declarative SQL into efficient execution plans. Cost-based
+optimizers estimate execution costs for different strategies, considering factors like
+table sizes, index availability, and join methods. Query hints allow manual tuning
+when automatic optimization proves insufficient.
+
+## Section 6: Distributed Systems
+
+Distributed systems coordinate multiple computers to achieve common goals. Challenges
+include network latency, partial failures, and maintaining consistency across nodes.
+The CAP theorem states that distributed systems cannot simultaneously guarantee
+Consistency, Availability, and Partition tolerance.
+
+Consensus algorithms enable distributed nodes to agree on values despite failures.
+Paxos and Raft provide fault-tolerant consensus through leader election and log
+replication. Byzantine fault tolerance handles malicious behavior, though at higher
+complexity and communication costs.
+
+Microservices architecture decomposes applications into small, independently deployable
+services. Each service owns its data and communicates through well-defined APIs. This
+approach enables team autonomy and technology diversity but introduces challenges in
+distributed debugging and transaction management.
+
+Service meshes like Istio and Linkerd provide infrastructure for service-to-service
+communication. They handle concerns like load balancing, encryption, authentication,
+and observability without requiring application code changes.
+
+## Section 7: Network Protocols
+
+Computer networks enable communication between devices. The OSI model defines seven
+layers: Physical, Data Link, Network, Transport, Session, Presentation, and Application.
+The simpler TCP/IP model combines some layers but captures the essential protocol
+stack used in the Internet.
+
+IP (Internet Protocol) routes packets across networks using addressing and routing
+tables. IPv4 uses 32-bit addresses, supporting approximately 4.3 billion addresses.
+IPv6 expands the address space to 128 bits, accommodating the growing number of
+Internet-connected devices.
+
+TCP (Transmission Control Protocol) provides reliable, ordered delivery of byte
+streams. It establishes connections through three-way handshakes, uses sequence
+numbers to detect missing packets, and implements congestion control to prevent
+network overload. UDP offers connectionless datagram delivery with lower overhead
+for applications that can tolerate packet loss.
+
+HTTP (Hypertext Transfer Protocol) enables web communication. HTTP/1.1 introduced
+persistent connections and chunked transfer encoding. HTTP/2 multiplexes multiple
+requests over single connections and compresses headers. HTTP/3 uses QUIC over UDP
+for improved performance and reduced latency.
+
+## Section 8: Security and Cryptography
+
+Computer security protects systems and data from unauthorized access and manipulation.
+The CIA triad defines core objectives: Confidentiality, Integrity, and Availability.
+Defense in depth applies multiple security layers, recognizing that no single
+measure provides complete protection.
+
+Cryptography secures communication through mathematical transformations. Symmetric
+encryption like AES uses the same key for encryption and decryption, offering high
+performance. Asymmetric encryption like RSA uses public-private key pairs, enabling
+secure key exchange and digital signatures without sharing secret keys.
+
+Hash functions like SHA-256 produce fixed-size digests from arbitrary input, with
+properties including collision resistance and irreversibility. Applications include
+password storage, data integrity verification, and blockchain mining.
+
+Authentication verifies identity through credentials like passwords, biometrics, or
+cryptographic keys. Multi-factor authentication combines multiple credential types,
+significantly improving security. OAuth and OpenID Connect enable federated
+authentication, allowing users to authenticate through third-party identity providers.
+
+## Section 9: Cloud Computing
+
+Cloud computing delivers computing resources as services over the Internet. Infrastructure
+as a Service (IaaS) provides virtual machines and networking. Platform as a Service (PaaS)
+offers development platforms and databases. Software as a Service (SaaS) delivers
+applications directly to users.
+
+Containers package applications with their dependencies, enabling consistent deployment
+across environments. Docker standardized container formats and tooling. Container
+orchestration platforms like Kubernetes automate deployment, scaling, and management
+of containerized applications across clusters.
+
+Serverless computing abstracts infrastructure management, charging only for actual
+resource consumption. Functions as a Service (FaaS) platforms like AWS Lambda execute
+code in response to events without requiring server provisioning. This model suits
+event-driven workloads and enables cost-effective scaling.
+
+Cloud storage services offer various consistency and durability guarantees. Object
+storage like S3 provides high durability through replication across multiple locations.
+Block storage offers low-latency access for database workloads. File storage enables
+shared access through standard filesystem protocols.
+
+## Section 10: Conclusion and Future Directions
+
+Technology continues evolving at an accelerating pace. Quantum computing promises to
+solve problems intractable for classical computers, though practical applications
+remain largely experimental. Neuromorphic computing mimics biological neural networks,
+potentially offering more efficient AI hardware.
+
+Edge computing moves computation closer to data sources, reducing latency and bandwidth
+requirements for IoT applications. 5G networks provide the low-latency, high-bandwidth
+connectivity needed for real-time edge processing.
+
+Artificial intelligence will likely become more integrated into everyday technology.
+Advances in natural language understanding, computer vision, and reasoning capabilities
+will enable more sophisticated applications. Ethical considerations around AI fairness,
+transparency, and accountability will become increasingly important as these systems
+gain more influence over decisions affecting people's lives.
+
+The next generation of developers will build on today's foundations while creating
+entirely new paradigms. Understanding core principles while remaining adaptable to
+change will be essential for success in this dynamic field.
+# Large Test Document for Google Context Caching
+
+This is a comprehensive test document designed to exceed Google's minimum
+token requirement of 4096 tokens for context caching. The document contains
+multiple sections with varying content to ensure realistic testing scenarios.
+
+## Section 1: Introduction to Artificial Intelligence
+
+Artificial intelligence (AI) is transforming the way we interact with technology.
+From natural language processing to computer vision, AI systems are becoming
+increasingly sophisticated. Machine learning algorithms can now recognize patterns
+in vast datasets, enabling applications that were once thought impossible.
+
+Deep learning, a subset of machine learning, uses neural networks with multiple
+layers to process information in ways that mimic human cognition. These networks
+can learn hierarchical representations of data, making them particularly effective
+for tasks like image recognition, speech synthesis, and language translation.
+
+## Section 2: The Evolution of Computing
+
+The history of computing spans centuries, from early mechanical calculators to
+modern quantum computers. Charles Babbage's Analytical Engine, conceived in the
+1830s, laid the groundwork for programmable computing. Ada Lovelace, working with
+Babbage, wrote what is considered the first computer program.
+
+The 20th century saw explosive growth in computing power. The invention of the
+transistor in 1947 revolutionized electronics, leading to the development of
+integrated circuits and microprocessors. Moore's Law, which predicted the doubling
+of transistors on integrated circuits approximately every two years, has held
+remarkably true for decades.
+
+## Section 3: Data Structures and Algorithms
+
+Understanding data structures and algorithms is fundamental to computer science.
+Arrays provide contiguous memory storage for elements of the same type, offering
+constant-time access but requiring expensive insertion and deletion operations.
+Linked lists, by contrast, allow efficient insertion and deletion but require
+sequential access to elements.
+
+Trees represent hierarchical data structures with a root node and child nodes.
+Binary search trees enable efficient searching, insertion, and deletion operations
+with average-case logarithmic time complexity. Balanced trees like AVL trees and
+red-black trees guarantee logarithmic performance by maintaining balance invariants.
+
+Hash tables provide near-constant time lookup by mapping keys to array indices
+through hash functions. Collision resolution strategies like chaining and open
+addressing handle cases where multiple keys hash to the same index. Well-designed
+hash functions distribute keys uniformly across the available space.
+
+Graphs model relationships between entities through vertices and edges. Graph
+algorithms like depth-first search and breadth-first search enable traversal and
+analysis of these relationships. Dijkstra's algorithm finds shortest paths in
+weighted graphs, while topological sorting orders vertices in directed acyclic graphs.
+
+## Section 4: Software Engineering Principles
+
+Software engineering encompasses the methodologies and practices for developing
+high-quality software systems. The software development lifecycle includes
+requirements gathering, design, implementation, testing, deployment, and maintenance.
+Agile methodologies like Scrum and Kanban emphasize iterative development and
+continuous feedback.
+
+Design patterns provide reusable solutions to common software design problems.
+Creational patterns like Factory and Singleton control object creation. Structural
+patterns like Adapter and Decorator modify object interfaces and add functionality.
+Behavioral patterns like Observer and Strategy define object interactions and
+algorithm families.
+
+Code quality depends on factors like readability, maintainability, and testability.
+Clean code principles advocate for meaningful names, small functions, and clear
+abstractions. SOLID principles guide object-oriented design: Single Responsibility,
+Open-Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion.
+
+Testing ensures software behaves correctly. Unit tests verify individual components
+in isolation. Integration tests check interactions between components. End-to-end
+tests validate entire system workflows. Test-driven development writes tests before
+implementation, ensuring code meets specifications from the start.
+
+## Section 5: Database Systems
+
+Database systems manage persistent data storage and retrieval. Relational databases
+organize data into tables with rows and columns, using SQL for querying. Normalization
+eliminates redundancy and maintains data integrity through normal forms. ACID properties
+(Atomicity, Consistency, Isolation, Durability) guarantee transaction reliability.
+
+NoSQL databases provide alternative data models for specific use cases. Document
+databases like MongoDB store semi-structured data as JSON-like documents. Key-value
+stores like Redis offer simple but extremely fast lookups. Column-family databases
+like Cassandra optimize for write-heavy workloads. Graph databases like Neo4j
+excel at traversing connected data.
+
+Database indexing accelerates query performance by creating auxiliary data structures.
+B-tree indexes support range queries efficiently. Hash indexes enable fast exact
+lookups. Full-text indexes facilitate search across text content. Choosing appropriate
+indexes requires understanding query patterns and balancing read versus write performance.
+
+Query optimization transforms declarative SQL into efficient execution plans. Cost-based
+optimizers estimate execution costs for different strategies, considering factors like
+table sizes, index availability, and join methods. Query hints allow manual tuning
+when automatic optimization proves insufficient.
+
+## Section 6: Distributed Systems
+
+Distributed systems coordinate multiple computers to achieve common goals. Challenges
+include network latency, partial failures, and maintaining consistency across nodes.
+The CAP theorem states that distributed systems cannot simultaneously guarantee
+Consistency, Availability, and Partition tolerance.
+
+Consensus algorithms enable distributed nodes to agree on values despite failures.
+Paxos and Raft provide fault-tolerant consensus through leader election and log
+replication. Byzantine fault tolerance handles malicious behavior, though at higher
+complexity and communication costs.
+
+Microservices architecture decomposes applications into small, independently deployable
+services. Each service owns its data and communicates through well-defined APIs. This
+approach enables team autonomy and technology diversity but introduces challenges in
+distributed debugging and transaction management.
+
+Service meshes like Istio and Linkerd provide infrastructure for service-to-service
+communication. They handle concerns like load balancing, encryption, authentication,
+and observability without requiring application code changes.
+
+## Section 7: Network Protocols
+
+Computer networks enable communication between devices. The OSI model defines seven
+layers: Physical, Data Link, Network, Transport, Session, Presentation, and Application.
+The simpler TCP/IP model combines some layers but captures the essential protocol
+stack used in the Internet.
+
+IP (Internet Protocol) routes packets across networks using addressing and routing
+tables. IPv4 uses 32-bit addresses, supporting approximately 4.3 billion addresses.
+IPv6 expands the address space to 128 bits, accommodating the growing number of
+Internet-connected devices.
+
+TCP (Transmission Control Protocol) provides reliable, ordered delivery of byte
+streams. It establishes connections through three-way handshakes, uses sequence
+numbers to detect missing packets, and implements congestion control to prevent
+network overload. UDP offers connectionless datagram delivery with lower overhead
+for applications that can tolerate packet loss.
+
+HTTP (Hypertext Transfer Protocol) enables web communication. HTTP/1.1 introduced
+persistent connections and chunked transfer encoding. HTTP/2 multiplexes multiple
+requests over single connections and compresses headers. HTTP/3 uses QUIC over UDP
+for improved performance and reduced latency.
+
+## Section 8: Security and Cryptography
+
+Computer security protects systems and data from unauthorized access and manipulation.
+The CIA triad defines core objectives: Confidentiality, Integrity, and Availability.
+Defense in depth applies multiple security layers, recognizing that no single
+measure provides complete protection.
+
+Cryptography secures communication through mathematical transformations. Symmetric
+encryption like AES uses the same key for encryption and decryption, offering high
+performance. Asymmetric encryption like RSA uses public-private key pairs, enabling
+secure key exchange and digital signatures without sharing secret keys.
+
+Hash functions like SHA-256 produce fixed-size digests from arbitrary input, with
+properties including collision resistance and irreversibility. Applications include
+password storage, data integrity verification, and blockchain mining.
+
+Authentication verifies identity through credentials like passwords, biometrics, or
+cryptographic keys. Multi-factor authentication combines multiple credential types,
+significantly improving security. OAuth and OpenID Connect enable federated
+authentication, allowing users to authenticate through third-party identity providers.
+
+## Section 9: Cloud Computing
+
+Cloud computing delivers computing resources as services over the Internet. Infrastructure
+as a Service (IaaS) provides virtual machines and networking. Platform as a Service (PaaS)
+offers development platforms and databases. Software as a Service (SaaS) delivers
+applications directly to users.
+
+Containers package applications with their dependencies, enabling consistent deployment
+across environments. Docker standardized container formats and tooling. Container
+orchestration platforms like Kubernetes automate deployment, scaling, and management
+of containerized applications across clusters.
+
+Serverless computing abstracts infrastructure management, charging only for actual
+resource consumption. Functions as a Service (FaaS) platforms like AWS Lambda execute
+code in response to events without requiring server provisioning. This model suits
+event-driven workloads and enables cost-effective scaling.
+
+Cloud storage services offer various consistency and durability guarantees. Object
+storage like S3 provides high durability through replication across multiple locations.
+Block storage offers low-latency access for database workloads. File storage enables
+shared access through standard filesystem protocols.
+
+## Section 10: Conclusion and Future Directions
+
+Technology continues evolving at an accelerating pace. Quantum computing promises to
+solve problems intractable for classical computers, though practical applications
+remain largely experimental. Neuromorphic computing mimics biological neural networks,
+potentially offering more efficient AI hardware.
+
+Edge computing moves computation closer to data sources, reducing latency and bandwidth
+requirements for IoT applications. 5G networks provide the low-latency, high-bandwidth
+connectivity needed for real-time edge processing.
+
+Artificial intelligence will likely become more integrated into everyday technology.
+Advances in natural language understanding, computer vision, and reasoning capabilities
+will enable more sophisticated applications. Ethical considerations around AI fairness,
+transparency, and accountability will become increasingly important as these systems
+gain more influence over decisions affecting people's lives.
+
+The next generation of developers will build on today's foundations while creating
+entirely new paradigms. Understanding core principles while remaining adaptable to
+change will be essential for success in this dynamic field.

@@ -115,14 +115,19 @@ async def test_openai_chat_with_files_raises_error():
 @pytest.mark.asyncio
 async def test_google_chat_with_cached_content():
     """Test Google chat with cached content (file mechanism)."""
-    if not os.getenv("GOOGLE_API_KEY") and not os.getenv("GEMINI_API_KEY"):
-        pytest.skip("GOOGLE_API_KEY or GEMINI_API_KEY not set")
+    if not (
+        os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or os.getenv("GOOGLE_GEMINI_API_KEY")
+    ):
+        pytest.skip("GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GEMINI_API_KEY not set")
 
     provider = GoogleProvider()
     try:
         # Upload file to create cached content
+        # Google requires minimum 4096 tokens for caching
         upload_response = await provider.upload_file(
-            file="tests/fixtures/sample.txt",
+            file="tests/fixtures/google_large_doc.txt",
             purpose="cache",
             ttl_seconds=3600,
         )
