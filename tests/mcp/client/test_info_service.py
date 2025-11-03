@@ -247,7 +247,6 @@ class TestDataStorageInformation:
 
         llm_table_names = [table["table"] for table in storage_info.llm_service_tables]
         assert "usage_logs" in llm_table_names
-        assert "receipts" in llm_table_names
 
         # Check user data locations
         assert "conversation_content" in storage_info.user_data_locations

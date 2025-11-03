@@ -73,28 +73,12 @@ async def llmring_server_client(test_db_factory) -> AsyncGenerator[AsyncClient, 
     # Inject the test database into the app
     server_app.state.db = db
 
-    # Ensure receipt keys are configured for testing
-    import tempfile
-    from pathlib import Path
+    # Create settings for testing
+    from llmring_server.config import Settings
 
-    from llmring_server.config import Settings, ensure_receipt_keys
-
-    # Create a temporary directory for receipt keys
-    temp_dir = Path(tempfile.mkdtemp())
-    key_file = temp_dir / "receipt_test_keys"
-
-    # Generate keys and get them
     settings = Settings()
-    settings = ensure_receipt_keys(settings, key_file=key_file)
-
     # Inject settings into app state for dependency injection to work
     server_app.state.settings = settings
-
-    # Also set environment variables as fallback for any code that creates Settings() directly
-    if settings.receipts_private_key_base64:
-        os.environ["LLMRING_RECEIPTS_PRIVATE_KEY_B64"] = settings.receipts_private_key_base64
-    if settings.receipts_public_key_base64:
-        os.environ["LLMRING_RECEIPTS_PUBLIC_KEY_B64"] = settings.receipts_public_key_base64
 
     # Create ASGI transport and client
     transport = ASGITransport(app=server_app)
