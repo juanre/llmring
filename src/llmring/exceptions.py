@@ -405,6 +405,52 @@ class FileAccessError(FileProcessingError):
     pass
 
 
+class FileTooLargeError(FileProcessingError):
+    """File size exceeds provider limits."""
+
+    def __init__(
+        self,
+        message: str,
+        file_size: int,
+        provider_limit: int,
+        provider: Optional[str] = None,
+        filename: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None,
+    ):
+        super().__init__(message, filename, details)
+        self.file_size = file_size
+        self.provider_limit = provider_limit
+        self.provider = provider
+
+
+class FileTypeNotSupportedError(FileProcessingError):
+    """File type not supported by provider."""
+
+    def __init__(
+        self,
+        message: str,
+        file_type: str,
+        provider: Optional[str] = None,
+        filename: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None,
+    ):
+        super().__init__(message, filename, details)
+        self.file_type = file_type
+        self.provider = provider
+
+
+class FileNotDownloadableError(FileProcessingError):
+    """Cannot download uploaded files; only generated files can be downloaded."""
+
+    def __init__(
+        self,
+        message: str = "Uploaded files cannot be downloaded. Only generated files (from tools like DALL-E) can be downloaded.",
+        filename: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None,
+    ):
+        super().__init__(message, filename, details)
+
+
 # Tool and Function Errors
 class ToolError(LLMRingError):
     """Base class for tool-related errors."""
