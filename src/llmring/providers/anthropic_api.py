@@ -510,21 +510,28 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         # Add file references to the first user message if files are provided
         if files and anthropic_messages:
-            # Find the first user message
-            for msg in anthropic_messages:
-                if msg["role"] == "user":
-                    # Ensure content is a list
-                    if isinstance(msg["content"], str):
-                        msg["content"] = [{"type": "text", "text": msg["content"]}]
-                    elif not isinstance(msg["content"], list):
-                        msg["content"] = [{"type": "text", "text": str(msg["content"])}]
+            # Check if any user message exists
+            has_user_message = any(msg.get("role") == "user" for msg in anthropic_messages)
+            if not has_user_message:
+                logger.warning(
+                    "Files provided but no user messages found. Files will be ignored by Anthropic API."
+                )
+            else:
+                # Find the first user message
+                for msg in anthropic_messages:
+                    if msg["role"] == "user":
+                        # Ensure content is a list
+                        if isinstance(msg["content"], str):
+                            msg["content"] = [{"type": "text", "text": msg["content"]}]
+                        elif not isinstance(msg["content"], list):
+                            msg["content"] = [{"type": "text", "text": str(msg["content"])}]
 
-                    # Add document blocks for each file_id
-                    for file_id in files:
-                        msg["content"].append(
-                            {"type": "document", "source": {"type": "file", "file_id": file_id}}
-                        )
-                    break
+                        # Add document blocks for each file_id
+                        for file_id in files:
+                            msg["content"].append(
+                                {"type": "document", "source": {"type": "file", "file_id": file_id}}
+                            )
+                        break
 
         return anthropic_messages, system_message, system_cache_control
 

@@ -365,8 +365,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             # Use the first file as cached_content (Google's file mechanism)
             if len(files) > 1:
                 logger.warning(
-                    f"Google provider only supports one cached_content at a time. "
-                    f"Using first file: {files[0]}, ignoring others: {files[1:]}"
+                    "Google provider only supports one cached_content at a time. Using first file: %s, ignoring others: %s",
+                    files[0],
+                    files[1:],
                 )
             merged_cache["cached_content"] = files[0]
 
@@ -429,8 +430,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             # Use the first file as cached_content (Google's file mechanism)
             if len(files) > 1:
                 logger.warning(
-                    f"Google provider only supports one cached_content at a time. "
-                    f"Using first file: {files[0]}, ignoring others: {files[1:]}"
+                    "Google provider only supports one cached_content at a time. Using first file: %s, ignoring others: %s",
+                    files[0],
+                    files[1:],
                 )
             merged_cache["cached_content"] = files[0]
 

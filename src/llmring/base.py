@@ -45,6 +45,7 @@ class BaseLLMProvider(ABC):
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
     ) -> LLMResponse:
         """
         Send a chat request to the LLM provider.
@@ -61,6 +62,7 @@ class BaseLLMProvider(ABC):
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
             extra_params: Provider-specific parameters to pass through
+            files: Optional list of file IDs or references to include
 
         Returns:
             LLM response with complete generated content
@@ -81,6 +83,7 @@ class BaseLLMProvider(ABC):
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         Send a streaming chat request to the LLM provider.
@@ -97,6 +100,7 @@ class BaseLLMProvider(ABC):
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration
             extra_params: Provider-specific parameters to pass through
+            files: Optional list of file IDs or references to include
 
         Returns:
             Async iterator of stream chunks
