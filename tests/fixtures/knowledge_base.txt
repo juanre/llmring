@@ -1,0 +1,26 @@
+Knowledge Base: Python Programming Best Practices
+
+Python is a high-level, interpreted programming language known for its
+clear syntax and readability. It supports multiple programming paradigms
+including procedural, object-oriented, and functional programming.
+
+Best Practices:
+
+1. Use meaningful variable names that describe the data they contain.
+2. Follow PEP 8 style guidelines for consistent code formatting.
+3. Write docstrings for functions, classes, and modules.
+4. Use type hints to improve code clarity and enable static analysis.
+5. Keep functions small and focused on a single responsibility.
+
+Testing:
+
+Writing tests is crucial for maintaining code quality. Python's unittest
+module provides a framework for writing and running tests. For more
+advanced features, pytest is the preferred testing framework in the
+Python community.
+
+Virtual Environments:
+
+Always use virtual environments to isolate project dependencies. Tools
+like venv, virtualenv, or uv help manage project-specific packages
+without affecting the system Python installation.

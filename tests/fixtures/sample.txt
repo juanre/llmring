@@ -1,0 +1,9 @@
+This is a sample text file for testing file upload functionality.
+
+It contains multiple paragraphs to simulate realistic text content.
+The file is small enough to be easily processed but large enough
+to verify that content is being correctly transmitted and received.
+
+This is the second paragraph with some additional context.
+We can use this file to test basic file upload operations
+and ensure that the content arrives intact at the server.
