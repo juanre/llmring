@@ -22,7 +22,7 @@ async def test_anthropic_chat_with_files():
     try:
         # Upload test file
         upload_response = await provider.upload_file(
-            file="tests/fixtures/sample_data.csv",
+            file="tests/fixtures/sample.txt",
             purpose="analysis",
         )
 
@@ -30,14 +30,14 @@ async def test_anthropic_chat_with_files():
         messages = [Message(role="user", content="What is in this file?")]
         response = await provider.chat(
             messages=messages,
-            model="claude-3-5-sonnet-latest",
+            model="claude-3-5-haiku-20241022",
             files=[upload_response.file_id],
         )
 
         # Verify response
         assert response.content is not None
         assert len(response.content) > 0
-        assert response.model == "claude-3-5-sonnet-20241022"
+        assert response.model == "claude-3-5-haiku-20241022"
         assert response.usage is not None
 
         # Cleanup
@@ -57,11 +57,11 @@ async def test_anthropic_chat_with_multiple_files():
     try:
         # Upload two test files
         file1 = await provider.upload_file(
-            file="tests/fixtures/sample_data.csv",
+            file="tests/fixtures/sample.txt",
             purpose="analysis",
         )
         file2 = await provider.upload_file(
-            file="tests/fixtures/sample.txt",
+            file="tests/fixtures/large_document.txt",
             purpose="analysis",
         )
 
@@ -69,7 +69,7 @@ async def test_anthropic_chat_with_multiple_files():
         messages = [Message(role="user", content="What is in these files?")]
         response = await provider.chat(
             messages=messages,
-            model="claude-3-5-sonnet-latest",
+            model="claude-3-5-haiku-20241022",
             files=[file1.file_id, file2.file_id],
         )
 
@@ -131,7 +131,7 @@ async def test_google_chat_with_cached_content():
         messages = [Message(role="user", content="What is in the cached file?")]
         response = await provider.chat(
             messages=messages,
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-flash",
             files=[upload_response.file_id],  # cached_content ID
         )
 
@@ -152,14 +152,14 @@ async def test_llmring_chat_with_files():
     async with LLMRing() as ring:
         # Upload file
         file_response = await ring.upload_file(
-            file="tests/fixtures/sample_data.csv",
+            file="tests/fixtures/sample.txt",
             purpose="analysis",
             provider="anthropic",
         )
 
         # Use file in chat via LLMRequest
         request = LLMRequest(
-            model="anthropic:claude-3-5-sonnet-20250122",
+            model="anthropic:claude-3-5-haiku-20241022",
             messages=[Message(role="user", content="What is in this file?")],
             files=[file_response.file_id],
         )
@@ -212,7 +212,7 @@ async def test_chat_stream_with_files():
 
         # Use file in streaming chat
         request = LLMRequest(
-            model="anthropic:claude-3-5-sonnet-20250122",
+            model="anthropic:claude-3-5-haiku-20241022",
             messages=[Message(role="user", content="Briefly describe this file.")],
             files=[file_response.file_id],
         )
@@ -245,7 +245,7 @@ async def test_chat_with_no_files():
         messages = [Message(role="user", content="Say 'test' and nothing else.")]
         response = await provider.chat(
             messages=messages,
-            model="claude-3-5-sonnet-latest",
+            model="claude-3-5-haiku-20241022",
         )
 
         # Verify response
