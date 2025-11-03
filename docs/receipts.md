@@ -4,15 +4,15 @@
 
 LLMRing provides a comprehensive receipt system for tracking LLM API usage and costs. Receipts include detailed information about each API call, including token usage, costs, model selection, and cryptographic signatures for compliance.
 
-**Important:** Receipts are generated **on-demand** via llmring-server, not automatically with every API call. This gives you control over when to generate signed receipts for compliance, billing, or audit purposes.
+When you log conversations to llmring-server, receipts are automatically generated and cryptographically signed. You can also generate batch receipts to aggregate multiple conversations for billing or reporting purposes.
 
 ## Key Features
 
-- **On-Demand Generation**: Generate receipts when you need them (single calls or batches)
-- **Automatic Cost Calculation**: Tracks tokens and calculates costs based on registry pricing
+- **Automatic Receipt Generation**: Every logged conversation gets a cryptographically signed receipt
+- **Batch Receipts**: Aggregate multiple conversations into summary receipts for billing/reporting
 - **Cryptographic Signatures**: Ed25519 signatures for receipt verification
 - **Canonical JSON**: JCS (JSON Canonicalization Scheme) for deterministic serialization
-- **Batch Receipts**: Certify multiple logs in a single receipt for efficiency
+- **Automatic Cost Calculation**: Tracks tokens and calculates costs based on registry pricing
 - **Lockfile Integration**: Includes SHA256 digest of lockfile for reproducibility
 - **Profile Tracking**: Records which profile was used for each request
 
@@ -67,12 +67,13 @@ response = await service.chat(request)
 print(f"Tokens used: {response.usage['total_tokens']}")
 print(f"Cost: ${response.usage['cost']:.6f}")
 
-# Logs are stored on server, receipts generated on-demand
+# Conversations and receipts are automatically stored on server
+# Receipt is available in the response when using log_conversations=True
 ```
 
-### Generating Receipts On-Demand
+### Generating Batch Receipts
 
-Generate signed receipts when you need them:
+Generate batch receipts to aggregate multiple conversations for billing or reporting:
 
 ```python
 from llmring.server_client import ServerClient
@@ -161,23 +162,20 @@ with open("receipts.json", "w") as fh:
     json.dump(export_data, fh, indent=2)
 ```
 
-## On-Demand Receipts (Phase 7.5)
+## Batch Receipts
 
 ### Overview
 
-**Important**: As of Phase 7.5, receipt generation is **on-demand only**. Receipts are no longer automatically generated with conversation logging. Instead, you explicitly request receipt generation when needed. This gives you full control over:
+When you log conversations to llmring-server, each conversation automatically gets its own receipt. However, for billing, reporting, or compliance purposes, you may want to generate batch receipts that aggregate multiple conversations into a single signed document.
 
-- When receipts are generated
-- What logs are certified (single conversation, date range, specific logs, or all uncertified)
-- Batch receipt generation for billing periods
-- Receipt descriptions and tags for categorization
+Batch receipts provide:
+
+- **Aggregated statistics**: Total cost, tokens, and calls across multiple conversations
+- **Breakdowns by model and alias**: See which models and aliases contributed to costs
+- **Flexible date ranges**: Generate monthly, weekly, or custom period receipts
+- **Descriptions and tags**: Organize receipts for different purposes (billing, compliance, auditing)
 
 ### How It Works
-
-When you use LLMRing with a server connection:
-
-1. **Logging happens without receipts**: Conversations and usage are logged to the server
-2. **Generate receipts on-demand**: Explicitly request receipts when needed for compliance, billing, or auditing
 
 ```python
 from llmring import LLMRing, LLMRequest, Message
@@ -187,34 +185,37 @@ from datetime import datetime
 async with LLMRing(
     server_url="http://localhost:8000",
     api_key="your-api-key",
-    log_conversations=True  # Logs conversations (no automatic receipts)
+    log_conversations=True  # Logs conversations with automatic receipts
 ) as service:
-    # 1. Use LLM as normal - logs are created but no receipts yet
+    # 1. Use LLM as normal - each conversation gets a receipt automatically
     request = LLMRequest(
         model="balanced",
         messages=[Message(role="user", content="Hello!")]
     )
     response = await service.chat(request)
 
-    # 2. Generate a receipt on-demand when needed
+    # Individual receipt is automatically available
+    # (when using server integration)
+
+    # 2. Later, generate a batch receipt for aggregation/reporting
     if service.server_client:
         result = await service.server_client.generate_receipt(
-            since_last_receipt=True,  # Certify all uncertified logs
-            description="Daily certification",
-            tags=["daily", "compliance"]
+            since_last_receipt=True,  # Aggregate all conversations since last batch
+            description="Daily summary",
+            tags=["daily", "reporting"]
         )
         receipt = result["receipt"]
-        print(f"Generated receipt {receipt['receipt_id']}")
-        print(f"Certified {result['certified_count']} logs")
+        print(f"Batch receipt {receipt['receipt_id']}")
+        print(f"Aggregates {result['certified_count']} conversations")
 ```
 
-### Four Generation Modes
+### Batch Receipt Generation Modes
 
-Phase 7.5 supports four modes for generating receipts:
+You can generate batch receipts in four ways:
 
-#### 1. Single Conversation Receipt
+#### 1. By Conversation ID
 
-Generate a receipt for one specific conversation:
+Generate a batch receipt for a specific conversation (useful for re-certification or auditing):
 
 ```python
 result = await service.server_client.generate_receipt(
@@ -228,9 +229,9 @@ result = await service.server_client.generate_receipt(
 llmring receipts generate --conversation 550e8400-e29b-41d4-a716-446655440000
 ```
 
-#### 2. Date Range Batch Receipt
+#### 2. By Date Range
 
-Generate a single batch receipt certifying all logs within a date range:
+Generate a batch receipt aggregating all conversations within a date range:
 
 ```python
 from datetime import datetime
@@ -255,9 +256,9 @@ llmring receipts generate --start 2025-10-01 --end 2025-10-31 \
   --description "October billing" --tags billing --tags monthly
 ```
 
-#### 3. Specific Log IDs
+#### 3. By Specific Log IDs
 
-Generate a receipt for a specific set of log IDs:
+Generate a batch receipt for specific conversations or usage logs:
 
 ```python
 result = await service.server_client.generate_receipt(
@@ -270,9 +271,9 @@ result = await service.server_client.generate_receipt(
 )
 ```
 
-#### 4. Since Last Receipt
+#### 4. Since Last Batch Receipt
 
-Generate a receipt for all logs that haven't been certified yet:
+Generate a batch receipt aggregating all conversations since the last batch was created:
 
 ```python
 result = await service.server_client.generate_receipt(
@@ -387,11 +388,11 @@ for log in logs['logs']:
 
 ### Single vs Batch Receipts
 
-Phase 7.5 introduces two types of receipts:
+LLMRing supports two types of receipts:
 
 #### Single Receipt
 
-Traditional receipt for one conversation/call:
+Automatically generated receipt for each conversation:
 
 ```json
 {
@@ -630,7 +631,7 @@ async with httpx.AsyncClient() as client:
 
 ### Using LLMRing with Conversation Logging
 
-When using `LLMRing` with server integration and conversation logging enabled (Phase 7.5):
+When using `LLMRing` with server integration and conversation logging enabled:
 
 ```python
 from llmring import LLMRing, LLMRequest, Message
@@ -639,9 +640,9 @@ from datetime import datetime, timedelta
 async with LLMRing(
     server_url="http://localhost:8000",  # or https://api.llmring.ai
     api_key="your-api-key",
-    log_conversations=True  # Logs conversations (no automatic receipts)
+    log_conversations=True  # Logs conversations with automatic receipts
 ) as service:
-    # 1. Use LLM - conversations are logged without receipts
+    # 1. Use LLM - each conversation gets a receipt automatically
     request = LLMRequest(
         model="balanced",
         messages=[Message(role="user", content="Hello!")]
@@ -649,18 +650,19 @@ async with LLMRing(
     response = await service.chat(request)
 
     # Make more requests throughout the day/week/month...
+    # Each gets its own automatic receipt
 
-    # 2. Generate receipts on-demand when needed
+    # 2. Generate batch receipts for aggregation/billing
     if service.server_client:
-        # Weekly certification
+        # Weekly batch receipt
         result = await service.server_client.generate_receipt(
             since_last_receipt=True,
-            description="Weekly certification",
-            tags=["weekly", "compliance"]
+            description="Weekly batch receipt",
+            tags=["weekly", "reporting"]
         )
-        print(f"Certified {result['certified_count']} logs")
+        print(f"Batch receipt aggregates {result['certified_count']} conversations")
 
-        # Or monthly billing
+        # Or monthly billing batch receipt
         start = datetime(2025, 10, 1)
         end = datetime(2025, 10, 31)
         result = await service.server_client.generate_receipt(
@@ -675,15 +677,15 @@ async with LLMRing(
 
 **Benefits:**
 - Centralized conversation and usage logging
-- On-demand Ed25519 signed receipts
-- Flexible certification schedules (daily, weekly, monthly)
-- Batch receipts with aggregate statistics
-- Receipts linked to full conversation history
+- Automatic Ed25519 signed receipts for every conversation
+- Batch receipts for aggregation and reporting
+- Flexible batch schedules (daily, weekly, monthly)
+- Aggregate statistics in batch receipts
+- Individual receipts linked to full conversation history
 - Analytics and reporting
 - Compliance and audit trails
 - Team-wide cost tracking
 - Public verification endpoints
-- Control over when receipts are generated
 
 ## Usage Statistics
 
@@ -881,7 +883,7 @@ llmring receipts generate --start 2025-10-01 --end 2025-10-31 \
 
 ### Daily Compliance Certification
 
-Certify all uncertified logs daily for compliance:
+Generate daily batch receipts aggregating all conversations since the last batch:
 
 ```python
 import asyncio
@@ -923,7 +925,7 @@ asyncio.run(daily_certification())
 
 ### Audit Specific Conversation
 
-Generate a receipt for one specific conversation for audit purposes:
+Generate a tagged batch receipt for a specific conversation (in addition to the automatic receipt) for audit trail purposes:
 
 ```python
 async with LLMRing(
@@ -939,7 +941,8 @@ async with LLMRing(
 
     conversation_id = response.metadata.get("conversation_id")
 
-    # Immediately certify for legal records
+    # Generate a batch receipt with audit tags
+    # (conversation already has an automatic receipt, this adds audit metadata)
     if ring.server_client and conversation_id:
         result = await ring.server_client.generate_receipt(
             conversation_id=conversation_id,
@@ -948,7 +951,7 @@ async with LLMRing(
         )
 
         receipt = result["receipt"]
-        # Store receipt with case files
+        # Store batch receipt with case files for audit trail
         with open(f"case-123-receipt-{receipt['receipt_id']}.json", "w") as f:
             json.dump(receipt, f, indent=2)
 ```
