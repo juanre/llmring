@@ -1,3 +1,5 @@
+# ABOUTME: Prompt registry for MCP prompts.
+# ABOUTME: Manages prompt templates and retrieval.
 """
 Prompt registry for MCP Server Engine.
 Provides management of prompt templates that can be exposed via MCP.

@@ -1,3 +1,5 @@
+# ABOUTME: File utilities for MCP client configuration.
+# ABOUTME: Handles MCP configuration file discovery and loading.
 """
 File processing utilities for MCP client.
 

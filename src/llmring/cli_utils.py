@@ -1,3 +1,5 @@
+# ABOUTME: Common utilities for CLI commands including formatting and lockfile loading.
+# ABOUTME: Provides consistent error messages, success output, and alias display functions.
 """
 Common utilities for CLI commands to reduce duplication.
 """

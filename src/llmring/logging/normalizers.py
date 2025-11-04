@@ -1,3 +1,5 @@
+# ABOUTME: Provider detection and response normalization for decorator-based logging.
+# ABOUTME: Supports auto-detection and normalization from OpenAI, Anthropic, and Google SDKs.
 """
 Provider detection and response normalization for decorator-based logging.
 
@@ -38,7 +40,11 @@ def detect_provider(response: Any, func: Any = None) -> Optional[str]:
     # Anthropic detection
     if "anthropic" in response_module.lower():
         return "anthropic"
-    if response_type == "Message" and hasattr(response, "content") and hasattr(response, "stop_reason"):
+    if (
+        response_type == "Message"
+        and hasattr(response, "content")
+        and hasattr(response, "stop_reason")
+    ):
         return "anthropic"
 
     # Google Gemini detection
@@ -62,7 +68,9 @@ def detect_provider(response: Any, func: Any = None) -> Optional[str]:
     return None
 
 
-def normalize_response(response: Any, provider: str) -> Tuple[str, str, Dict[str, int], Optional[str]]:
+def normalize_response(
+    response: Any, provider: str
+) -> Tuple[str, str, Dict[str, int], Optional[str]]:
     """
     Normalize provider-specific response to common format.
 
@@ -128,8 +136,7 @@ def _normalize_anthropic_response(response: Any) -> Tuple[str, str, Dict[str, in
             if isinstance(response.content, list):
                 # Extract text from all text blocks
                 content = "".join(
-                    block.text for block in response.content
-                    if hasattr(block, "text")
+                    block.text for block in response.content if hasattr(block, "text")
                 )
             else:
                 content = str(response.content)
@@ -144,8 +151,8 @@ def _normalize_anthropic_response(response: Any) -> Tuple[str, str, Dict[str, in
                 "prompt_tokens": getattr(response.usage, "input_tokens", 0),
                 "completion_tokens": getattr(response.usage, "output_tokens", 0),
                 "total_tokens": (
-                    getattr(response.usage, "input_tokens", 0) +
-                    getattr(response.usage, "output_tokens", 0)
+                    getattr(response.usage, "input_tokens", 0)
+                    + getattr(response.usage, "output_tokens", 0)
                 ),
             }
             # Anthropic provides cache metrics

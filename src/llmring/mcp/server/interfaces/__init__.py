@@ -1,3 +1,5 @@
+# ABOUTME: MCP server interfaces package.
+# ABOUTME: Exports abstract interfaces for auth, middleware, and storage.
 """
 Abstract interfaces for MCP Server Engine.
 """

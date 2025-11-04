@@ -1,3 +1,5 @@
+# ABOUTME: Package initialization for lockfile management.
+# ABOUTME: Exports AliasBinding, Lockfile, and ProfileConfig classes.
 """Lockfile management package."""
 
 # Import lockfile classes from the parent module

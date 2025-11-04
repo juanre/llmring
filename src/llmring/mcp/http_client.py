@@ -1,3 +1,5 @@
+# ABOUTME: HTTP client for MCP server communication.
+# ABOUTME: Provides methods for servers, tools, prompts, and resources management.
 """HTTP client for llmring-server MCP endpoints - Refactored Version.
 
 This module provides a clean HTTP interface for MCP operations,

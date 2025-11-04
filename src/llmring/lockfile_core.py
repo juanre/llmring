@@ -1,3 +1,5 @@
+# ABOUTME: Lockfile management for llmring with alias bindings and profile support.
+# ABOUTME: Handles reading, writing, and validating llmring.lock configuration files.
 """
 Lockfile management for LLMRing.
 

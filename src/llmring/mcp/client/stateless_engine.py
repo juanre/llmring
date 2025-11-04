@@ -1,3 +1,5 @@
+# ABOUTME: Stateless MCP execution engine for single-shot operations.
+# ABOUTME: Executes MCP operations without maintaining session state.
 """Stateless chat engine for processing conversations."""
 
 import logging

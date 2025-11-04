@@ -1,3 +1,5 @@
+# ABOUTME: Model string parsing utilities for provider:model format.
+# ABOUTME: Extracts provider and model names from qualified model strings.
 """
 Utilities for parsing model reference strings.
 

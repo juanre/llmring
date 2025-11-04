@@ -1,3 +1,5 @@
+# ABOUTME: Cost calculation service for token usage across providers.
+# ABOUTME: Calculates costs using registry pricing data and token counts.
 """
 Cost calculation service for LLMRing.
 

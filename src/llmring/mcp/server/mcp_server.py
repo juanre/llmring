@@ -1,3 +1,5 @@
+# ABOUTME: Core MCP server implementation.
+# ABOUTME: Handles MCP protocol requests and routes to tools/resources.
 """
 Main MCP Server implementation.
 

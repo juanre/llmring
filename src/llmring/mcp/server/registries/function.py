@@ -1,3 +1,5 @@
+# ABOUTME: Function registry for MCP tools.
+# ABOUTME: Manages tool registration and discovery.
 """
 Function registry for MCP Server Engine.
 Provides in-memory storage and management of registered functions.

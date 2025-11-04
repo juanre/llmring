@@ -1,3 +1,5 @@
+# ABOUTME: Token counting utilities for accurate token estimation across providers.
+# ABOUTME: Uses tiktoken for OpenAI, Anthropic, and Google; falls back to character-based estimation.
 """
 Token counting utilities for LLMRing.
 

@@ -1,3 +1,5 @@
+# ABOUTME: Integration layer between MCP client and LLMRing service.
+# ABOUTME: Connects MCP tool calling with LLMRing's multi-provider support.
 """
 Integration layer between MCP and LLMRing/llmring-server.
 

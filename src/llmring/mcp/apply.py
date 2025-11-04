@@ -1,3 +1,5 @@
+# ABOUTME: MCP manifest application for declarative server configuration.
+# ABOUTME: Loads and applies MCP configuration from JSON manifests.
 """Utilities to declaratively apply MCP configuration (servers, tools, resources, prompts).
 
 Intended for both CLI (llmring mcp apply -f manifest.json) and code-first ensure

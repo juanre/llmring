@@ -1,3 +1,5 @@
+# ABOUTME: Logging service for sending usage data to llmring-server.
+# ABOUTME: Handles asynchronous logging of LLM calls with error resilience.
 """
 Logging service for LLMRing.
 

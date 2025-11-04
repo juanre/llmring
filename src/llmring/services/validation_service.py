@@ -1,3 +1,5 @@
+# ABOUTME: Validation service for LLM requests and responses.
+# ABOUTME: Validates request parameters, model capabilities, and response formats.
 """
 Validation service for LLMRing.
 

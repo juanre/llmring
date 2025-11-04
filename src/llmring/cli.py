@@ -1,3 +1,5 @@
+# ABOUTME: Command-line interface for llmring with lockfile, chat, and server management.
+# ABOUTME: Provides CLI commands for model binding, aliases, MCP integration, and usage tracking.
 """Command-line interface for LLM service."""
 
 import argparse

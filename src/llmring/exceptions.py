@@ -1,3 +1,5 @@
+# ABOUTME: Exception hierarchy for llmring with structured error classes.
+# ABOUTME: Defines provider, model, registry, lockfile, MCP, and server exceptions with context preservation.
 """
 Exception hierarchy for LLMRing.
 

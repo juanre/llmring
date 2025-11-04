@@ -1,3 +1,5 @@
+# ABOUTME: Client utilities for interacting with llmring-server HTTP API.
+# ABOUTME: Provides authenticated requests for usage tracking and conversation management.
 """Client utilities for interacting with llmring-server.
 
 This module provides utilities for server communication, but does NOT include

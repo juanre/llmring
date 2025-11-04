@@ -1,3 +1,5 @@
+# ABOUTME: Interactive chat application for MCP servers.
+# ABOUTME: Provides terminal-based chat interface with tool calling.
 """
 Main chat application for MCP client.
 """
@@ -833,7 +835,9 @@ When the user asks about aliases, models, or configurations, use the appropriate
                                 "model": data.get("model", "unknown"),
                             }
                         )
-                except:
+                except (json.JSONDecodeError, IOError, KeyError) as e:
+                    # Skip corrupted or unreadable session files
+                    logger.debug(f"Skipping session file {session_file}: {e}")
                     continue
 
             # Sort by creation date

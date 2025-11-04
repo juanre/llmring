@@ -1,3 +1,5 @@
+# ABOUTME: MCP transport layer package.
+# ABOUTME: Exports transport implementations for MCP communication.
 """
 Transport layer for MCP client.
 

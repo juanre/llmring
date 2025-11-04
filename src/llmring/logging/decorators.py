@@ -1,3 +1,5 @@
+# ABOUTME: Decorators for logging LLM calls to llmring-server from any SDK.
+# ABOUTME: Enables usage tracking without requiring migration to LLMRing abstraction.
 """
 Decorators for logging LLM calls to llmring-server.
 
@@ -163,7 +165,9 @@ def log_llm_stream(
 
     def decorator(func: Callable) -> Callable:
         if not inspect.isasyncgenfunction(func):
-            raise TypeError(f"@log_llm_stream can only decorate async generator functions, got {func}")
+            raise TypeError(
+                f"@log_llm_stream can only decorate async generator functions, got {func}"
+            )
 
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> AsyncIterator[Any]:
@@ -304,9 +308,7 @@ async def _log_response(
                 conversation_data["metadata"]["cached_tokens"] = usage.get("cached_tokens", 0)
 
             await client.post("/api/v1/conversations/log", json=conversation_data)
-            logger.debug(
-                f"Logged conversation to server: {detected_provider}:{final_model}"
-            )
+            logger.debug(f"Logged conversation to server: {detected_provider}:{final_model}")
 
         elif log_metadata and usage:
             # Log metadata only

@@ -1,3 +1,5 @@
+# ABOUTME: HTTP transport for MCP communication.
+# ABOUTME: Implements MCP over HTTP with request/response pattern.
 """
 HTTP transport implementation for MCP client.
 

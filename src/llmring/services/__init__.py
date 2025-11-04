@@ -1,3 +1,5 @@
+# ABOUTME: Services package for llmring internal components.
+# ABOUTME: Exports service classes for alias resolution, cost calculation, and schema adaptation.
 """
 Service layer for LLMRing - extracted from monolithic LLMRing class.
 

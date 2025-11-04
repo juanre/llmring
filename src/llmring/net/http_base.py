@@ -1,3 +1,5 @@
+# ABOUTME: Base HTTP client with authentication and error handling.
+# ABOUTME: Provides common HTTP methods for server communication.
 """
 Base HTTP client for all LLMRing HTTP operations.
 

@@ -1,3 +1,5 @@
+# ABOUTME: Storage interface for MCP server state persistence.
+# ABOUTME: Defines abstract storage provider for tools and resources.
 """
 Storage provider interface for MCP Server Engine.
 """

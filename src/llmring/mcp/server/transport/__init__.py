@@ -1,3 +1,5 @@
+# ABOUTME: MCP server transport package.
+# ABOUTME: Exports transport implementations for different protocols.
 """
 Transport implementations for MCP Server Engine.
 """

@@ -1,3 +1,5 @@
+# ABOUTME: MCP protocol package initialization.
+# ABOUTME: Exports protocol handlers and routing.
 """
 Protocol implementation for MCP Server Engine.
 """

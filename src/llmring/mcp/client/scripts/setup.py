@@ -1,3 +1,5 @@
+# ABOUTME: Setup script for MCP client configuration.
+# ABOUTME: Guides users through MCP server connection setup.
 #!/usr/bin/env python3
 """
 MCP Client Setup Script

@@ -1,3 +1,5 @@
+# ABOUTME: Main entry point for lockfile MCP server.
+# ABOUTME: Runs lockfile management server as MCP tool provider.
 #!/usr/bin/env python3
 """
 Entry point for running the lockfile MCP server.

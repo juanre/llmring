@@ -1,3 +1,5 @@
+# ABOUTME: Registry advisor tools for MCP.
+# ABOUTME: Provides MCP tools for model recommendations and registry queries.
 """
 MCP tools for registry analysis and lockfile recommendations.
 

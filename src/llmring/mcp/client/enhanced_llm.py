@@ -1,3 +1,5 @@
+# ABOUTME: Enhanced LLM client with MCP tool calling.
+# ABOUTME: Integrates MCP tools into LLM conversations automatically.
 """
 Enhanced LLM Interface for MCP Client - Fixed Version
 

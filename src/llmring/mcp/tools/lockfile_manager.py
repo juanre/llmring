@@ -1,3 +1,5 @@
+# ABOUTME: Lockfile management tools for MCP.
+# ABOUTME: Provides MCP tools for reading and updating lockfiles.
 """
 MCP tools for conversational lockfile management.
 
@@ -636,7 +638,9 @@ class LockfileManagerTools:
                             if any(m.model_name == model_name for m in models):
                                 provider = prov
                                 break
-                        except:
+                        except Exception as e:
+                            # Provider may be unavailable or have network issues
+                            logger.debug(f"Could not fetch models for provider {prov}: {e}")
                             continue
 
                 if not provider:

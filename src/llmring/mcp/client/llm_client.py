@@ -1,3 +1,5 @@
+# ABOUTME: LLM client wrapper for MCP integration.
+# ABOUTME: Provides LLM interface for MCP-enhanced conversations.
 """
 Enhanced MCP client with LLM sampling capabilities.
 

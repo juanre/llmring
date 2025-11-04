@@ -1,3 +1,5 @@
+# ABOUTME: File handling utilities for LLM requests with base64 encoding and validation.
+# ABOUTME: Provides functions for images, PDFs, data URLs, and multi-file content creation.
 """
 File handling utilities for the LLM Service.
 

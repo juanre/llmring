@@ -1,3 +1,5 @@
+# ABOUTME: Pydantic schemas for MCP protocol messages.
+# ABOUTME: Defines data models for tools, prompts, resources, and results.
 """
 Pydantic schemas for MCP chat interface.
 """

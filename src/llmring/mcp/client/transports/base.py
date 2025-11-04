@@ -1,3 +1,5 @@
+# ABOUTME: Base transport interface for MCP clients.
+# ABOUTME: Defines abstract transport interface for protocol implementation.
 """
 Abstract base transport interface for MCP client.
 

@@ -1,3 +1,5 @@
+# ABOUTME: Streamable HTTP transport for MCP with chunked responses.
+# ABOUTME: Implements MCP over HTTP with streaming support.
 """
 Streamable HTTP transport implementation for MCP client.
 

@@ -1,3 +1,5 @@
+# ABOUTME: MCP client package initialization.
+# ABOUTME: Exports MCP client classes for connecting to MCP servers.
 """
 MCP Client Library
 

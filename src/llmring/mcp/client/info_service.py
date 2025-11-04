@@ -1,3 +1,5 @@
+# ABOUTME: Information service for MCP server capabilities.
+# ABOUTME: Queries and displays MCP server tools, prompts, and resources.
 """
 Information Service for MCP Client
 
