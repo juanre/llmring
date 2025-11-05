@@ -19,12 +19,7 @@ from typing import Any, Dict, List, Optional, Union
 import toml
 from pydantic import BaseModel, Field
 
-from llmring.constants import (
-    DEFAULT_PROFILE,
-    LOCKFILE_JSON_NAME,
-    LOCKFILE_NAME,
-    PROJECT_ROOT_INDICATORS,
-)
+from llmring.constants import LOCKFILE_NAME, PROJECT_ROOT_INDICATORS
 
 try:
     # Python 3.9+

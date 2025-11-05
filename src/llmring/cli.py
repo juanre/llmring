@@ -15,16 +15,8 @@ import httpx
 from dotenv import load_dotenv
 
 from llmring import LLMRequest, LLMRing, Message
-from llmring.cli_utils import (
-    format_error,
-    format_info,
-    format_success,
-    format_warning,
-    load_lockfile_or_exit,
-    print_aliases,
-    print_packaging_guidance,
-)
-from llmring.constants import LOCKFILE_NAME, PROJECT_ROOT_INDICATORS
+from llmring.cli_utils import format_error, format_info, format_success, format_warning
+from llmring.constants import LOCKFILE_NAME
 from llmring.lockfile_core import Lockfile
 from llmring.registry import RegistryClient
 from llmring.server_client import ServerClient
@@ -130,7 +122,7 @@ async def cmd_lock_init(args):
             # Fall back to current directory
             path = Path(LOCKFILE_NAME)
             package_dir = Path.cwd()
-            print(f"No package directory found")
+            print("No package directory found")
             print(f"Creating lockfile in current directory: {path.resolve()}")
 
     if path.exists() and not args.force:
@@ -395,8 +387,6 @@ def format_models_for_prompt(models_data: dict, providers_data: dict) -> str:
 
 async def cmd_lock_chat(args):
     """Conversational lockfile management using MCP chat interface."""
-    import subprocess
-    import tempfile
     from pathlib import Path
 
     # Import MCP chat app
@@ -413,7 +403,7 @@ async def cmd_lock_chat(args):
     else:
         # Fall back to current directory if no package found
         user_lockfile_path = Path.cwd() / LOCKFILE_NAME
-        print(f"📁 No package found, using current directory")
+        print("📁 No package found, using current directory")
     print(f"📄 Managing lockfile: {user_lockfile_path}")
 
     # If no server URL provided, we'll use embedded server
@@ -755,7 +745,6 @@ async def cmd_cache_clear(args):
 async def cmd_cache_info(args):
     """Show cache information."""
     from datetime import datetime, timezone
-    from pathlib import Path
 
     from llmring.registry import RegistryClient
 
@@ -1851,7 +1840,7 @@ def main():
     cache_parser = subparsers.add_parser("cache", help="Registry cache management")
     cache_subparsers = cache_parser.add_subparsers(dest="cache_command", help="Cache commands")
     cache_subparsers.add_parser("clear", help="Clear the registry cache")
-    cache_info_parser = cache_subparsers.add_parser("info", help="Show cache information")
+    cache_subparsers.add_parser("info", help="Show cache information")
 
     # Server management commands
     server_parser = subparsers.add_parser("server", help="Manage llmring-server configuration")

@@ -12,7 +12,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from ollama import AsyncClient, ResponseError
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
-from llmring.exceptions import CircuitBreakerError
+from llmring.exceptions import CircuitBreakerError, ProviderResponseError, ProviderTimeoutError
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
@@ -218,6 +218,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
     ) -> LLMResponse:
         """
         Send a chat request to the Ollama API using the official SDK.

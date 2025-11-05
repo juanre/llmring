@@ -21,7 +21,9 @@ from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
 from llmring.exceptions import (
     CircuitBreakerError,
     FileSizeError,
+    ModelNotFoundError,
     ProviderAuthenticationError,
+    ProviderRateLimitError,
     ProviderResponseError,
 )
 from llmring.net.circuit_breaker import CircuitBreaker
@@ -865,8 +867,8 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
     ) -> LLMResponse:
         """
         Send a chat request to the OpenAI API using the official SDK.

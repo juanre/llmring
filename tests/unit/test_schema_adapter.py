@@ -1,6 +1,5 @@
 """Unit tests for SchemaAdapter service."""
 
-import json
 from unittest.mock import MagicMock
 
 import pytest

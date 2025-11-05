@@ -38,7 +38,7 @@ class TestLockfile:
             lockfile = Lockfile.create_default()
 
             default_profile = lockfile.get_profile("default")
-            aliases = {b.alias for b in default_profile.bindings}
+            {b.alias for b in default_profile.bindings}
 
             # Without registry data, basic create_default() doesn't add any bindings
             # No hardcoded models
@@ -50,7 +50,7 @@ class TestLockfile:
             lockfile = Lockfile.create_default()
 
             default_profile = lockfile.get_profile("default")
-            aliases = {b.alias for b in default_profile.bindings}
+            {b.alias for b in default_profile.bindings}
 
             # Without registry data, basic create_default() doesn't add any bindings
             # No hardcoded models

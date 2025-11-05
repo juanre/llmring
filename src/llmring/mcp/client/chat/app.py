@@ -6,6 +6,7 @@ Main chat application for MCP client.
 
 import asyncio
 import json
+import logging
 import os
 import uuid
 from datetime import datetime
@@ -18,7 +19,6 @@ from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
 from rich.console import Console
-from rich.json import JSON
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
@@ -26,12 +26,13 @@ from rich.table import Table
 from llmring.mcp.client import MCPClient
 from llmring.mcp.client.chat.styles import PROMPT_STYLE, RICH_THEME
 from llmring.mcp.client.llmring_integration import MCPLLMRingIntegration
-from llmring.mcp.client.pool_config import CHAT_APP_POOL
 from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
 
 # Load environment variables from .env file
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class CommandCompleter(Completer):
@@ -327,7 +328,7 @@ class MCPChatApp:
             except Exception as e:
                 # Only show error if critical
                 if "connection" in str(e).lower():
-                    self.console.print(f"[error]MCP server connection failed[/error]")
+                    self.console.print("[error]MCP server connection failed[/error]")
 
         # Simple prompt to start
         self.console.print(
@@ -918,7 +919,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
 
         if len(matching) > 1:
             self.console.print(
-                f"[warning]Multiple sessions match. Please be more specific:[/warning]"
+                "[warning]Multiple sessions match. Please be more specific:[/warning]"
             )
             for s in matching[:5]:
                 self.console.print(f"  - {s['session_id'][:12]}... ({s['message_count']} messages)")

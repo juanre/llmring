@@ -14,7 +14,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -287,7 +287,6 @@ class LockfileServer:
     def _wrap_async(self, async_func):
         """Wrap async function for synchronous call from MCP server with enhanced error handling."""
         import concurrent.futures
-        import threading
 
         def wrapper(**kwargs):
             # Extract timeout if provided in kwargs (with _ prefix to avoid conflicts)
@@ -296,7 +295,7 @@ class LockfileServer:
             # Check if we're in an async context
             try:
                 # Try to get the running loop
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
 
                 # We're in an async context, but need to run synchronously
                 # Use a thread to avoid blocking

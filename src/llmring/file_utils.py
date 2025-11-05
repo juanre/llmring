@@ -11,7 +11,7 @@ import base64
 import mimetypes
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from llmring.validation import InputValidator
 
@@ -202,7 +202,7 @@ def validate_file_for_vision_api(file_path: str) -> None:
 
 
 def create_file_content(
-    file_path_url_or_base64: str, text: str = "", mime_type: str = None
+    file_path_url_or_base64: str, text: str = "", mime_type: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Create file content for LLM messages from file path, URL, or base64 data.
@@ -497,7 +497,7 @@ def create_multi_image_content(
 def analyze_file(
     file_path_url_or_base64: str,
     prompt: str = "Analyze this file",
-    mime_type: str = None,
+    mime_type: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Convenience function to create file analysis content for both images and documents.

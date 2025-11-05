@@ -17,7 +17,13 @@ from google import genai
 from google.genai import types
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
-from llmring.exceptions import CircuitBreakerError, ProviderAuthenticationError
+from llmring.exceptions import (
+    CircuitBreakerError,
+    ProviderAuthenticationError,
+    ProviderRateLimitError,
+    ProviderResponseError,
+    ProviderTimeoutError,
+)
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
@@ -333,8 +339,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
     ) -> LLMResponse:
         """
         Send a chat request to the Google Gemini API using the official SDK.

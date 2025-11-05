@@ -11,7 +11,7 @@ This would have caught the Google tool loop bug where tool responses were ignore
 """
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import pytest
 

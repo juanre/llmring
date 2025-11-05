@@ -1,7 +1,5 @@
 """Tests for GoogleSchemaNormalizer."""
 
-import pytest
-
 from llmring.providers.google_schema_normalizer import GoogleSchemaNormalizer
 
 

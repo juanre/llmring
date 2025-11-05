@@ -7,7 +7,6 @@ line and programmatically in Python code.
 """
 
 import asyncio
-from pathlib import Path
 
 from llmring.mcp.client.chat.app import MCPChatApp
 from llmring.mcp.server import MCPServer
@@ -37,6 +36,8 @@ def create_example_server():
 
     @server.function_registry.register(name="save_note", description="Save a note to memory")
     def save_note(title: str, content: str) -> dict:
+        from datetime import datetime
+
         # In a real application, this would persist to a database
         return {
             "success": True,

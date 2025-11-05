@@ -60,19 +60,19 @@ async def test_real_lockfile_operations():
         # Load and verify the lockfile
         loaded = Lockfile.load(lockfile_path)
         assert loaded.resolve_alias("test_fast") == ["openai:gpt-4o-mini"]
-        print(f"   ✓ Loaded lockfile, alias resolves correctly")
+        print("   ✓ Loaded lockfile, alias resolves correctly")
 
         print("\n6️⃣ Testing remove_alias...")
         # Remove the alias
         result = await tools.remove_alias("test_fast")
         assert result["success"], f"Failed to remove: {result}"
-        print(f"   ✓ Removed alias: test_fast")
+        print("   ✓ Removed alias: test_fast")
 
         # Verify it's gone
         result = await tools.list_aliases()
         alias_names = [a["alias"] for a in result["aliases"]]
         assert "test_fast" not in alias_names, "Alias still exists after removal"
-        print(f"   ✓ Verified removal")
+        print("   ✓ Verified removal")
 
         print("\n7️⃣ Testing analyze_costs...")
         # Add an alias for cost analysis

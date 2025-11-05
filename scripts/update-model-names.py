@@ -5,7 +5,6 @@ Update old model names to current ones in documentation and skills.
 Run with: python scripts/update-model-names.py
 """
 
-import re
 from pathlib import Path
 
 # Model name mappings (old → new)
@@ -54,7 +53,7 @@ def main():
     root = Path(__file__).parent.parent
 
     # Files to update
-    patterns = [
+    [
         root / "README.md",
         root / "skills/**/*.md",
         root / "docs/**/*.md",

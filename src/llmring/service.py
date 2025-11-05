@@ -455,11 +455,6 @@ class LLMRing:
             )
         self.lockfile.require_aliases(required, profile, context)
 
-    def clear_alias_cache(self):
-        """Clear the alias resolution cache."""
-        if self._alias_resolver:
-            self._alias_resolver.clear_cache()
-
     async def chat(self, request: LLMRequest, profile: Optional[str] = None) -> LLMResponse:
         """
         Send a chat request to the appropriate provider.

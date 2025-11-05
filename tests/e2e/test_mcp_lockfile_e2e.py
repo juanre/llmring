@@ -7,7 +7,6 @@ No mocks - real execution only.
 """
 
 import asyncio
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -17,9 +16,7 @@ import pytest
 
 from llmring.lockfile_core import Lockfile
 from llmring.mcp.client.chat.app import MCPChatApp
-from llmring.mcp.server.lockfile_server.server import LockfileServer
 from llmring.mcp.tools.lockfile_manager import LockfileManagerTools
-from llmring.schemas import LLMRequest, Message
 
 
 async def simulate_tool_execution(
@@ -34,7 +31,7 @@ async def simulate_tool_execution(
 
         # Find the tool
         if tool_name in app.available_tools:
-            tool = app.available_tools[tool_name]
+            app.available_tools[tool_name]
 
             # Execute via MCP client
             try:
@@ -161,16 +158,16 @@ async def test_e2e_conversational_flow():
             monthly_volume={"input_tokens": 10000000, "output_tokens": 5000000}
         )
 
-        print(f"🤖 Assistant: With heavy usage (15M tokens/month):")
+        print("🤖 Assistant: With heavy usage (15M tokens/month):")
         print(f"   Total cost: ${cost_result['total_monthly_cost']:.2f}")
 
         # Conversation 3: User wants coding model
         print("\n👤 User: I also need something for coding.")
 
         # Add a coding-optimized model directly
-        print(f"🤖 Assistant: I'll add a coding-optimized model:")
-        print(f"   coder: openai:gpt-4o")
-        print(f"   This model has excellent code generation capabilities")
+        print("🤖 Assistant: I'll add a coding-optimized model:")
+        print("   coder: openai:gpt-4o")
+        print("   This model has excellent code generation capabilities")
 
         # Add the alias
         await tools.add_alias(alias="coder", models="openai:gpt-4o")
@@ -187,7 +184,7 @@ async def test_e2e_conversational_flow():
         # Conversation 5: Save configuration
         print("\n👤 User: Save this configuration")
 
-        save_result = await tools.save_lockfile()
+        await tools.save_lockfile()
 
         print(f"🤖 Assistant: Configuration saved to {lockfile_path.name}")
         print("   You can now use these aliases with 'llmring chat -m <alias>'")

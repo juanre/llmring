@@ -12,7 +12,7 @@ Handles provider-specific schema adaptations, including:
 import json
 import logging
 from copy import deepcopy
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from llmring.base import BaseLLMProvider
 from llmring.providers.google_schema_normalizer import GoogleSchemaNormalizer

@@ -10,7 +10,6 @@ This example demonstrates:
 
 import asyncio
 import logging
-from typing import Optional
 
 from llmring import LLMRing
 from llmring.exceptions import (
@@ -20,7 +19,7 @@ from llmring.exceptions import (
     ProviderResponseError,
     ProviderTimeoutError,
 )
-from llmring.schemas import LLMRequest, LLMResponse, Message
+from llmring.schemas import LLMRequest, Message
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -125,7 +124,7 @@ async def retry_with_backoff():
             print(f"Response: {response.content}")
             break
 
-        except ProviderRateLimitError as e:
+        except ProviderRateLimitError:
             if attempt < max_retries - 1:
                 delay = base_delay * (2**attempt)  # Exponential backoff
                 logger.warning(
@@ -136,7 +135,7 @@ async def retry_with_backoff():
                 logger.error("Max retries exceeded")
                 raise
 
-        except ProviderTimeoutError as e:
+        except ProviderTimeoutError:
             if attempt < max_retries - 1:
                 delay = base_delay * (2**attempt)
                 logger.warning(

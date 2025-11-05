@@ -9,7 +9,7 @@ to llmring's unified exception hierarchy.
 
 import asyncio
 import logging
-from typing import Any, Optional, Protocol
+from typing import Optional, Protocol
 
 from llmring.exceptions import (
     LLMRingError,

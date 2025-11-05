@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from llmring.exceptions import (
-    LLMRingError,
     ModelNotFoundError,
     ProviderAuthenticationError,
     ProviderRateLimitError,
@@ -302,7 +301,7 @@ class TestProviderErrorHandler:
             await handler.handle_error(ValueError("unknown"), "test-model")
 
         assert "Unexpected error" in str(exc_info.value)
-        assert exc_info.value.original.__class__ == ValueError
+        assert isinstance(exc_info.value.original, ValueError)
 
     @pytest.mark.asyncio
     async def test_extract_error_message_with_message_attr(self, handler):

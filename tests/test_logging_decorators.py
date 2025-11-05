@@ -6,14 +6,12 @@ and properly log to llmring-server.
 """
 
 import asyncio
-from typing import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from llmring.logging import log_llm_call, log_llm_stream
 from llmring.logging.normalizers import detect_provider, normalize_response
-
 
 # -----------------------------------------------------------------------------
 # Mock Provider Response Classes
@@ -452,10 +450,7 @@ class TestLogLLMStreamDecorator:
 # -----------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    "LLMRING_SERVER_AVAILABLE" not in dir(),
-    reason="llmring-server not available"
-)
+@pytest.mark.skipif("LLMRING_SERVER_AVAILABLE" not in dir(), reason="llmring-server not available")
 class TestDecoratorWithRealServer:
     """Integration tests with real llmring-server."""
 

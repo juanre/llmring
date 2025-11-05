@@ -12,11 +12,10 @@ Following llmring policy: NO MOCKS. Tests verify the fixes directly.
 import asyncio
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
-from llmring import LLMRing
 from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service_extended import LLMRingSession
 
@@ -139,7 +138,6 @@ class TestLoggingRegressions:
         Fix: Use 'package_dir' which is already defined in the function.
         """
         from llmring.cli import cmd_lock_init
-        from llmring.lockfile_core import Lockfile
 
         # Create temp directory for test
         with tempfile.TemporaryDirectory() as tmpdir:

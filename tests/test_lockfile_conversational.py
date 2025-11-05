@@ -6,7 +6,6 @@ Tests the MCP tools and conversational interface with predefined interactions.
 """
 
 import asyncio
-import json
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
@@ -319,7 +318,7 @@ if __name__ == "__main__":
             ],
         )
 
-        print(f"Assistant: I've added the 'fast' alias:")
+        print("Assistant: I've added the 'fast' alias:")
         if "add_alias" in result and result["add_alias"]["success"]:
             print(f"  - {result['add_alias']['alias']}: {result['add_alias']['model']}")
 

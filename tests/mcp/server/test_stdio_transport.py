@@ -304,7 +304,7 @@ class TestStdioTransport:
 
         # Simulate EOF with empty StringIO
         with patch("sys.stdin", StringIO("")):
-            with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            with patch("sys.stderr", new_callable=StringIO):
                 await transport.start()
 
                 # Give the read agent time to process EOF
@@ -333,7 +333,7 @@ class TestStdioTransport:
         )
 
         with patch("sys.stdin", StringIO(messages)):
-            with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            with patch("sys.stderr", new_callable=StringIO):
                 await transport.start()
 
                 # Give the read agent time to process

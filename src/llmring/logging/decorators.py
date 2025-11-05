@@ -10,7 +10,7 @@ import asyncio
 import functools
 import inspect
 import logging
-from typing import Any, AsyncIterator, Callable, Dict, Optional
+from typing import Any, AsyncIterator, Callable, Optional
 
 from llmring.logging.normalizers import detect_provider, normalize_response
 from llmring.server_client import ServerClient
@@ -276,11 +276,10 @@ async def _log_response(
         client = ServerClient(server_url=server_url, api_key=api_key)
 
         # Calculate cost if possible (basic estimation)
-        cost_info = None
         if usage and usage.get("prompt_tokens"):
             # For now, we don't have registry access in decorator context
             # Cost will be calculated server-side if needed
-            cost_info = {"total_cost": 0.0}
+            pass
 
         # Prepare log data
         if log_conversations and messages:

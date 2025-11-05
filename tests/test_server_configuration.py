@@ -1,7 +1,5 @@
 """Tests for server auto-configuration behaviour."""
 
-import asyncio
-
 import pytest
 
 from llmring.service import DEFAULT_SAAS_URL, LLMRing

@@ -12,7 +12,6 @@ This demonstrates the complete MCP implementation with:
 
 import asyncio
 import os
-from pathlib import Path
 
 # Ensure environment is set up
 os.environ.setdefault("LLMRING_LOG_LEVEL", "INFO")
@@ -47,10 +46,7 @@ async def demo_features():
     print("🎯 Demo Scenarios")
     print("=" * 70)
 
-    from unittest.mock import AsyncMock
-
     from llmring.mcp.client.chat.app import MCPChatApp
-    from llmring.schemas import LLMResponse, Message
 
     # Create chat app with all features enabled
     app = MCPChatApp(

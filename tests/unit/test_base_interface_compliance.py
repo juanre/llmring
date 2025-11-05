@@ -57,6 +57,7 @@ class TestBaseInterfaceCompliance:
             "json_response",
             "cache",
             "extra_params",
+            "files",
         ]
 
         assert (

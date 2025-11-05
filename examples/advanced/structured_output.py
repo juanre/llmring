@@ -9,10 +9,9 @@ This example demonstrates:
 """
 
 import asyncio
-from typing import List, Optional
 
 from llmring import LLMRing
-from llmring.schemas import LLMRequest, LLMResponse, Message
+from llmring.schemas import LLMRequest, Message
 
 
 async def basic_structured_output():

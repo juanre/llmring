@@ -7,7 +7,6 @@ This test demonstrates that:
 3. No PYTHONPATH manipulation is needed when using proper module paths
 """
 
-import asyncio
 from pathlib import Path
 
 import pytest
@@ -77,8 +76,3 @@ class TestMCPServerEntryPoint:
             result = client.initialize()
             assert isinstance(result, dict)
             assert "serverInfo" in result
-
-
-if __name__ == "__main__":
-    # Run the tests
-    asyncio.run(test_entry_point_with_local_registry())

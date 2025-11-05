@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Test script for CLI commands."""
 
-import json
 import os
 import subprocess
 import sys

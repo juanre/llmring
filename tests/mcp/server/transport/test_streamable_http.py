@@ -125,7 +125,7 @@ class TestStreamableHTTPTransport:
         )
 
         try:
-            result = await transport.handle_request(request)
+            await transport.handle_request(request)
             # Session ID should be set in response headers
             assert "Mcp-Session-Id" in transport._response_headers
         finally:
@@ -139,7 +139,7 @@ class TestStreamableHTTPTransport:
         await transport.start()
 
         # Request without proper Accept header should fail
-        request = MockRequest(
+        MockRequest(
             method="POST",
             body='{"jsonrpc":"2.0","id":1,"method":"initialize"}',
             headers={"content-type": "application/json"},  # Missing Accept header
@@ -311,7 +311,7 @@ class TestStreamableHTTPTransport:
 
         # Create a session first
         session_id = transport._create_session_id()
-        session = transport._get_or_create_session(session_id)
+        transport._get_or_create_session(session_id)
 
         # GET request with session ID
         request = MockRequest(
@@ -345,7 +345,7 @@ class TestStreamableHTTPTransport:
 
         # Create a session
         session_id = transport._create_session_id()
-        session = transport._get_or_create_session(session_id)
+        transport._get_or_create_session(session_id)
 
         assert session_id in transport.sessions
 

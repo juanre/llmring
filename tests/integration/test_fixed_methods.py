@@ -127,7 +127,7 @@ class TestFixedMethods:
         tool_call = ToolCall(id="call_123", tool_name="test_tool", arguments={"param": "value"})
 
         # Execute the tool
-        result = await chat_engine.execute_tool(
+        await chat_engine.execute_tool(
             conversation_id=conv_id,
             tool_call=tool_call,
             auth_context={"user_id": "test"},

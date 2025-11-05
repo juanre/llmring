@@ -135,7 +135,7 @@ class TestStatelessEngineReal:
 
         # This tests the actual method signature
         try:
-            message_id = await conversation_manager.add_message(
+            await conversation_manager.add_message(
                 conversation_id=conversation_id,
                 role="user",
                 content="Test message content",
@@ -195,7 +195,7 @@ class TestStatelessEngineReal:
 
         # This should try to load the conversation
         try:
-            context = await chat_engine._create_context(request)
+            await chat_engine._create_context(request)
             # If it doesn't exist, it should raise ValueError
         except ValueError as e:
             assert "not found" in str(e)
@@ -309,7 +309,7 @@ class TestStatelessEngineReal:
                 save_to_db=False,
             )
 
-            response = await chat_engine.process_request(request)
+            await chat_engine.process_request(request)
 
             # Check that metadata was set
             assert len(requests_sent) == 1

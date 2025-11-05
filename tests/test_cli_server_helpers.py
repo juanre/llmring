@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from llmring.cli import _load_env_file, _resolve_server_settings, _write_env_file
 from llmring.service import DEFAULT_SAAS_URL
 

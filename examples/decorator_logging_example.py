@@ -212,10 +212,8 @@ async def example_multiple_functions():
         )
 
     # Use both functions
-    prod_response = await production_chat(
-        messages=[{"role": "user", "content": "Production query"}]
-    )
-    test_response = await testing_chat(messages=[{"role": "user", "content": "Test query"}])
+    await production_chat(messages=[{"role": "user", "content": "Production query"}])
+    await testing_chat(messages=[{"role": "user", "content": "Test query"}])
 
     print("✓ Both functions logged with different configurations")
 

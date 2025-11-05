@@ -51,10 +51,10 @@ class FileCreator:
         # Try to use a better font, fall back to default
         try:
             font = ImageFont.truetype("Arial.ttf", 36)
-        except:
+        except (IOError, OSError):
             try:
                 font = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 36)
-            except:
+            except (IOError, OSError):
                 font = ImageFont.load_default()
 
         # Calculate text position (centered)
@@ -162,7 +162,7 @@ The company is well-positioned for continued growth in 2025.
             try:
                 if file_path.exists():
                     file_path.unlink()
-            except:
+            except (OSError, PermissionError):
                 pass
         with contextlib.suppress(builtins.BaseException):
             self.temp_dir.rmdir()

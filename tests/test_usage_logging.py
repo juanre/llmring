@@ -1,6 +1,6 @@
 """Tests for server-side usage logging functionality."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -168,7 +168,7 @@ async def test_usage_logging_with_alias():
                             messages=[Message(role="user", content="Hello")],
                         )
 
-                        response = await ring.chat(request)
+                        await ring.chat(request)
 
                         # Verify usage was logged with alias
                         mock_server_client.post.assert_called_once()

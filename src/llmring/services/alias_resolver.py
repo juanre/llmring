@@ -9,7 +9,7 @@ with caching and fallback support.
 
 import logging
 import os
-from typing import Dict, Optional, Set
+from typing import Optional, Set
 
 from cachetools import TTLCache
 

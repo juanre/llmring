@@ -2,7 +2,6 @@
 # ABOUTME: Tests cache creation, list, get, and delete operations without mocks.
 
 import os
-from pathlib import Path
 
 import pytest
 

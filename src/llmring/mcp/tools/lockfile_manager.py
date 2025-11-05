@@ -7,7 +7,6 @@ Provides tools for managing lockfiles through natural conversation,
 including adding/removing aliases, assessing models, and generating configurations.
 """
 
-import json
 import logging
 import os
 from pathlib import Path
@@ -15,8 +14,8 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
-from llmring.constants import LOCKFILE_NAME, SUCCESS_PREFIX, WARNING_PREFIX
-from llmring.lockfile_core import AliasBinding, Lockfile, ProfileConfig
+from llmring.constants import LOCKFILE_NAME
+from llmring.lockfile_core import Lockfile
 from llmring.registry import RegistryClient
 
 # Load environment variables from .env file

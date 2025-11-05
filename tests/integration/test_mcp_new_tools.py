@@ -6,7 +6,6 @@ Tests the data-focused tools that provide registry information to LLMs.
 """
 
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -17,7 +16,6 @@ load_dotenv()
 
 from llmring.mcp.server.lockfile_server.server import LockfileServer
 from llmring.mcp.tools.lockfile_manager import LockfileManagerTools
-from llmring.lockfile_core import Lockfile
 
 
 class TestNewMCPTools:
@@ -101,9 +99,7 @@ class TestNewMCPTools:
     async def test_filter_models_by_requirements(self, lockfile_tools):
         """Test filtering models based on requirements."""
         # Test filtering by context window
-        result = await lockfile_tools.filter_models_by_requirements(
-            min_context=100000
-        )
+        result = await lockfile_tools.filter_models_by_requirements(min_context=100000)
 
         assert "models" in result
         assert "applied_filters" in result
@@ -116,8 +112,7 @@ class TestNewMCPTools:
 
         # Test filtering by cost
         result = await lockfile_tools.filter_models_by_requirements(
-            max_price_input=5.0,
-            max_price_output=10.0
+            max_price_input=5.0, max_price_output=10.0
         )
 
         for model in result["models"]:
@@ -127,9 +122,7 @@ class TestNewMCPTools:
                 assert model["price_output"] <= 10.0
 
         # Test filtering by capabilities
-        result = await lockfile_tools.filter_models_by_requirements(
-            requires_vision=True
-        )
+        result = await lockfile_tools.filter_models_by_requirements(requires_vision=True)
 
         # Models should have vision capability
         for model in result["models"]:
@@ -138,9 +131,7 @@ class TestNewMCPTools:
 
         # Test filtering by multiple criteria
         result = await lockfile_tools.filter_models_by_requirements(
-            min_context=50000,
-            max_price_input=10.0,
-            providers=["openai", "anthropic"]
+            min_context=50000, max_price_input=10.0, providers=["openai", "anthropic"]
         )
 
         for model in result["models"]:
@@ -155,10 +146,7 @@ class TestNewMCPTools:
     async def test_get_model_details(self, lockfile_tools):
         """Test getting detailed information for specific models."""
         # Get details for specific models
-        models_to_check = [
-            "openai:gpt-4o-mini",
-            "anthropic:claude-3-5-haiku-20241022"
-        ]
+        models_to_check = ["openai:gpt-4o-mini", "anthropic:claude-3-5-haiku-20241022"]
 
         result = await lockfile_tools.get_model_details(models=models_to_check)
 
@@ -177,10 +165,13 @@ class TestNewMCPTools:
             if details:  # If registry data is available
                 # Check for expected fields (may vary by provider)
                 possible_fields = [
-                    "display_name", "context_window", "max_output",
+                    "display_name",
+                    "context_window",
+                    "max_output",
                     "dollars_per_million_tokens_input",
                     "dollars_per_million_tokens_output",
-                    "active", "knowledge_cutoff"
+                    "active",
+                    "knowledge_cutoff",
                 ]
                 # At least some of these should be present
                 has_fields = any(field in details for field in possible_fields)
@@ -219,15 +210,10 @@ class TestNewMCPTools:
     @pytest.mark.asyncio
     async def test_enhanced_analyze_costs(self, lockfile_tools):
         """Test the enhanced analyze_costs with what-if analysis."""
-        monthly_volume = {
-            "input_tokens": 1000000,
-            "output_tokens": 500000
-        }
+        monthly_volume = {"input_tokens": 1000000, "output_tokens": 500000}
 
         # Test with actual configuration
-        result = await lockfile_tools.analyze_costs(
-            monthly_volume=monthly_volume
-        )
+        result = await lockfile_tools.analyze_costs(monthly_volume=monthly_volume)
 
         assert "analysis_type" in result
         assert result["analysis_type"] == "actual"
@@ -239,12 +225,11 @@ class TestNewMCPTools:
         hypothetical = {
             "fast": "openai:gpt-4o-mini",
             "smart": "anthropic:claude-3-opus-20240229",
-            "balanced": "openai:gpt-4o"
+            "balanced": "openai:gpt-4o",
         }
 
         result = await lockfile_tools.analyze_costs(
-            monthly_volume=monthly_volume,
-            hypothetical_models=hypothetical
+            monthly_volume=monthly_volume, hypothetical_models=hypothetical
         )
 
         assert result["analysis_type"] == "hypothetical"
@@ -267,14 +252,16 @@ class TestNewMCPTools:
             "get_available_providers",
             "list_models",
             "filter_models_by_requirements",
-            "get_model_details"
+            "get_model_details",
         ]
 
         for tool_name in expected_new_tools:
             assert tool_name in mcp_server.server.function_registry.functions
 
         # Test that wrappers work correctly
-        get_providers_func = mcp_server.server.function_registry.functions["get_available_providers"]
+        get_providers_func = mcp_server.server.function_registry.functions[
+            "get_available_providers"
+        ]
         result = get_providers_func()
         assert "configured" in result
         assert "unconfigured" in result
@@ -290,16 +277,13 @@ class TestNewMCPTools:
     async def test_tools_error_handling(self, lockfile_tools):
         """Test error handling in new tools."""
         # Test with invalid model reference
-        result = await lockfile_tools.get_model_details(
-            models=["invalid:nonexistent-model-xyz"]
-        )
+        result = await lockfile_tools.get_model_details(models=["invalid:nonexistent-model-xyz"])
         # Should not crash, just return empty or skip invalid
         assert "models" in result
 
         # Test with invalid filter values
         result = await lockfile_tools.filter_models_by_requirements(
-            min_context=-1,  # Invalid negative value
-            max_price_input=-10  # Invalid negative cost
+            min_context=-1, max_price_input=-10  # Invalid negative value  # Invalid negative cost
         )
         # Should handle gracefully
         assert "models" in result

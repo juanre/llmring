@@ -5,8 +5,6 @@ Tests the actual MCP client code paths without any mocking.
 """
 
 import os
-import tempfile
-from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
@@ -14,10 +12,9 @@ from dotenv import load_dotenv
 # Load environment variables for API keys
 load_dotenv()
 
-from llmring.lockfile_core import Lockfile
 from llmring.mcp.client.stateless_engine import ChatRequest, StatelessChatEngine
+from llmring.schemas import LLMResponse
 from llmring.service import LLMRing
-from llmring.schemas import LLMRequest, LLMResponse, Message
 
 
 class TestMCPClientReal:
@@ -165,6 +162,7 @@ class TestMCPClientReal:
     @pytest.mark.asyncio
     async def test_conversation_persistence(self, chat_engine, test_lockfile_path):
         """Test conversation management without mocks."""
+
         # Create a simple in-memory conversation store
         class InMemoryConversationManager:
             def __init__(self):
@@ -179,17 +177,17 @@ class TestMCPClientReal:
                 self.messages[conv_id] = []
                 return conv_id
 
-            async def add_message(self, conversation_id=None, role=None, content=None, *args, **kwargs):
+            async def add_message(
+                self, conversation_id=None, role=None, content=None, *args, **kwargs
+            ):
                 # Handle both old and new signatures
-                conv_id = conversation_id or kwargs.get('conv_id')
-                message_type = role or kwargs.get('message_type', 'user')
+                conv_id = conversation_id or kwargs.get("conv_id")
+                message_type = role or kwargs.get("message_type", "user")
 
                 if conv_id and conv_id in self.messages:
-                    self.messages[conv_id].append({
-                        "type": message_type,
-                        "content": content,
-                        **kwargs
-                    })
+                    self.messages[conv_id].append(
+                        {"type": message_type, "content": content, **kwargs}
+                    )
                 return None
 
             async def get_messages(self, conv_id):
@@ -207,7 +205,6 @@ class TestMCPClientReal:
         )
 
         # Create a simple response for testing
-        from llmring.schemas import LLMResponse
 
         test_response = LLMResponse(
             content="Test response",
@@ -236,7 +233,7 @@ class TestMCPClientReal:
             assert len(conv_manager.conversations) > 0
 
             # Verify messages were added (if conversation was created)
-            conv_ids = list(conv_manager.conversations.keys())
+            list(conv_manager.conversations.keys())
             # Just verify no errors occurred
             assert response is not None
 
@@ -259,7 +256,6 @@ class TestMCPClientReal:
         async def tracking_chat(request):
             captured_requests.append(request)
             # Return a simple response
-            from llmring.schemas import LLMResponse
             return LLMResponse(
                 content="Response",
                 model=request.model,
@@ -271,7 +267,7 @@ class TestMCPClientReal:
 
         try:
             # Process with alias
-            response = await chat_engine.process_request(request_alias)
+            await chat_engine.process_request(request_alias)
 
             # The model should be resolved from alias
             assert len(captured_requests) == 1
@@ -288,7 +284,7 @@ class TestMCPClientReal:
                 save_to_db=False,
             )
 
-            response = await chat_engine.process_request(request_full)
+            await chat_engine.process_request(request_full)
 
             assert len(captured_requests) == 1
             assert captured_requests[0].model == "openai:gpt-4o"
@@ -309,7 +305,7 @@ class TestMCPClientReal:
         try:
             response = await chat_engine.process_request(request)
             # If it doesn't raise, check we got an error response
-            if hasattr(response, 'error'):
+            if hasattr(response, "error"):
                 assert response.error is not None
         except Exception as e:
             # Should be a meaningful error about model not found

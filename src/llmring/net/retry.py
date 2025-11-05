@@ -11,7 +11,7 @@ from typing import Awaitable, Callable, Optional
 class RetryError(Exception):
     """Retry wrapper that preserves root-cause messages in __str__."""
 
-    def __init__(self, message: str = None, attempts: int = 0, total_delay: float = 0.0):
+    def __init__(self, message: Optional[str] = None, attempts: int = 0, total_delay: float = 0.0):
         # Use a more informative message by default
         if not message and attempts > 0:
             message = f"Failed after {attempts} retry attempts over {total_delay:.1f}s"

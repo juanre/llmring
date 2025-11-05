@@ -23,7 +23,7 @@ def is_ollama_running():
         with httpx.Client() as client:
             response = client.get("http://localhost:11434/api/version", timeout=2.0)
             return response.status_code == 200
-    except:
+    except Exception:
         return False
 
 

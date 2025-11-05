@@ -1,6 +1,5 @@
 """Integration tests for streaming functionality."""
 
-import asyncio
 import os
 from pathlib import Path
 

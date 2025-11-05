@@ -21,10 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from llmring.lockfile_core import Lockfile
-from llmring.mcp.server import MCPServer
 from llmring.mcp.server.lockfile_server.server import LockfileServer
-from llmring.mcp.server.transport.stdio import StdioTransport
-from llmring.mcp.tools.lockfile_manager import LockfileManagerTools
 
 
 class RealServerTestHarness:
@@ -210,7 +207,7 @@ async def test_server_timeout_handling():
 
         # Should timeout (default is 30s, but we can pass shorter)
         with pytest.raises(TimeoutError):
-            result = wrapped(_timeout=0.1)  # 100ms timeout
+            wrapped(_timeout=0.1)  # 100ms timeout
 
 
 @pytest.mark.asyncio
@@ -311,7 +308,6 @@ async def test_server_save_and_reload():
 async def test_server_cost_analysis_integration():
     """Test server cost analysis with real data."""
     # Load test lockfile to get real model references
-    import os
 
     from llmring.lockfile_core import Lockfile
 
@@ -356,7 +352,6 @@ async def test_server_cost_analysis_integration():
 async def test_server_model_assessment():
     """Test server model assessment using test lockfile aliases."""
     # Use the test lockfile that has valid models
-    import os
 
     from llmring.lockfile_core import Lockfile
 

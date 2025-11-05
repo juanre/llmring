@@ -17,7 +17,13 @@ from anthropic import AsyncAnthropic
 from anthropic.types import Message as AnthropicMessage
 
 from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
-from llmring.exceptions import CircuitBreakerError, FileSizeError, ProviderAuthenticationError
+from llmring.exceptions import (
+    CircuitBreakerError,
+    FileSizeError,
+    ProviderAuthenticationError,
+    ProviderRateLimitError,
+    ProviderResponseError,
+)
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
@@ -182,8 +188,8 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
     ) -> LLMResponse:
         """
         Send a chat request to the Anthropic Claude API using the official SDK.

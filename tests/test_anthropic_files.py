@@ -2,7 +2,6 @@
 # ABOUTME: Tests upload, list, get, and delete operations without mocks.
 
 import os
-from pathlib import Path
 
 import pytest
 
