@@ -1120,54 +1120,10 @@ class LLMRing:
             return "google"
         return None
 
-    def _select_provider_for_upload(self, purpose: str) -> str:
-        """
-        Select provider for file upload based on purpose or current model.
-
-        Args:
-            purpose: Upload purpose
-
-        Returns:
-            Provider name
-
-        Raises:
-            ProviderNotFoundError: If no suitable provider is available
-        """
-        # Try to get provider from current model in lockfile
-        if self.lockfile:
-            try:
-                # Get default alias resolution to find current provider
-                profile = self.lockfile.default_profile
-                # Try common alias names
-                for alias in ["default", "fast", "balanced", "powerful"]:
-                    if self.lockfile.has_alias(alias, profile):
-                        resolved = self.resolve_alias(alias, profile)
-                        provider, _ = parse_model_string(resolved)
-                        if provider in self.providers:
-                            logger.debug(
-                                f"Auto-selected provider '{provider}' from alias '{alias}'"
-                            )
-                            return provider
-            except Exception as e:
-                logger.debug(f"Could not determine provider from lockfile: {e}")
-
-        # Fall back to first available provider that supports files
-        # Prefer anthropic > openai > google
-        for provider in ["anthropic", "openai", "google"]:
-            if provider in self.providers:
-                logger.debug(f"Auto-selected first available provider: '{provider}'")
-                return provider
-
-        raise ProviderNotFoundError(
-            "No provider available for file upload. "
-            f"Available providers: {list(self.providers.keys())}"
-        )
-
     async def upload_file(
         self,
         file: Union[str, Path, Any],
-        purpose: str = "analysis",
-        provider: Optional[str] = None,
+        model: str,
         ttl_seconds: int = 3600,
         filename: Optional[str] = None,
         **kwargs,
@@ -1177,8 +1133,7 @@ class LLMRing:
 
         Args:
             file: File path, Path object, or file-like object
-            purpose: Purpose of the file (e.g., "analysis", "cache")
-            provider: Provider to use (auto-detected if not specified)
+            model: Model alias (e.g., "summarizer") or provider:model string (e.g., "anthropic:claude-sonnet-4-5")
             ttl_seconds: Time-to-live in seconds (Google only)
             filename: Optional filename (required for file-like objects)
             **kwargs: Additional provider-specific parameters
@@ -1187,16 +1142,25 @@ class LLMRing:
             FileUploadResponse with file_id and metadata
 
         Raises:
-            ProviderNotFoundError: If provider not found or cannot be auto-detected
+            ProviderNotFoundError: If provider not found
+            ValueError: If model string is invalid
         """
-        # Determine provider
-        if provider:
-            target_provider = provider
+        # Resolve model (like chat() does)
+        resolved_model = self.resolve_alias(model or "")
+
+        # Parse to get provider
+        provider_type, model_name = self._parse_model_string(resolved_model)
+
+        # Determine purpose based on whether it's an alias or direct model reference
+        if ":" in model:
+            # It's a direct provider:model string - use generic purpose
+            purpose = "file"
         else:
-            target_provider = self._select_provider_for_upload(purpose)
+            # It's an alias - use alias name as purpose
+            purpose = model
 
         # Get provider instance
-        provider_obj = self.get_provider(target_provider)
+        provider_obj = self.get_provider(provider_type)
 
         # Upload file
         response = await provider_obj.upload_file(
@@ -1233,7 +1197,16 @@ class LLMRing:
         if provider:
             target_provider = provider
         else:
-            target_provider = self._select_provider_for_upload(purpose or "analysis")
+            # Use first available provider - prefer anthropic > openai > google
+            for prov in ["anthropic", "openai", "google"]:
+                if prov in self.providers:
+                    target_provider = prov
+                    break
+            else:
+                raise ProviderNotFoundError(
+                    "No provider available for file listing. "
+                    f"Available providers: {list(self.providers.keys())}"
+                )
 
         # Get provider instance
         provider_obj = self.get_provider(target_provider)

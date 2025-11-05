@@ -21,8 +21,7 @@ async def test_upload_file_with_explicit_provider():
         # Upload to Anthropic explicitly
         response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="analysis",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # Verify response
@@ -47,10 +46,10 @@ async def test_upload_file_auto_detect_provider():
 
     ring = LLMRing()
     try:
-        # Upload without specifying provider (should auto-detect)
+        # Upload using model string (provider extracted from model)
         response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="analysis",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # Verify response
@@ -78,8 +77,7 @@ async def test_list_files_with_explicit_provider():
         # Upload a test file
         upload_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="analysis",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # List files from Anthropic
@@ -109,7 +107,7 @@ async def test_list_files_auto_detect_provider():
         # Upload a test file
         upload_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="analysis",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # List files without specifying provider
@@ -135,8 +133,7 @@ async def test_get_file_with_provider_auto_detection():
         # Upload a file to Anthropic
         upload_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="analysis",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # Get file metadata without specifying provider (should auto-detect from file_id)
@@ -164,8 +161,7 @@ async def test_get_file_with_explicit_provider():
         # Upload a file
         upload_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="analysis",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # Get file metadata with explicit provider
@@ -192,8 +188,7 @@ async def test_delete_file_with_provider_auto_detection():
         # Upload a file to Anthropic
         upload_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="analysis",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # Delete without specifying provider (should auto-detect from file_id)
@@ -220,8 +215,7 @@ async def test_delete_file_with_explicit_provider():
         # Upload a file
         upload_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="analysis",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # Delete with explicit provider
@@ -248,7 +242,7 @@ async def test_provider_auto_detection_from_file_id_anthropic():
         # Upload to Anthropic
         response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # Verify file_id format
@@ -276,7 +270,7 @@ async def test_provider_auto_detection_from_file_id_openai():
         # Upload to OpenAI
         response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            provider="openai",
+            model="openai:gpt-4o",
         )
 
         # Verify file_id format
@@ -309,7 +303,7 @@ async def test_provider_auto_detection_from_file_id_google():
         # Google requires minimum 4096 tokens for caching
         response = await ring.upload_file(
             file="tests/fixtures/google_large_doc.txt",
-            provider="google",
+            model="google:gemini-2.5-flash",
             ttl_seconds=300,
         )
 
@@ -341,13 +335,13 @@ async def test_cross_provider_file_operations():
         # Upload to Anthropic
         anthropic_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # Upload to OpenAI
         openai_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            provider="openai",
+            model="openai:gpt-4o",
         )
 
         # Verify different file_ids
@@ -377,7 +371,7 @@ async def test_invalid_provider_raises_error():
         with pytest.raises(ProviderNotFoundError):
             await ring.upload_file(
                 file="tests/fixtures/sample.txt",
-                provider="invalid_provider",
+                model="invalid_provider:some-model",
             )
     finally:
         await ring.close()
@@ -421,8 +415,7 @@ async def test_upload_with_filelike_object():
         with open("tests/fixtures/sample.txt", "rb") as f:
             response = await ring.upload_file(
                 file=f,
-                purpose="analysis",
-                provider="anthropic",
+                model="anthropic:claude-3-5-haiku-20241022",
                 filename="sample.txt",
             )
 
@@ -449,8 +442,7 @@ async def test_list_files_with_purpose_filter():
         # Upload with specific purpose
         upload_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="code_execution",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # List files with purpose filter
@@ -479,8 +471,7 @@ async def test_list_files_with_limit():
         # Upload a test file
         upload_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="analysis",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # List files with limit

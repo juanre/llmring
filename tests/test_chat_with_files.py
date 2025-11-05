@@ -158,8 +158,7 @@ async def test_llmring_chat_with_files():
         # Upload file
         file_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="analysis",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # Use file in chat via LLMRequest
@@ -211,8 +210,7 @@ async def test_chat_stream_with_files():
         # Upload file
         file_response = await ring.upload_file(
             file="tests/fixtures/sample.txt",
-            purpose="analysis",
-            provider="anthropic",
+            model="anthropic:claude-3-5-haiku-20241022",
         )
 
         # Use file in streaming chat
