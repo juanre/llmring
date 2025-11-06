@@ -19,7 +19,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     # Register a file (doesn't upload yet)
-    file_id = await service.register_file("data.csv")
+    file_id = service.register_file("data.csv")
 
     # Use with Anthropic (lazy upload happens here)
     request = LLMRequest(
@@ -73,11 +73,11 @@ async def register_file(
 
 ```python
 # Register a file
-file_id = await service.register_file("dataset.csv")
+file_id = service.register_file("dataset.csv")
 
 # Register from Path object
 from pathlib import Path
-file_id = await service.register_file(Path("data.json"))
+file_id = service.register_file(Path("data.json"))
 ```
 
 **How it works:**
@@ -114,7 +114,7 @@ async def list_registered_files() -> List[Dict[str, str]]
 
 ```python
 # List all registered files
-files = await service.list_registered_files()
+files = service.list_registered_files()
 
 for file in files:
     print(f"{file['file_id']}: {file['file_path']}")
@@ -237,7 +237,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     # Register file once (no upload yet)
-    file_id = await service.register_file("sales_data.csv")
+    file_id = service.register_file("sales_data.csv")
 
     print(f"Registered: {file_id}")
 
@@ -282,9 +282,9 @@ Register and use multiple files together:
 ```python
 async with LLMRing() as service:
     # Register multiple files
-    file1 = await service.register_file("q1_sales.csv")
-    file2 = await service.register_file("q2_sales.csv")
-    file3 = await service.register_file("q3_sales.csv")
+    file1 = service.register_file("q1_sales.csv")
+    file2 = service.register_file("q2_sales.csv")
+    file3 = service.register_file("q3_sales.csv")
 
     # Analyze all files together (uploads happen on first use)
     request = LLMRequest(
@@ -317,12 +317,12 @@ from llmring import LLMRing
 
 async with LLMRing() as service:
     # Register some files
-    file1 = await service.register_file("data1.csv")
-    file2 = await service.register_file("data2.csv")
-    file3 = await service.register_file("data3.csv")
+    file1 = service.register_file("data1.csv")
+    file2 = service.register_file("data2.csv")
+    file3 = service.register_file("data3.csv")
 
     # List all registered files
-    files = await service.list_registered_files()
+    files = service.list_registered_files()
     print(f"Registered files: {len(files)}")
     for file in files:
         print(f"- {file['file_id']}: {file['file_path']}")
@@ -334,7 +334,7 @@ async with LLMRing() as service:
     await service.deregister_file(file1)
 
     # Verify it's gone
-    remaining = await service.list_registered_files()
+    remaining = service.list_registered_files()
     print(f"Remaining files: {len(remaining)}")
 ```
 
@@ -352,7 +352,7 @@ async with LLMRing() as service:
     file_path = Path("dynamic_data.csv")
 
     # Register file
-    file_id = await service.register_file(file_path)
+    file_id = service.register_file(file_path)
 
     # First use - uploads to Anthropic
     request = LLMRequest(
@@ -391,7 +391,7 @@ Stream responses while using registered files:
 ```python
 async with LLMRing() as service:
     # Register file
-    file_id = await service.register_file("data.csv")
+    file_id = service.register_file("data.csv")
 
     # Stream response
     request = LLMRequest(
@@ -424,7 +424,7 @@ async with LLMRing() as service:
 
 ```python
 try:
-    file_id = await service.register_file("nonexistent.csv")
+    file_id = service.register_file("nonexistent.csv")
 except FileNotFoundError as e:
     print(f"File not found: {e}")
     # Solution: Verify file path exists before registration
@@ -441,7 +441,7 @@ from llmring.exceptions import FileSizeError
 
 try:
     # Register large file (succeeds)
-    file_id = await service.register_file("huge_file.csv")
+    file_id = service.register_file("huge_file.csv")
 
     # Use with Anthropic (upload happens here, may fail)
     request = LLMRequest(
@@ -469,7 +469,7 @@ except FileSizeError as e:
 ```python
 try:
     # Register binary file
-    file_id = await service.register_file("image.png")
+    file_id = service.register_file("image.png")
 
     # Try to use with Google (will fail - Google requires text)
     request = LLMRequest(
@@ -489,7 +489,7 @@ except ValueError as e:
 
 ```python
 # OpenAI files don't work with Chat Completions API
-file_id = await service.register_file("document.pdf")
+file_id = service.register_file("document.pdf")
 
 request = LLMRequest(
     model="openai:gpt-4o",
@@ -515,7 +515,7 @@ except ValueError as e:
 Always deregister files when done to clean up provider uploads:
 
 ```python
-file_id = await service.register_file("data.csv")
+file_id = service.register_file("data.csv")
 try:
     # Use file with various providers
     response = await service.chat(request)
@@ -532,7 +532,7 @@ The power of file registration is cross-provider reuse:
 
 ```python
 # Register once
-file_id = await service.register_file("analysis_data.csv")
+file_id = service.register_file("analysis_data.csv")
 
 # Use with multiple providers - uploads happen automatically
 providers = ["anthropic:claude-sonnet-4-5", "google:gemini-2.5-flash"]
@@ -571,7 +571,7 @@ if file_path.stat().st_size > max_size:
     raise ValueError(f"File too large: {file_path.stat().st_size} bytes")
 
 # Register
-file_id = await service.register_file(file_path)
+file_id = service.register_file(file_path)
 ```
 
 ---
@@ -582,7 +582,7 @@ File changes are detected automatically:
 
 ```python
 # Register file
-file_id = await service.register_file("live_data.csv")
+file_id = service.register_file("live_data.csv")
 
 # Use file multiple times - it's automatically re-uploaded if changed
 for i in range(5):
@@ -606,9 +606,9 @@ Combine multiple files for complex analysis:
 
 ```python
 # Register all files
-file1 = await service.register_file("sales.csv")
-file2 = await service.register_file("costs.csv")
-file3 = await service.register_file("inventory.csv")
+file1 = service.register_file("sales.csv")
+file2 = service.register_file("costs.csv")
+file3 = service.register_file("inventory.csv")
 
 # Use all together
 request = LLMRequest(
@@ -647,7 +647,7 @@ if estimated_tokens < 1024:
     print("Warning: File may not meet Google's minimum token requirement")
 
 # Register anyway - it works with other providers
-file_id = await service.register_file(file_path)
+file_id = service.register_file(file_path)
 ```
 
 ---
@@ -669,7 +669,7 @@ file_path = Path("data.csv")
 if not file_path.exists():
     print(f"File not found: {file_path}")
 else:
-    file_id = await service.register_file(file_path)
+    file_id = service.register_file(file_path)
 ```
 
 ---
@@ -682,7 +682,7 @@ else:
 
 ```python
 # Register binary file
-file_id = await service.register_file("image.png")
+file_id = service.register_file("image.png")
 
 # ✅ Works with Anthropic
 request = LLMRequest(
@@ -710,7 +710,7 @@ request = LLMRequest(
 **Solution:** OpenAI Chat Completions API doesn't support file uploads:
 
 ```python
-file_id = await service.register_file("document.pdf")
+file_id = service.register_file("document.pdf")
 
 # ❌ Won't work with OpenAI Chat
 request = LLMRequest(
@@ -741,7 +741,7 @@ import time
 from pathlib import Path
 
 file_path = Path("data.csv")
-file_id = await service.register_file(file_path)
+file_id = service.register_file(file_path)
 
 # Use file
 response1 = await service.chat(request)

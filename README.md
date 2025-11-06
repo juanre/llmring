@@ -281,7 +281,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     # Register file once (no upload yet)
-    file_id = await service.register_file("data.csv")
+    file_id = service.register_file("data.csv")
 
     # Use with Anthropic (lazy upload happens here)
     request = LLMRequest(
@@ -303,7 +303,7 @@ async with LLMRing() as service:
     response = await service.chat(request)
 
     # Manage registered files
-    files = await service.list_registered_files()
+    files = service.list_registered_files()
     await service.deregister_file(file_id)
 ```
 

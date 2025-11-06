@@ -85,10 +85,10 @@ LLMRing provides a provider-agnostic file registration system. Files are registe
 
 ```python
 # Register a file (no upload yet)
-file_id = await service.register_file("data.csv")
+file_id = service.register_file("data.csv")
 
 # List all registered files
-files = await service.list_registered_files()
+files = service.list_registered_files()
 
 # Deregister file (removes registration and all provider uploads)
 await service.deregister_file(file_id)
