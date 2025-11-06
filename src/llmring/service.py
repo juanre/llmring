@@ -368,10 +368,14 @@ class LLMRing:
         Returns:
             SHA256 hash of file content
         """
+        sha256_hash = hashlib.sha256()
         with open(file_path, "rb") as f:
-            return hashlib.sha256(f.read()).hexdigest()
+            # Read in 8KB chunks to avoid loading large files into memory
+            for chunk in iter(lambda: f.read(8192), b""):
+                sha256_hash.update(chunk)
+        return sha256_hash.hexdigest()
 
-    async def _ensure_file_uploaded(self, file_id: str, provider_type: str, model_name: str) -> str:
+    async def _ensure_file_uploaded(self, file_id: str, provider_type: str) -> str:
         """
         Ensure file is uploaded to provider, return provider file_id.
 
@@ -385,7 +389,6 @@ class LLMRing:
         Args:
             file_id: llmring file ID
             provider_type: Provider to upload to
-            model_name: Model name for purpose determination
 
         Returns:
             Provider-specific file_id
@@ -652,7 +655,7 @@ class LLMRing:
 
                 for llmring_file_id in adapted_request.files:
                     provider_file_id = await self._ensure_file_uploaded(
-                        llmring_file_id, provider_type, model_name
+                        llmring_file_id, provider_type
                     )
                     provider_file_ids.append(provider_file_id)
 
@@ -805,7 +808,7 @@ class LLMRing:
 
                 for llmring_file_id in adapted_request.files:
                     provider_file_id = await self._ensure_file_uploaded(
-                        llmring_file_id, provider_type, model_name
+                        llmring_file_id, provider_type
                     )
                     provider_file_ids.append(provider_file_id)
 
@@ -1306,14 +1309,31 @@ class LLMRing:
 
         reg_file = self._registered_files[file_id]
 
-        # Delete from all providers it was uploaded to
+        # Build list of deletion tasks
+        import asyncio
+
+        deletion_tasks = []
         for provider_type, upload in reg_file.uploads.items():
             try:
                 provider = self.get_provider(provider_type)
-                await provider.delete_file(upload.provider_file_id)
-                logger.debug(f"Deleted {file_id} from {provider_type}")
+                deletion_tasks.append(
+                    (provider_type, provider.delete_file(upload.provider_file_id))
+                )
             except Exception as e:
-                logger.warning(f"Failed to delete {file_id} from {provider_type}: {e}")
+                logger.warning(f"Could not get provider {provider_type}: {e}")
+
+        # Execute all deletions in parallel
+        if deletion_tasks:
+            results = await asyncio.gather(
+                *[task for _, task in deletion_tasks], return_exceptions=True
+            )
+
+            # Log any failures
+            for (provider_type, _), result in zip(deletion_tasks, results):
+                if isinstance(result, Exception):
+                    logger.warning(f"Failed to delete {file_id} from {provider_type}: {result}")
+                else:
+                    logger.debug(f"Deleted {file_id} from {provider_type}")
 
         # Remove from registry
         del self._registered_files[file_id]
