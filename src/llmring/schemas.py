@@ -1,5 +1,6 @@
 # ABOUTME: Pydantic schemas for LLM requests, responses, messages, and file handling.
 # ABOUTME: Defines data models used across llmring for type safety and validation.
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
 
@@ -48,7 +49,7 @@ class LLMRequest(BaseModel):
     """A request to an LLM provider."""
 
     messages: List[Message]
-    model: Optional[str] = None
+    model: str
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     reasoning_tokens: Optional[int] = Field(
@@ -96,3 +97,26 @@ class StreamChunk(BaseModel):
     finish_reason: Optional[str] = None
     usage: Optional[Dict[str, Any]] = None  # Only present in final chunk
     tool_calls: Optional[List[Dict[str, Any]]] = None
+
+
+# Internal data structures for file registration (not exported)
+
+
+@dataclass
+class ProviderFileUpload:
+    """Provider-specific file upload information."""
+
+    provider_file_id: str
+    uploaded_at: datetime
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class RegisteredFile:
+    """Internal representation of a registered file."""
+
+    id: str
+    file_path: str
+    content_hash: str
+    uploads: Dict[str, ProviderFileUpload]
+    registered_at: datetime

@@ -1,486 +1,305 @@
-# ABOUTME: Integration tests for unified file upload interface in LLMRing service layer.
-# ABOUTME: Tests upload, list, get, delete operations across providers without mocks.
+# ABOUTME: Integration tests for provider-agnostic file registration in LLMRing service layer.
+# ABOUTME: Tests register, deregister, list operations and cross-provider file usage without mocks.
 
 import os
 
 import pytest
 
-from llmring.exceptions import ProviderNotFoundError
-from llmring.schemas import FileMetadata, FileUploadResponse
 from llmring.service import LLMRing
 
 
 @pytest.mark.asyncio
-async def test_upload_file_with_explicit_provider():
-    """Test uploading a file with explicit provider parameter."""
+async def test_register_file():
+    """Test file registration returns llmring ID."""
+    ring = LLMRing()
+    try:
+        file_id = await ring.register_file("tests/fixtures/sample.txt")
+        assert file_id.startswith("llmring-file-")
+
+        # Verify file is in registered files
+        files = await ring.list_registered_files()
+        assert len(files) == 1
+        assert files[0]["id"] == file_id
+        assert files[0]["file_path"].endswith("sample.txt")
+        assert files[0]["uploads"] == {}  # No uploads yet
+
+    finally:
+        await ring.close()
+
+
+@pytest.mark.asyncio
+async def test_register_file_with_custom_id():
+    """Test file registration with custom ID."""
+    ring = LLMRing()
+    try:
+        custom_id = "test-file-123"
+        file_id = await ring.register_file("tests/fixtures/sample.txt", file_id=custom_id)
+        assert file_id == custom_id
+
+        # Verify file is registered
+        files = await ring.list_registered_files()
+        assert len(files) == 1
+        assert files[0]["id"] == custom_id
+
+    finally:
+        await ring.close()
+
+
+@pytest.mark.asyncio
+async def test_register_file_nonexistent():
+    """Test registering nonexistent file raises error."""
+    ring = LLMRing()
+    try:
+        with pytest.raises(FileNotFoundError):
+            await ring.register_file("nonexistent.txt")
+    finally:
+        await ring.close()
+
+
+@pytest.mark.asyncio
+async def test_lazy_upload_anthropic():
+    """Test file uploads to Anthropic on first use."""
     if not os.getenv("ANTHROPIC_API_KEY"):
         pytest.skip("ANTHROPIC_API_KEY not set")
 
     ring = LLMRing()
     try:
-        # Upload to Anthropic explicitly
-        response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
+        # Register file (no upload yet)
+        file_id = await ring.register_file("tests/fixtures/sample.txt")
 
-        # Verify response
-        assert isinstance(response, FileUploadResponse)
-        assert response.file_id.startswith("file_")
-        assert response.provider == "anthropic"
-        assert response.size_bytes > 0
+        # Verify no uploads yet
+        files = await ring.list_registered_files()
+        assert files[0]["uploads"] == {}
 
-        # Cleanup
-        deleted = await ring.delete_file(response.file_id)
-        assert deleted is True
+        # Use with Anthropic - should upload
+        from llmring.schemas import LLMRequest, Message
 
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_upload_file_auto_detect_provider():
-    """Test uploading a file with auto-detected provider."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Upload using model string (provider extracted from model)
-        response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
-
-        # Verify response
-        assert isinstance(response, FileUploadResponse)
-        assert response.file_id is not None
-        assert response.provider in ["anthropic", "openai", "google"]
-        assert response.size_bytes > 0
-
-        # Cleanup
-        deleted = await ring.delete_file(response.file_id)
-        assert deleted is True
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_list_files_with_explicit_provider():
-    """Test listing files with explicit provider parameter."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Upload a test file
-        upload_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
-
-        # List files from Anthropic
-        files = await ring.list_files(provider="anthropic")
-        assert isinstance(files, list)
-        assert all(isinstance(f, FileMetadata) for f in files)
-
-        # Find our uploaded file
-        found = any(f.file_id == upload_response.file_id for f in files)
-        assert found, "Uploaded file should appear in list"
-
-        # Cleanup
-        await ring.delete_file(upload_response.file_id, provider="anthropic")
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_list_files_auto_detect_provider():
-    """Test listing files with auto-detected provider."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Upload a test file
-        upload_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
-
-        # List files without specifying provider
-        files = await ring.list_files()
-        assert isinstance(files, list)
-        assert all(isinstance(f, FileMetadata) for f in files)
-
-        # Cleanup
-        await ring.delete_file(upload_response.file_id)
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_get_file_with_provider_auto_detection():
-    """Test getting file metadata with provider auto-detected from file_id."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Upload a file to Anthropic
-        upload_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
-
-        # Get file metadata without specifying provider (should auto-detect from file_id)
-        metadata = await ring.get_file(upload_response.file_id)
-        assert isinstance(metadata, FileMetadata)
-        assert metadata.file_id == upload_response.file_id
-        assert metadata.provider == "anthropic"
-        assert metadata.size_bytes == upload_response.size_bytes
-
-        # Cleanup
-        await ring.delete_file(upload_response.file_id)
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_get_file_with_explicit_provider():
-    """Test getting file metadata with explicit provider parameter."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Upload a file
-        upload_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
-
-        # Get file metadata with explicit provider
-        metadata = await ring.get_file(upload_response.file_id, provider="anthropic")
-        assert isinstance(metadata, FileMetadata)
-        assert metadata.file_id == upload_response.file_id
-        assert metadata.provider == "anthropic"
-
-        # Cleanup
-        await ring.delete_file(upload_response.file_id, provider="anthropic")
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_delete_file_with_provider_auto_detection():
-    """Test deleting a file with provider auto-detected from file_id."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Upload a file to Anthropic
-        upload_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
-
-        # Delete without specifying provider (should auto-detect from file_id)
-        deleted = await ring.delete_file(upload_response.file_id)
-        assert deleted is True
-
-        # Verify it's gone
-        files = await ring.list_files(provider="anthropic")
-        found = any(f.file_id == upload_response.file_id for f in files)
-        assert not found, "Deleted file should not appear in list"
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_delete_file_with_explicit_provider():
-    """Test deleting a file with explicit provider parameter."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Upload a file
-        upload_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
-
-        # Delete with explicit provider
-        deleted = await ring.delete_file(upload_response.file_id, provider="anthropic")
-        assert deleted is True
-
-        # Verify it's gone
-        files = await ring.list_files(provider="anthropic")
-        found = any(f.file_id == upload_response.file_id for f in files)
-        assert not found, "Deleted file should not appear in list"
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_provider_auto_detection_from_file_id_anthropic():
-    """Test that Anthropic file_id format is correctly detected."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Upload to Anthropic
-        response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
-
-        # Verify file_id format
-        assert response.file_id.startswith("file_")
-
-        # Test auto-detection
-        detected_provider = ring._detect_provider_from_file_id(response.file_id)
-        assert detected_provider == "anthropic"
-
-        # Cleanup
-        await ring.delete_file(response.file_id)
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_provider_auto_detection_from_file_id_openai():
-    """Test that OpenAI file_id format is correctly detected."""
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Upload to OpenAI
-        response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="openai:gpt-4o",
-        )
-
-        # Verify file_id format
-        assert response.file_id.startswith("file-")
-
-        # Test auto-detection
-        detected_provider = ring._detect_provider_from_file_id(response.file_id)
-        assert detected_provider == "openai"
-
-        # Cleanup
-        await ring.delete_file(response.file_id)
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_provider_auto_detection_from_file_id_google():
-    """Test that Google cache_id format is correctly detected."""
-    if not (
-        os.getenv("GEMINI_API_KEY")
-        or os.getenv("GOOGLE_API_KEY")
-        or os.getenv("GOOGLE_GEMINI_API_KEY")
-    ):
-        pytest.skip("GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GEMINI_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Upload to Google (creates cache)
-        # Google requires minimum 4096 tokens for caching
-        response = await ring.upload_file(
-            file="tests/fixtures/google_large_doc.txt",
-            model="google:gemini-2.5-flash",
-            ttl_seconds=300,
-        )
-
-        # Verify cache_id format
-        assert response.file_id.startswith("cachedContents/")
-
-        # Test auto-detection
-        detected_provider = ring._detect_provider_from_file_id(response.file_id)
-        assert detected_provider == "google"
-
-        # Cleanup
-        await ring.delete_file(response.file_id)
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_cross_provider_file_operations():
-    """Test file operations across multiple providers."""
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-
-    if not anthropic_key or not openai_key:
-        pytest.skip("Both ANTHROPIC_API_KEY and OPENAI_API_KEY required")
-
-    ring = LLMRing()
-    try:
-        # Upload to Anthropic
-        anthropic_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
-
-        # Upload to OpenAI
-        openai_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="openai:gpt-4o",
-        )
-
-        # Verify different file_ids
-        assert anthropic_response.file_id != openai_response.file_id
-        assert anthropic_response.file_id.startswith("file_")
-        assert openai_response.file_id.startswith("file-")
-
-        # Verify auto-detection works for both
-        detected_anthropic = ring._detect_provider_from_file_id(anthropic_response.file_id)
-        detected_openai = ring._detect_provider_from_file_id(openai_response.file_id)
-        assert detected_anthropic == "anthropic"
-        assert detected_openai == "openai"
-
-        # Cleanup both
-        await ring.delete_file(anthropic_response.file_id)
-        await ring.delete_file(openai_response.file_id)
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_invalid_provider_raises_error():
-    """Test that specifying an invalid provider raises ProviderNotFoundError."""
-    ring = LLMRing()
-    try:
-        with pytest.raises(ProviderNotFoundError):
-            await ring.upload_file(
-                file="tests/fixtures/sample.txt",
-                model="invalid_provider:some-model",
-            )
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_get_file_unknown_format_without_provider():
-    """Test that get_file with unknown file_id format raises error if provider not specified."""
-    ring = LLMRing()
-    try:
-        with pytest.raises(ProviderNotFoundError) as exc_info:
-            await ring.get_file("unknown_format_12345")
-
-        assert "Cannot determine provider from file_id" in str(exc_info.value)
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_delete_file_unknown_format_without_provider():
-    """Test that delete_file with unknown file_id format raises error if provider not specified."""
-    ring = LLMRing()
-    try:
-        with pytest.raises(ProviderNotFoundError) as exc_info:
-            await ring.delete_file("unknown_format_12345")
-
-        assert "Cannot determine provider from file_id" in str(exc_info.value)
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_upload_with_filelike_object():
-    """Test uploading a file from a file-like object."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Open file and upload
-        with open("tests/fixtures/sample.txt", "rb") as f:
-            response = await ring.upload_file(
-                file=f,
+        response = await ring.chat(
+            LLMRequest(
                 model="anthropic:claude-3-5-haiku-20241022",
-                filename="sample.txt",
+                messages=[Message(role="user", content="What's in this file?")],
+                files=[file_id],
+            )
+        )
+
+        assert response.content
+        assert response.model.startswith("anthropic:")
+
+        # Verify file was uploaded to Anthropic
+        files = await ring.list_registered_files()
+        assert "anthropic" in files[0]["uploads"]
+        assert files[0]["uploads"]["anthropic"]["provider_file_id"].startswith("file_")
+
+        # Cleanup
+        await ring.deregister_file(file_id)
+
+    finally:
+        await ring.close()
+
+
+@pytest.mark.asyncio
+async def test_cross_provider_file_usage():
+    """Test same file works with multiple providers."""
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
+    if not anthropic_key or not google_key:
+        pytest.skip("Both ANTHROPIC_API_KEY and GOOGLE_API_KEY required")
+
+    ring = LLMRing()
+    try:
+        from llmring.schemas import LLMRequest, Message
+
+        # Register file once
+        file_id = await ring.register_file("tests/fixtures/google_large_doc.txt")
+
+        # Use with Anthropic
+        r1 = await ring.chat(
+            LLMRequest(
+                model="anthropic:claude-3-5-haiku-20241022",
+                messages=[Message(role="user", content="Summarize this file in one sentence.")],
+                files=[file_id],
+            )
+        )
+
+        # Use with Google
+        r2 = await ring.chat(
+            LLMRequest(
+                model="google:gemini-2.5-flash",
+                messages=[Message(role="user", content="Analyze this file in one sentence.")],
+                files=[file_id],
+            )
+        )
+
+        # Both should work
+        assert r1.content
+        assert r2.content
+
+        # Verify file was uploaded to both providers
+        files = await ring.list_registered_files()
+        assert "anthropic" in files[0]["uploads"]
+        assert "google" in files[0]["uploads"]
+        assert files[0]["uploads"]["anthropic"]["provider_file_id"].startswith("file_")
+        assert files[0]["uploads"]["google"]["provider_file_id"].startswith("cachedContents/")
+
+        # Cleanup
+        await ring.deregister_file(file_id)
+
+    finally:
+        await ring.close()
+
+
+@pytest.mark.asyncio
+async def test_file_upload_caching():
+    """Test that file uploads are cached per provider."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not set")
+
+    ring = LLMRing()
+    try:
+        from llmring.schemas import LLMRequest, Message
+
+        file_id = await ring.register_file("tests/fixtures/sample.txt")
+
+        # First use - should upload
+        await ring.chat(
+            LLMRequest(
+                model="anthropic:claude-3-5-haiku-20241022",
+                messages=[Message(role="user", content="Summarize.")],
+                files=[file_id],
+            )
+        )
+
+        # Get the provider file_id
+        files = await ring.list_registered_files()
+        first_provider_file_id = files[0]["uploads"]["anthropic"]["provider_file_id"]
+
+        # Second use - should use cache (same provider file_id)
+        await ring.chat(
+            LLMRequest(
+                model="anthropic:claude-3-5-haiku-20241022",
+                messages=[Message(role="user", content="Analyze.")],
+                files=[file_id],
+            )
+        )
+
+        # Verify same provider file_id was used
+        files = await ring.list_registered_files()
+        second_provider_file_id = files[0]["uploads"]["anthropic"]["provider_file_id"]
+        assert first_provider_file_id == second_provider_file_id
+
+        # Cleanup
+        await ring.deregister_file(file_id)
+
+    finally:
+        await ring.close()
+
+
+@pytest.mark.asyncio
+async def test_deregister_file():
+    """Test cleanup from all providers."""
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
+    if not anthropic_key or not google_key:
+        pytest.skip("Both ANTHROPIC_API_KEY and GOOGLE_API_KEY required")
+
+    ring = LLMRing()
+    try:
+        from llmring.schemas import LLMRequest, Message
+
+        file_id = await ring.register_file("tests/fixtures/google_large_doc.txt")
+
+        # Upload to two providers
+        await ring.chat(
+            LLMRequest(
+                model="anthropic:claude-3-5-haiku-20241022",
+                messages=[Message(role="user", content="Hi")],
+                files=[file_id],
+            )
+        )
+        await ring.chat(
+            LLMRequest(
+                model="google:gemini-2.5-flash",
+                messages=[Message(role="user", content="Hi")],
+                files=[file_id],
+            )
+        )
+
+        # Deregister - should delete from both
+        success = await ring.deregister_file(file_id)
+        assert success
+
+        # Verify file_id no longer exists
+        files = await ring.list_registered_files()
+        assert len(files) == 0
+
+        # Trying to use it should fail
+        with pytest.raises(ValueError, match="not registered"):
+            await ring.chat(
+                LLMRequest(
+                    model="anthropic:claude-3-5-haiku-20241022",
+                    messages=[Message(role="user", content="Hi")],
+                    files=[file_id],
+                )
             )
 
-        assert isinstance(response, FileUploadResponse)
-        assert response.file_id.startswith("file_")
-        assert response.provider == "anthropic"
-        assert response.size_bytes > 0
+    finally:
+        await ring.close()
 
-        # Cleanup
-        await ring.delete_file(response.file_id)
+
+@pytest.mark.asyncio
+async def test_deregister_file_not_found():
+    """Test deregistering nonexistent file returns False."""
+    ring = LLMRing()
+    try:
+        success = await ring.deregister_file("nonexistent-id")
+        assert success is False
+    finally:
+        await ring.close()
+
+
+@pytest.mark.asyncio
+async def test_list_registered_files():
+    """Test listing registered files."""
+    ring = LLMRing()
+    try:
+        # No files initially
+        files = await ring.list_registered_files()
+        assert len(files) == 0
+
+        # Register two files
+        file_id1 = await ring.register_file("tests/fixtures/sample.txt")
+        file_id2 = await ring.register_file("tests/fixtures/google_large_doc.txt")
+
+        # List should show both
+        files = await ring.list_registered_files()
+        assert len(files) == 2
+        file_ids = [f["id"] for f in files]
+        assert file_id1 in file_ids
+        assert file_id2 in file_ids
 
     finally:
         await ring.close()
 
 
 @pytest.mark.asyncio
-async def test_list_files_with_purpose_filter():
-    """Test listing files with purpose filter."""
+async def test_file_not_registered_error():
+    """Test using unregistered file_id raises error."""
     if not os.getenv("ANTHROPIC_API_KEY"):
         pytest.skip("ANTHROPIC_API_KEY not set")
 
     ring = LLMRing()
     try:
-        # Upload with specific purpose
-        upload_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
+        from llmring.schemas import LLMRequest, Message
 
-        # List files with purpose filter
-        files = await ring.list_files(provider="anthropic", purpose="code_execution")
-        assert isinstance(files, list)
-
-        # Our file should be in the list
-        found = any(f.file_id == upload_response.file_id for f in files)
-        assert found, "Uploaded file should appear in list"
-
-        # Cleanup
-        await ring.delete_file(upload_response.file_id)
-
-    finally:
-        await ring.close()
-
-
-@pytest.mark.asyncio
-async def test_list_files_with_limit():
-    """Test listing files with limit parameter."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-
-    ring = LLMRing()
-    try:
-        # Upload a test file
-        upload_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
-
-        # List files with limit
-        files = await ring.list_files(provider="anthropic", limit=5)
-        assert isinstance(files, list)
-        assert len(files) <= 5
-
-        # Cleanup
-        await ring.delete_file(upload_response.file_id)
-
+        with pytest.raises(ValueError, match="not registered"):
+            await ring.chat(
+                LLMRequest(
+                    model="anthropic:claude-3-5-haiku-20241022",
+                    messages=[Message(role="user", content="Hi")],
+                    files=["unregistered-file-id"],
+                )
+            )
     finally:
         await ring.close()

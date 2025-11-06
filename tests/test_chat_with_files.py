@@ -155,17 +155,14 @@ async def test_llmring_chat_with_files():
         pytest.skip("ANTHROPIC_API_KEY not set")
 
     async with LLMRing() as ring:
-        # Upload file
-        file_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
+        # Register file
+        file_id = await ring.register_file("tests/fixtures/sample.txt")
 
         # Use file in chat via LLMRequest
         request = LLMRequest(
             model="anthropic:claude-3-5-haiku-20241022",
             messages=[Message(role="user", content="What is in this file?")],
-            files=[file_response.file_id],
+            files=[file_id],
         )
 
         response = await ring.chat(request)
@@ -176,7 +173,7 @@ async def test_llmring_chat_with_files():
         assert "anthropic" in response.model
 
         # Cleanup
-        await ring.delete_file(file_response.file_id, provider="anthropic")
+        await ring.deregister_file(file_id)
 
 
 @pytest.mark.asyncio
@@ -186,11 +183,14 @@ async def test_llmring_chat_with_files_openai_error():
         pytest.skip("OPENAI_API_KEY not set")
 
     async with LLMRing() as ring:
+        # Register file
+        file_id = await ring.register_file("tests/fixtures/sample.txt")
+
         # Try to use files with OpenAI
         request = LLMRequest(
             model="openai:gpt-4o",
             messages=[Message(role="user", content="What is in this file?")],
-            files=["file-xyz123"],  # Fake file ID
+            files=[file_id],
         )
 
         with pytest.raises(ValueError) as exc_info:
@@ -198,6 +198,9 @@ async def test_llmring_chat_with_files_openai_error():
 
         # Verify error message
         assert "Chat Completions API does not support file uploads" in str(exc_info.value)
+
+        # Cleanup
+        await ring.deregister_file(file_id)
 
 
 @pytest.mark.asyncio
@@ -207,17 +210,14 @@ async def test_chat_stream_with_files():
         pytest.skip("ANTHROPIC_API_KEY not set")
 
     async with LLMRing() as ring:
-        # Upload file
-        file_response = await ring.upload_file(
-            file="tests/fixtures/sample.txt",
-            model="anthropic:claude-3-5-haiku-20241022",
-        )
+        # Register file
+        file_id = await ring.register_file("tests/fixtures/sample.txt")
 
         # Use file in streaming chat
         request = LLMRequest(
             model="anthropic:claude-3-5-haiku-20241022",
             messages=[Message(role="user", content="Briefly describe this file.")],
-            files=[file_response.file_id],
+            files=[file_id],
         )
 
         # Collect stream chunks
@@ -233,7 +233,7 @@ async def test_chat_stream_with_files():
         assert len(content_chunks) > 0
 
         # Cleanup
-        await ring.delete_file(file_response.file_id, provider="anthropic")
+        await ring.deregister_file(file_id)
 
 
 @pytest.mark.asyncio

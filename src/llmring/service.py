@@ -4,9 +4,12 @@
 LLM service that manages providers and routes requests.
 """
 
+import hashlib
 import json
 import logging
 import os
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, Union
 
@@ -19,7 +22,15 @@ from llmring.providers.google_api import GoogleProvider
 from llmring.providers.ollama_api import OllamaProvider
 from llmring.providers.openai_api import OpenAIProvider
 from llmring.registry import RegistryClient, RegistryModel
-from llmring.schemas import FileMetadata, FileUploadResponse, LLMRequest, LLMResponse, StreamChunk
+from llmring.schemas import (
+    FileMetadata,
+    FileUploadResponse,
+    LLMRequest,
+    LLMResponse,
+    ProviderFileUpload,
+    RegisteredFile,
+    StreamChunk,
+)
 from llmring.services.alias_resolver import AliasResolver
 from llmring.services.cost_calculator import CostCalculator
 from llmring.services.logging_service import LoggingService
@@ -78,6 +89,8 @@ class LLMRing:
         self._registry_models: Dict[str, List[RegistryModel]] = {}
         # O(1) alias lookup: provider -> alias -> concrete model name
         self._alias_to_model: Dict[str, Dict[str, str]] = {}
+        # File registration for provider-agnostic file handling
+        self._registered_files: Dict[str, RegisteredFile] = {}
 
         # Resolve server configuration (explicit args override environment)
         prefer_saas = _env_flag_enabled(os.getenv("LLMRING_PREFER_SAAS"))
@@ -345,6 +358,92 @@ class LLMRing:
         """
         return parse_model_string(model)
 
+    def _hash_file(self, file_path: str) -> str:
+        """
+        Compute SHA256 hash of file content for staleness detection.
+
+        Args:
+            file_path: Path to file
+
+        Returns:
+            SHA256 hash of file content
+        """
+        with open(file_path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+
+    async def _ensure_file_uploaded(self, file_id: str, provider_type: str, model_name: str) -> str:
+        """
+        Ensure file is uploaded to provider, return provider file_id.
+
+        Performs lazy upload with staleness detection:
+        1. Get registered file
+        2. Re-hash to detect changes
+        3. If changed: clear uploads cache
+        4. If not uploaded to this provider: upload now
+        5. Return provider file_id
+
+        Args:
+            file_id: llmring file ID
+            provider_type: Provider to upload to
+            model_name: Model name for purpose determination
+
+        Returns:
+            Provider-specific file_id
+
+        Raises:
+            ValueError: If file_id not registered
+        """
+        # Get registered file
+        if file_id not in self._registered_files:
+            raise ValueError(
+                f"File ID '{file_id}' not registered. "
+                f"Use register_file() to register files before using them."
+            )
+
+        reg_file = self._registered_files[file_id]
+
+        # Re-hash to detect changes
+        current_hash = self._hash_file(reg_file.file_path)
+        if current_hash != reg_file.content_hash:
+            # File changed - invalidate all uploads
+            logger.debug(f"File {file_id} changed on disk, clearing upload cache")
+            reg_file.uploads = {}
+            reg_file.content_hash = current_hash
+
+        # Check if already uploaded to this provider
+        if provider_type in reg_file.uploads:
+            provider_upload = reg_file.uploads[provider_type]
+            logger.debug(
+                f"Using cached upload for {file_id} on {provider_type}: "
+                f"{provider_upload.provider_file_id}"
+            )
+            return provider_upload.provider_file_id
+
+        # Not uploaded yet - upload now
+        logger.debug(f"Uploading {file_id} to {provider_type}")
+
+        provider = self.get_provider(provider_type)
+
+        # Use generic purpose for now - can be enhanced later
+        purpose = "file"
+
+        # Upload to provider
+        upload_response = await provider.upload_file(
+            file=reg_file.file_path,
+            purpose=purpose,
+            filename=None,
+            ttl_seconds=3600,  # Default for Google
+        )
+
+        # Cache the provider file_id
+        reg_file.uploads[provider_type] = ProviderFileUpload(
+            provider_file_id=upload_response.file_id,
+            uploaded_at=datetime.now(),
+            metadata=upload_response.metadata,
+        )
+
+        return upload_response.file_id
+
     def _scoped_pinned_version(self, provider: Any, provider_type: str, profile: Optional[str]):
         """
         Set and save pinned registry version for scoped restoration.
@@ -540,6 +639,20 @@ class LLMRing:
 
                 # Could add more capability checks here in the future (streaming, etc.)
 
+            # Handle file lazy uploads
+            if adapted_request.files:
+                # Map llmring file IDs to provider file IDs
+                provider_file_ids = []
+
+                for llmring_file_id in adapted_request.files:
+                    provider_file_id = await self._ensure_file_uploaded(
+                        llmring_file_id, provider_type, model_name
+                    )
+                    provider_file_ids.append(provider_file_id)
+
+                # Replace request.files with provider file IDs
+                adapted_request.files = provider_file_ids
+
             # Send non-streaming request to provider
             response = await provider.chat(
                 messages=adapted_request.messages,
@@ -678,6 +791,20 @@ class LLMRing:
                     adapted_request.temperature = None
 
                 # Could add more capability checks here in the future
+
+            # Handle file lazy uploads
+            if adapted_request.files:
+                # Map llmring file IDs to provider file IDs
+                provider_file_ids = []
+
+                for llmring_file_id in adapted_request.files:
+                    provider_file_id = await self._ensure_file_uploaded(
+                        llmring_file_id, provider_type, model_name
+                    )
+                    provider_file_ids.append(provider_file_id)
+
+                # Replace request.files with provider file IDs
+                adapted_request.files = provider_file_ids
 
             # Get the stream from provider
             stream = await provider.chat_stream(
@@ -1102,191 +1229,120 @@ class LLMRing:
 
         return model_info
 
-    def _detect_provider_from_file_id(self, file_id: str) -> Optional[str]:
+    async def register_file(self, file: Union[str, Path], file_id: Optional[str] = None) -> str:
         """
-        Detect provider from file_id format.
+        Register a file for use across providers.
+
+        Does NOT upload to any provider yet - uploads happen lazily
+        when the file is first used in a chat request with each provider.
 
         Args:
-            file_id: File ID to analyze
+            file: Path to file
+            file_id: Optional custom ID (auto-generated UUID if not provided)
 
         Returns:
-            Provider name or None if cannot be determined
+            llmring-managed file ID (e.g., "llmring-file-uuid-123")
+
+        Example:
+            file_id = await ring.register_file("data.csv")
+
+            # Use with any provider
+            await ring.chat(LLMRequest(
+                model="anthropic:claude-sonnet",
+                files=[file_id]  # Uploads to Anthropic first time
+            ))
+
+            await ring.chat(LLMRequest(
+                model="openai:gpt-4o",
+                files=[file_id]  # Uploads to OpenAI first time
+            ))
         """
-        if file_id.startswith("file_"):
-            return "anthropic"
-        elif file_id.startswith("file-"):
-            return "openai"
-        elif file_id.startswith("cachedContents/"):
-            return "google"
-        return None
+        file_path = str(Path(file).absolute())
 
-    async def upload_file(
-        self,
-        file: Union[str, Path, Any],
-        model: str,
-        ttl_seconds: int = 3600,
-        filename: Optional[str] = None,
-        **kwargs,
-    ) -> FileUploadResponse:
-        """
-        Upload file to provider.
+        # Validate file exists
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
 
-        Args:
-            file: File path, Path object, or file-like object
-            model: Model alias (e.g., "summarizer") or provider:model string (e.g., "anthropic:claude-sonnet-4-5")
-            ttl_seconds: Time-to-live in seconds (Google only)
-            filename: Optional filename (required for file-like objects)
-            **kwargs: Additional provider-specific parameters
+        # Generate ID
+        if not file_id:
+            file_id = f"llmring-file-{uuid.uuid4()}"
 
-        Returns:
-            FileUploadResponse with file_id and metadata
+        # Hash file content
+        content_hash = self._hash_file(file_path)
 
-        Raises:
-            ProviderNotFoundError: If provider not found
-            ValueError: If model string is invalid
-        """
-        # Resolve model (like chat() does)
-        resolved_model = self.resolve_alias(model or "")
-
-        # Parse to get provider
-        provider_type, model_name = self._parse_model_string(resolved_model)
-
-        # Determine purpose based on whether it's an alias or direct model reference
-        if ":" in model:
-            # It's a direct provider:model string - use generic purpose
-            purpose = "file"
-        else:
-            # It's an alias - use alias name as purpose
-            purpose = model
-
-        # Get provider instance
-        provider_obj = self.get_provider(provider_type)
-
-        # Upload file
-        response = await provider_obj.upload_file(
-            file=file,
-            purpose=purpose,
-            ttl_seconds=ttl_seconds,
-            filename=filename,
-            **kwargs,
+        # Store registration
+        self._registered_files[file_id] = RegisteredFile(
+            id=file_id,
+            file_path=file_path,
+            content_hash=content_hash,
+            uploads={},  # Empty - uploads happen lazily
+            registered_at=datetime.now(),
         )
 
-        return response
+        logger.debug(f"Registered file {file_path} as {file_id}")
+        return file_id
 
-    async def list_files(
-        self,
-        provider: Optional[str] = None,
-        purpose: Optional[str] = None,
-        limit: Optional[int] = None,
-    ) -> List[FileMetadata]:
+    async def deregister_file(self, file_id: str) -> bool:
         """
-        List files from provider.
+        Deregister a file and clean up from all providers.
 
         Args:
-            provider: Provider to use (auto-detected if not specified)
-            purpose: Filter by purpose (optional)
-            limit: Maximum number of files to return (optional)
+            file_id: llmring file ID
 
         Returns:
-            List of FileMetadata objects
+            True if file was deregistered, False if not found
 
-        Raises:
-            ProviderNotFoundError: If provider not found or cannot be auto-detected
+        Note:
+            Deletes file from all providers it was uploaded to.
         """
-        # Determine provider
-        if provider:
-            target_provider = provider
-        else:
-            # Use first available provider - prefer anthropic > openai > google
-            for prov in ["anthropic", "openai", "google"]:
-                if prov in self.providers:
-                    target_provider = prov
-                    break
-            else:
-                raise ProviderNotFoundError(
-                    "No provider available for file listing. "
-                    f"Available providers: {list(self.providers.keys())}"
-                )
+        if file_id not in self._registered_files:
+            return False
 
-        # Get provider instance
-        provider_obj = self.get_provider(target_provider)
+        reg_file = self._registered_files[file_id]
 
-        # List files - only pass limit if specified
-        kwargs = {}
-        if purpose is not None:
-            kwargs["purpose"] = purpose
-        if limit is not None:
-            kwargs["limit"] = limit
+        # Delete from all providers it was uploaded to
+        for provider_type, upload in reg_file.uploads.items():
+            try:
+                provider = self.get_provider(provider_type)
+                await provider.delete_file(upload.provider_file_id)
+                logger.debug(f"Deleted {file_id} from {provider_type}")
+            except Exception as e:
+                logger.warning(f"Failed to delete {file_id} from {provider_type}: {e}")
 
-        files = await provider_obj.list_files(**kwargs)
+        # Remove from registry
+        del self._registered_files[file_id]
+        logger.debug(f"Deregistered file {file_id}")
+        return True
 
-        return files
-
-    async def get_file(self, file_id: str, provider: Optional[str] = None) -> FileMetadata:
+    async def list_registered_files(self) -> List[Dict[str, Any]]:
         """
-        Get file metadata from provider.
-
-        Args:
-            file_id: File ID
-            provider: Provider to use (auto-detected from file_id if not specified)
+        List all registered files in this service instance.
 
         Returns:
-            FileMetadata object
-
-        Raises:
-            ProviderNotFoundError: If provider not found or cannot be auto-detected
+            List of file info dicts with:
+            - id: llmring file ID
+            - file_path: Path to file
+            - uploads: Dict of provider uploads
+            - registered_at: Registration timestamp
         """
-        # Determine provider
-        if provider:
-            target_provider = provider
-        else:
-            target_provider = self._detect_provider_from_file_id(file_id)
-            if not target_provider:
-                raise ProviderNotFoundError(
-                    f"Cannot determine provider from file_id '{file_id}'. "
-                    "Please specify provider explicitly."
-                )
-
-        # Get provider instance
-        provider_obj = self.get_provider(target_provider)
-
-        # Get file metadata
-        metadata = await provider_obj.get_file(file_id)
-
-        return metadata
-
-    async def delete_file(self, file_id: str, provider: Optional[str] = None) -> bool:
-        """
-        Delete file from provider.
-
-        Args:
-            file_id: File ID
-            provider: Provider to use (auto-detected from file_id if not specified)
-
-        Returns:
-            True if deletion was successful
-
-        Raises:
-            ProviderNotFoundError: If provider not found or cannot be auto-detected
-        """
-        # Determine provider
-        if provider:
-            target_provider = provider
-        else:
-            target_provider = self._detect_provider_from_file_id(file_id)
-            if not target_provider:
-                raise ProviderNotFoundError(
-                    f"Cannot determine provider from file_id '{file_id}'. "
-                    "Please specify provider explicitly."
-                )
-
-        # Get provider instance
-        provider_obj = self.get_provider(target_provider)
-
-        # Delete file
-        success = await provider_obj.delete_file(file_id)
-
-        return success
+        result = []
+        for file_id, reg_file in self._registered_files.items():
+            result.append(
+                {
+                    "id": reg_file.id,
+                    "file_path": reg_file.file_path,
+                    "uploads": {
+                        provider: {
+                            "provider_file_id": upload.provider_file_id,
+                            "uploaded_at": upload.uploaded_at.isoformat(),
+                            "metadata": upload.metadata,
+                        }
+                        for provider, upload in reg_file.uploads.items()
+                    },
+                    "registered_at": reg_file.registered_at.isoformat(),
+                }
+            )
+        return result
 
     async def close(self):
         """Clean up resources."""
