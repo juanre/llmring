@@ -403,7 +403,13 @@ class LLMRing:
         reg_file = self._registered_files[file_id]
 
         # Re-hash to detect changes
-        current_hash = self._hash_file(reg_file.file_path)
+        try:
+            current_hash = self._hash_file(reg_file.file_path)
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"Registered file not found on disk: {reg_file.file_path}. "
+                f"File may have been moved or deleted after registration with ID '{file_id}'."
+            )
         if current_hash != reg_file.content_hash:
             # File changed - invalidate all uploads
             logger.debug(f"File {file_id} changed on disk, clearing upload cache")
@@ -439,7 +445,7 @@ class LLMRing:
         reg_file.uploads[provider_type] = ProviderFileUpload(
             provider_file_id=upload_response.file_id,
             uploaded_at=datetime.now(),
-            metadata=upload_response.metadata,
+            metadata=upload_response.metadata or {},
         )
 
         return upload_response.file_id
@@ -1324,6 +1330,7 @@ class LLMRing:
             - file_path: Path to file
             - uploads: Dict of provider uploads
             - registered_at: Registration timestamp
+            - content_hash: SHA256 hash of file content
         """
         result = []
         for file_id, reg_file in self._registered_files.items():
@@ -1340,6 +1347,7 @@ class LLMRing:
                         for provider, upload in reg_file.uploads.items()
                     },
                     "registered_at": reg_file.registered_at.isoformat(),
+                    "content_hash": reg_file.content_hash,
                 }
             )
         return result

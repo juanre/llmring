@@ -303,3 +303,70 @@ async def test_file_not_registered_error():
             )
     finally:
         await ring.close()
+
+
+@pytest.mark.asyncio
+async def test_file_staleness_detection():
+    """Test that file changes on disk are detected and cache invalidated."""
+    import tempfile
+
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not set")
+
+    ring = LLMRing()
+    temp_file = None
+    file_id = None
+
+    try:
+        from llmring.schemas import LLMRequest, Message
+
+        # Create temp file
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+            f.write("Original content for staleness test")
+            temp_file = f.name
+
+        # Register file
+        file_id = await ring.register_file(temp_file)
+
+        # Use with Anthropic (first upload)
+        response1 = await ring.chat(
+            LLMRequest(
+                model="anthropic:claude-3-5-haiku-20241022",
+                messages=[Message(role="user", content="What does this say?")],
+                files=[file_id],
+            )
+        )
+        assert response1.content
+
+        # Get registered file to check state
+        files = await ring.list_registered_files()
+        reg_file = next(f for f in files if f["id"] == file_id)
+        assert "anthropic" in reg_file["uploads"]
+        original_hash = reg_file["content_hash"]
+
+        # Modify file content
+        with open(temp_file, "w") as f:
+            f.write("Modified content - this should be detected")
+
+        # Use again - should detect change and re-upload
+        response2 = await ring.chat(
+            LLMRequest(
+                model="anthropic:claude-3-5-haiku-20241022",
+                messages=[Message(role="user", content="What does it say now?")],
+                files=[file_id],
+            )
+        )
+        assert response2.content
+
+        # Verify hash was updated
+        files_after = await ring.list_registered_files()
+        reg_file_after = next(f for f in files_after if f["id"] == file_id)
+        assert reg_file_after["content_hash"] != original_hash
+
+    finally:
+        # Cleanup
+        if file_id:
+            await ring.deregister_file(file_id)
+        if temp_file and os.path.exists(temp_file):
+            os.unlink(temp_file)
+        await ring.close()
