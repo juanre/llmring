@@ -77,46 +77,30 @@ response.tool_calls      # List[Dict]: Function calls if any
 response.parsed          # Any: Parsed structured output (if response_format used)
 ```
 
-### FileUploadResponse
+### File Registration
 
-Response schema from file upload operations.
+LLMRing provides a provider-agnostic file registration system. Files are registered once and uploaded lazily on first use with each provider.
 
-```python
-from llmring import FileUploadResponse
-
-response = await service.upload_file(file_path, model="openai:gpt-4o")
-
-# Available fields:
-response.file_id         # str: Unique file identifier
-response.provider        # str: Provider name (e.g., "openai", "anthropic")
-response.filename        # str: Original filename
-response.size_bytes      # int: File size in bytes
-response.created_at      # datetime: Upload timestamp
-response.purpose         # str: File purpose
-response.metadata        # Dict: Provider-specific metadata
-```
-
-### FileMetadata
-
-Metadata schema for uploaded files.
+**Methods:**
 
 ```python
-from llmring import FileMetadata
+# Register a file (no upload yet)
+file_id = await service.register_file("data.csv")
 
-metadata = await service.get_file_metadata(file_id)
+# List all registered files
+files = await service.list_registered_files()
 
-# Available fields:
-metadata.file_id         # str: Unique file identifier
-metadata.provider        # str: Provider name
-metadata.filename        # str: Original filename
-metadata.size_bytes      # int: File size in bytes
-metadata.created_at      # datetime: Upload timestamp
-metadata.purpose         # str: File purpose
-metadata.status          # str: "uploaded", "processing", "ready", "error", "expired"
-metadata.metadata        # Dict: Provider-specific metadata
+# Deregister file (removes registration and all provider uploads)
+await service.deregister_file(file_id)
 ```
 
-See [File Uploads Documentation](file-uploads.md) for complete details on file upload operations.
+**Key Concepts:**
+- **Provider-agnostic**: Register once, use with any provider
+- **Lazy uploads**: Upload happens on first use per provider, not at registration
+- **Staleness detection**: Files are re-hashed before each use to detect changes
+- **Cross-provider tracking**: Each provider maintains its own upload
+
+See [File Registration Documentation](file-uploads.md) for complete details.
 
 ## Provider-Specific Features
 

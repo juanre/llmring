@@ -272,42 +272,57 @@ request = LLMRequest(
 )
 ```
 
-## File Uploads
+## File Registration
 
-Upload files once and reference them across multiple requests for efficient file handling:
+Register files once and use them with any provider. Files are uploaded lazily on first use:
 
 ```python
 from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
-    # Upload file once
-    file_resp = await service.upload_file("data.csv", model="anthropic:claude-3-5-haiku-20241022")
+    # Register file once (no upload yet)
+    file_id = await service.register_file("data.csv")
 
-    # Use many times with different prompts
+    # Use with Anthropic (lazy upload happens here)
     request = LLMRequest(
         model="anthropic:claude-3-5-haiku-20241022",
         messages=[Message(role="user", content="Analyze this data")],
-        files=[file_resp.file_id],
+        files=[file_id],
         tools=[{"type": "code_execution"}]
     )
 
     response = await service.chat(request)
 
-    # Manage files
-    files = await service.list_files()
-    metadata = await service.get_file(file_resp.file_id)
-    await service.delete_file(file_resp.file_id)
+    # Use same file with Google (separate upload happens automatically)
+    request = LLMRequest(
+        model="google:gemini-2.5-flash",
+        messages=[Message(role="user", content="Summarize this data")],
+        files=[file_id]
+    )
+
+    response = await service.chat(request)
+
+    # Manage registered files
+    files = await service.list_registered_files()
+    await service.deregister_file(file_id)
 ```
+
+**Key Features:**
+
+- **Provider-agnostic**: Register once, use with any provider (Anthropic, OpenAI, Google)
+- **Lazy uploads**: Files upload only when first used, not at registration
+- **Automatic staleness detection**: Files are re-hashed before each use to detect changes
+- **Cross-provider caching**: Upload tracking per provider prevents redundant uploads
 
 **Provider Support:**
 
-| Provider | Upload | Use in Chat | Notes |
-|----------|--------|-------------|-------|
-| **Anthropic** | ✅ Files API | ✅ Document blocks | 500MB limit, code execution |
-| **OpenAI** | ✅ Files API | ⚠️ Assistants only | 512MB limit, not in Chat Completions |
-| **Google** | ✅ Context Caching | ✅ Cached content | Text-only, TTL-based |
+| Provider | Lazy Upload | Use in Chat | Notes |
+|----------|-------------|-------------|-------|
+| **Anthropic** | ✅ On first use | ✅ Document blocks | 500MB limit, code execution |
+| **OpenAI** | ✅ On first use | ⚠️ Assistants only | 512MB limit, not in Chat Completions |
+| **Google** | ✅ On first use | ✅ Cached content | Text-only, TTL-based |
 
-See [File Uploads Documentation](docs/file-uploads.md) for complete guide.
+See [File Registration Documentation](docs/file-uploads.md) for complete guide.
 
 ## Current Limitations & Workarounds
 
@@ -320,7 +335,7 @@ LLMRing provides a unified interface for core LLM functionality. Some advanced p
 - **Tool calling** - Function calling with native provider support
 - **Structured output** - JSON schema across all providers
 - **Vision & multimodal** - Images, documents, PDFs
-- **File uploads** - Upload-once-reference-many pattern (v1.4.0+)
+- **File registration** - Provider-agnostic registration with lazy uploads (v1.5.0+)
 - **Provider fallback** - Automatic failover between models
 - **Cost tracking** - Token usage and cost calculation
 

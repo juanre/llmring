@@ -1,15 +1,16 @@
-# File Uploads
+# File Registration
 
 ## Overview
 
-LLMRing provides a unified file upload API that enables efficient file handling across Anthropic, OpenAI, and Google providers. Upload files once and reference them across multiple chat requests, reducing token usage and improving performance.
+LLMRing provides a provider-agnostic file registration system that enables efficient file handling across all LLM providers. Register files once and use them anywhere with lazy uploads that happen automatically on first use per provider.
 
 **Key benefits:**
-- **Upload once, use many times** - Reference files across multiple requests
+- **Provider-agnostic** - Register once, use with any provider (Anthropic, OpenAI, Google)
+- **Lazy uploads** - Files upload only when first used, not at registration
+- **Automatic staleness detection** - Files are re-hashed before each use to detect changes
+- **Cross-provider caching** - Upload tracking per provider prevents redundant uploads
 - **Reduce token costs** - File content doesn't count against message token limits
-- **Enable code execution** - Upload datasets for analysis with Anthropic's code execution tool
-- **Optimize caching** - Use Google's context caching for repeated document access
-- **Build knowledge bases** - Upload documents for OpenAI Assistants API
+- **Enable code execution** - Use datasets for analysis with Anthropic's code execution tool
 
 ## Quick Start
 
@@ -17,216 +18,155 @@ LLMRing provides a unified file upload API that enables efficient file handling 
 from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
-    # Upload a file
-    file_resp = await service.upload_file(
-        "data.csv",
-        model="anthropic:claude-3-5-haiku-20241022"
-    )
+    # Register a file (doesn't upload yet)
+    file_id = await service.register_file("data.csv")
 
-    # Use in chat request
+    # Use with Anthropic (lazy upload happens here)
     request = LLMRequest(
         model="anthropic:claude-sonnet-4-5",
         messages=[Message(role="user", content="Analyze this CSV")],
-        files=[file_resp.file_id],
+        files=[file_id],
         tools=[{"type": "code_execution"}]
     )
 
     response = await service.chat(request)
     print(response.content)
 
-    # Clean up
-    await service.delete_file(file_resp.file_id)
+    # Use same file with Google (separate upload happens automatically)
+    request = LLMRequest(
+        model="google:gemini-2.5-flash",
+        messages=[Message(role="user", content="Summarize this data")],
+        files=[file_id]
+    )
+
+    response = await service.chat(request)
+    print(response.content)
+
+    # Clean up registration
+    await service.deregister_file(file_id)
 ```
 
 ---
 
 ## API Reference
 
-### `upload_file()`
+### `register_file()`
 
-Upload a file and receive a `file_id` for reuse across requests.
+Register a file for use with any provider. Files are not uploaded until first use.
 
 ```python
-async def upload_file(
-    file: Union[str, Path, BinaryIO],
-    model: str,
-    ttl_seconds: Optional[int] = None,
-    filename: Optional[str] = None,
-    **kwargs
-) -> FileUploadResponse
+async def register_file(
+    file_path: Union[str, Path]
+) -> str
 ```
 
 **Parameters:**
-- `file`: File path (string/Path) or file-like object (BinaryIO)
-- `model`: Model alias or provider:model reference that will use this file
-  - Use alias: `"summarizer"` (provider-agnostic, recommended)
-  - Use direct reference: `"anthropic:claude-3-5-haiku-20241022"`
-  - Provider is auto-detected from the model
-- `ttl_seconds`: Cache TTL for Google (default: 3600)
-- `filename`: Override filename for upload
-- `**kwargs`: Provider-specific parameters
+- `file_path`: Path to the file to register (string or Path object)
 
-**Returns:** `FileUploadResponse`
-```python
-FileUploadResponse(
-    file_id="file_abc123",          # Reference ID for file
-    provider="anthropic",            # Provider name
-    filename="data.csv",             # Original filename
-    size_bytes=12345,                # File size in bytes
-    created_at=datetime(...),        # Upload timestamp
-    purpose="code_execution",        # File purpose
-    metadata={}                      # Provider-specific metadata
-)
-```
+**Returns:** `str` - A unique file ID for referencing the file in chat requests
 
 **Raises:**
-- `FileSizeError` - File exceeds provider limits
-- `InvalidFileFormatError` - File type not supported
-- `FileAccessError` - Cannot read file
-- `ProviderResponseError` - Provider API error
+- `FileNotFoundError` - File doesn't exist
+- `ValueError` - File path is invalid
 
 **Examples:**
 
 ```python
-# Upload from file path with alias (provider-agnostic)
-file_resp = await service.upload_file(
-    "dataset.csv",
-    model="summarizer"
-)
+# Register a file
+file_id = await service.register_file("dataset.csv")
 
-# Upload from file-like object
-with open("document.txt", "rb") as f:
-    file_resp = await service.upload_file(
-        f,
-        model="anthropic:claude-3-5-haiku-20241022",
-        filename="document.txt"
-    )
-
-# Upload with direct model reference
-file_resp = await service.upload_file(
-    "data.json",
-    model="anthropic:claude-3-5-haiku-20241022"
-)
-
-# Upload to Google with custom TTL
-file_resp = await service.upload_file(
-    "large_doc.txt",
-    model="google:gemini-2.5-flash",
-    ttl_seconds=7200  # 2 hours
-)
+# Register from Path object
+from pathlib import Path
+file_id = await service.register_file(Path("data.json"))
 ```
+
+**How it works:**
+1. File path is validated but not read yet
+2. A unique file ID is generated and stored
+3. File metadata is tracked internally
+4. On first use with a provider, the file is hashed and uploaded
+5. Subsequent uses check the hash to detect changes
+6. Each provider tracks its own upload separately
 
 ---
 
-### `list_files()`
+### `list_registered_files()`
 
-List uploaded files for a provider.
+List all currently registered files.
 
 ```python
-async def list_files(
-    provider: Optional[str] = None,
-    purpose: Optional[str] = None,
-    limit: int = 100
-) -> List[FileMetadata]
+async def list_registered_files() -> List[Dict[str, str]]
 ```
 
-**Parameters:**
-- `provider`: Filter by provider (default: None)
-- `purpose`: Filter by purpose (default: None, not all providers support)
-- `limit`: Maximum files to return (default: 100)
-
-**Returns:** List of `FileMetadata` objects
+**Returns:** List of dictionaries with file information
+```python
+[
+    {
+        "file_id": "reg_abc123",
+        "file_path": "/path/to/data.csv",
+        "registered_at": "2024-01-15T10:30:00Z"
+    },
+    ...
+]
+```
 
 **Example:**
 
 ```python
-# List all files for Anthropic
-files = await service.list_files(provider="anthropic")
+# List all registered files
+files = await service.list_registered_files()
 
 for file in files:
-    print(f"{file.file_id}: {file.filename} ({file.size_bytes} bytes)")
+    print(f"{file['file_id']}: {file['file_path']}")
 ```
 
 ---
 
-### `get_file()`
+### `deregister_file()`
 
-Get metadata for a specific file.
-
-```python
-async def get_file(
-    file_id: str,
-    provider: Optional[str] = None
-) -> FileMetadata
-```
-
-**Parameters:**
-- `file_id`: File ID returned from `upload_file()`
-- `provider`: Provider name (default: auto-detect from file_id)
-
-**Returns:** `FileMetadata`
-```python
-FileMetadata(
-    file_id="file_abc123",
-    provider="anthropic",
-    filename="data.csv",
-    size_bytes=12345,
-    created_at=datetime(...),
-    purpose="code_execution",
-    status="ready",
-    metadata={}
-)
-```
-
-**Example:**
+Remove a file registration and clean up all provider uploads.
 
 ```python
-metadata = await service.get_file("file_abc123")
-print(f"File: {metadata.filename}, Status: {metadata.status}")
-```
-
----
-
-### `delete_file()`
-
-Delete an uploaded file.
-
-```python
-async def delete_file(
-    file_id: str,
-    provider: Optional[str] = None
+async def deregister_file(
+    file_id: str
 ) -> bool
 ```
 
 **Parameters:**
-- `file_id`: File ID to delete
-- `provider`: Provider name (default: auto-detect from file_id)
+- `file_id`: File ID returned from `register_file()`
 
 **Returns:** `True` if successful
+
+**What it does:**
+1. Removes the file registration
+2. Deletes uploaded versions from all providers
+3. Clears internal tracking metadata
 
 **Example:**
 
 ```python
-deleted = await service.delete_file("file_abc123")
-assert deleted
+# Clean up when done
+await service.deregister_file(file_id)
 ```
 
 ---
 
 ## Provider Comparison
 
-Different providers implement file uploads differently. LLMRing abstracts these differences while preserving provider-specific capabilities.
+LLMRing's file registration system abstracts provider differences while enabling cross-provider file usage. When you register a file, it can be used with any provider - each provider handles uploads independently.
 
 | Feature | Anthropic | OpenAI | Google |
 |---------|-----------|--------|--------|
 | **Upload Method** | Files API | Files API | Context Caching |
-| **Reference ID** | `file_` prefix | `file-` prefix | `cachedContents/` prefix |
+| **Lazy Upload** | ✅ On first use | ✅ On first use | ✅ On first use |
+| **Provider ID Format** | `file_` prefix | `file-` prefix | `cachedContents/` prefix |
 | **Max File Size** | 500 MB | 512 MB | N/A (text-only) |
 | **Storage Limit** | 100 GB/org | Per account | N/A |
 | **TTL** | Permanent | Permanent | Configurable (default 60 min) |
 | **File Types** | Any | Any | Text only (UTF-8) |
 | **Use Case** | Code execution, analysis | Assistants API | Cost optimization |
 | **Works with Chat** | ✅ Yes | ❌ No (Assistants only) | ✅ Yes |
+| **Staleness Detection** | ✅ Hash checked | ✅ Hash checked | ✅ Hash checked |
 
 ### Anthropic Files API
 
@@ -280,7 +220,7 @@ Different providers implement file uploads differently. LLMRing abstracts these 
 **Cache ID Format:** `cachedContents/abc123def456...`
 
 **Key Difference:**
-- Google doesn't have discrete "files" - `upload_file()` creates a cache
+- Google doesn't have discrete "files" - registering creates a cache on first use
 - File content converted to text and cached
 - Binary files will raise `ValueError` about UTF-8 encoding
 
@@ -288,62 +228,72 @@ Different providers implement file uploads differently. LLMRing abstracts these 
 
 ## Complete Examples
 
-### Example 1: Anthropic Code Execution with CSV
+### Example 1: Cross-Provider File Usage
 
-Upload a dataset and analyze it with Claude's code execution tool:
+Register a file once and use it with multiple providers:
 
 ```python
 from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
-    # Upload dataset
-    file_resp = await service.upload_file(
-        "sales_data.csv",
-        model="anthropic:claude-3-5-haiku-20241022"
-    )
+    # Register file once (no upload yet)
+    file_id = await service.register_file("sales_data.csv")
 
-    print(f"Uploaded: {file_resp.file_id} ({file_resp.size_bytes} bytes)")
+    print(f"Registered: {file_id}")
 
-    # Analyze with code execution
+    # Use with Anthropic (lazy upload happens here)
     request = LLMRequest(
         model="anthropic:claude-sonnet-4-5",
         messages=[Message(
             role="user",
             content="Analyze this sales data and calculate total revenue by quarter"
         )],
-        files=[file_resp.file_id],
+        files=[file_id],
         tools=[{"type": "code_execution"}],
         max_tokens=4000
     )
 
     response = await service.chat(request)
-    print(response.content)
+    print(f"Anthropic: {response.content}")
 
-    # Clean up
-    await service.delete_file(file_resp.file_id, provider="anthropic")
+    # Use same file with Google (separate upload happens automatically)
+    request = LLMRequest(
+        model="google:gemini-2.5-flash",
+        messages=[Message(
+            role="user",
+            content="Summarize the sales trends"
+        )],
+        files=[file_id]
+    )
+
+    response = await service.chat(request)
+    print(f"Google: {response.content}")
+
+    # Clean up (removes registration and all provider uploads)
+    await service.deregister_file(file_id)
 ```
 
 ---
 
-### Example 2: Multiple Files with Anthropic
+### Example 2: Multiple Files in Single Request
 
-Reference multiple files in a single request:
+Register and use multiple files together:
 
 ```python
 async with LLMRing() as service:
-    # Upload multiple files
-    file1 = await service.upload_file("q1_sales.csv", model="anthropic:claude-3-5-haiku-20241022")
-    file2 = await service.upload_file("q2_sales.csv", model="anthropic:claude-3-5-haiku-20241022")
-    file3 = await service.upload_file("q3_sales.csv", model="anthropic:claude-3-5-haiku-20241022")
+    # Register multiple files
+    file1 = await service.register_file("q1_sales.csv")
+    file2 = await service.register_file("q2_sales.csv")
+    file3 = await service.register_file("q3_sales.csv")
 
-    # Analyze all files together
+    # Analyze all files together (uploads happen on first use)
     request = LLMRequest(
         model="anthropic:claude-sonnet-4-5",
         messages=[Message(
             role="user",
             content="Compare quarterly sales trends across all three files"
         )],
-        files=[file1.file_id, file2.file_id, file3.file_id],
+        files=[file1, file2, file3],
         tools=[{"type": "code_execution"}],
         max_tokens=4000
     )
@@ -351,125 +301,97 @@ async with LLMRing() as service:
     response = await service.chat(request)
     print(response.content)
 
-    # Clean up
-    for file_id in [file1.file_id, file2.file_id, file3.file_id]:
-        await service.delete_file(file_id)
+    # Clean up all registrations
+    for file_id in [file1, file2, file3]:
+        await service.deregister_file(file_id)
 ```
 
 ---
 
-### Example 3: OpenAI File Management
+### Example 3: File Management Operations
 
-Upload and manage files for OpenAI (note: use with Assistants API, not Chat):
+List and manage registered files:
 
 ```python
 from llmring import LLMRing
 
 async with LLMRing() as service:
-    # Upload file
-    file_resp = await service.upload_file(
-        "knowledge_base.txt",
-        model="openai:gpt-4o-mini"
-    )
+    # Register some files
+    file1 = await service.register_file("data1.csv")
+    file2 = await service.register_file("data2.csv")
+    file3 = await service.register_file("data3.csv")
 
-    print(f"Uploaded to OpenAI: {file_resp.file_id}")
-
-    # List all OpenAI files
-    files = await service.list_files(provider="openai")
+    # List all registered files
+    files = await service.list_registered_files()
+    print(f"Registered files: {len(files)}")
     for file in files:
-        print(f"- {file.filename}: {file.file_id} ({file.purpose})")
+        print(f"- {file['file_id']}: {file['file_path']}")
 
-    # Get file metadata
-    metadata = await service.get_file(file_resp.file_id, provider="openai")
-    print(f"Status: {metadata.status}")
+    # Use the files with different providers
+    # ... chat operations ...
 
-    # Delete file
-    deleted = await service.delete_file(file_resp.file_id, provider="openai")
-    print(f"Deleted: {deleted}")
-```
+    # Clean up specific file
+    await service.deregister_file(file1)
 
-**Important:** To use uploaded files with OpenAI, use the Assistants API via raw SDK access:
-
-```python
-async with LLMRing() as service:
-    # Upload file
-    file_resp = await service.upload_file(
-        "document.pdf",
-        model="openai:gpt-4o"
-    )
-
-    # Access OpenAI SDK directly
-    openai_client = service.get_provider("openai").client
-
-    # Create assistant with file
-    assistant = await openai_client.beta.assistants.create(
-        name="Document Analyst",
-        instructions="Analyze documents",
-        model="gpt-4o",
-        tools=[{"type": "file_search"}],
-        tool_resources={
-            "file_search": {
-                "vector_stores": [{
-                    "file_ids": [file_resp.file_id]
-                }]
-            }
-        }
-    )
-
-    # Use assistant (see OpenAI Assistants API docs)
+    # Verify it's gone
+    remaining = await service.list_registered_files()
+    print(f"Remaining files: {len(remaining)}")
 ```
 
 ---
 
-### Example 4: Google Context Caching Workflow
+### Example 4: Automatic Staleness Detection
 
-Cache large documents for cost optimization:
+Files are re-hashed before each use to detect changes:
 
 ```python
+from llmring import LLMRing, LLMRequest, Message
+from pathlib import Path
+
 async with LLMRing() as service:
-    # Upload large document (creates cache)
-    file_resp = await service.upload_file(
-        "legal_document.txt",  # Must be text file
-        model="google:gemini-2.5-flash",
-        ttl_seconds=7200  # 2 hour cache
+    file_path = Path("dynamic_data.csv")
+
+    # Register file
+    file_id = await service.register_file(file_path)
+
+    # First use - uploads to Anthropic
+    request = LLMRequest(
+        model="anthropic:claude-sonnet-4-5",
+        messages=[Message(role="user", content="Analyze this data")],
+        files=[file_id],
+        tools=[{"type": "code_execution"}]
     )
+    response = await service.chat(request)
+    print(f"First analysis: {response.content}")
 
-    print(f"Cached: {file_resp.file_id}")
-    print(f"Expires: {file_resp.metadata.get('expire_time')}")
+    # Simulate file update
+    with open(file_path, "a") as f:
+        f.write("\nnew,data,row")
 
-    # Use cached content in multiple requests (90% cost savings!)
-    for question in [
-        "Summarize the main points",
-        "What are the legal obligations?",
-        "Who are the parties involved?"
-    ]:
-        request = LLMRequest(
-            model="google:gemini-2.5-flash",
-            messages=[Message(role="user", content=question)],
-            files=[file_resp.file_id]  # Reference cached content
-        )
+    # Second use - detects change and re-uploads automatically
+    request = LLMRequest(
+        model="anthropic:claude-sonnet-4-5",
+        messages=[Message(role="user", content="Analyze updated data")],
+        files=[file_id],
+        tools=[{"type": "code_execution"}]
+    )
+    response = await service.chat(request)
+    print(f"Updated analysis: {response.content}")
 
-        response = await service.chat(request)
-        print(f"\nQ: {question}")
-        print(f"A: {response.content}")
-
-    # Cache auto-expires after TTL, or delete manually
-    await service.delete_file(file_resp.file_id, provider="google")
+    # Clean up
+    await service.deregister_file(file_id)
 ```
 
 ---
 
-### Example 5: Streaming with Files
+### Example 5: Streaming with Registered Files
 
-Stream responses while using uploaded files:
+Stream responses while using registered files:
 
 ```python
 async with LLMRing() as service:
-    # Upload file
-    file_resp = await service.upload_file(
-        "data.csv",
-        model="anthropic:claude-3-5-haiku-20241022"
-    )
+    # Register file
+    file_id = await service.register_file("data.csv")
 
     # Stream response
     request = LLMRequest(
@@ -478,7 +400,7 @@ async with LLMRing() as service:
             role="user",
             content="Briefly analyze this data"
         )],
-        files=[file_resp.file_id],
+        files=[file_id],
         tools=[{"type": "code_execution"}]
     )
 
@@ -489,7 +411,7 @@ async with LLMRing() as service:
     print()
 
     # Clean up
-    await service.delete_file(file_resp.file_id)
+    await service.deregister_file(file_id)
 ```
 
 ---
@@ -498,21 +420,41 @@ async with LLMRing() as service:
 
 ### Common Errors and Solutions
 
+#### FileNotFoundError
+
+```python
+try:
+    file_id = await service.register_file("nonexistent.csv")
+except FileNotFoundError as e:
+    print(f"File not found: {e}")
+    # Solution: Verify file path exists before registration
+```
+
+---
+
 #### FileSizeError
+
+File size validation happens during upload (on first use), not registration:
 
 ```python
 from llmring.exceptions import FileSizeError
 
 try:
-    file_resp = await service.upload_file(
-        "huge_file.csv",
-        model="anthropic:claude-3-5-haiku-20241022"
+    # Register large file (succeeds)
+    file_id = await service.register_file("huge_file.csv")
+
+    # Use with Anthropic (upload happens here, may fail)
+    request = LLMRequest(
+        model="anthropic:claude-sonnet-4-5",
+        messages=[Message(role="user", content="Analyze")],
+        files=[file_id]
     )
+    response = await service.chat(request)
 except FileSizeError as e:
     print(f"File too large: {e.file_size} bytes")
     print(f"Maximum allowed: {e.max_size} bytes")
     print(f"Provider: {e.provider}")
-    # Solution: Split file or compress it
+    # Solution: Split file or use a different provider
 ```
 
 **Provider Limits:**
@@ -522,129 +464,97 @@ except FileSizeError as e:
 
 ---
 
-#### InvalidFileFormatError
+#### Invalid File Format
 
 ```python
-from llmring.exceptions import InvalidFileFormatError
-
 try:
-    # Google only accepts text files
-    file_resp = await service.upload_file(
-        "image.png",
-        model="google:gemini-2.5-flash"
+    # Register binary file
+    file_id = await service.register_file("image.png")
+
+    # Try to use with Google (will fail - Google requires text)
+    request = LLMRequest(
+        model="google:gemini-2.5-flash",
+        messages=[Message(role="user", content="Analyze")],
+        files=[file_id]
     )
+    response = await service.chat(request)
 except ValueError as e:
-    print(f"Invalid format: {e}")
-    # Google requires UTF-8 text files
-```
-
-**Solution:** Convert binary files to text or use different provider.
-
----
-
-#### FileAccessError
-
-```python
-from llmring.exceptions import FileAccessError
-from pathlib import Path
-
-file_path = "data.csv"
-if not Path(file_path).exists():
-    print(f"File not found: {file_path}")
-else:
-    try:
-        file_resp = await service.upload_file(file_path)
-    except FileAccessError as e:
-        print(f"Cannot read file: {e}")
+    print(f"Invalid format for Google: {e}")
+    # Solution: Use text files with Google or different provider
 ```
 
 ---
 
-#### OpenAI Chat Completions Error
+#### OpenAI Chat Completions Not Supported
 
 ```python
 # OpenAI files don't work with Chat Completions API
+file_id = await service.register_file("document.pdf")
+
 request = LLMRequest(
     model="openai:gpt-4o",
     messages=[Message(role="user", content="Analyze this")],
-    files=["file-abc123"]  # Will raise ValueError
+    files=[file_id]
 )
 
 try:
     response = await service.chat(request)
 except ValueError as e:
     print(e)
-    # "Chat Completions API does not support file uploads.
-    #  Use Assistants API instead."
+    # "OpenAI Chat Completions API does not support file uploads"
 ```
 
-**Solution:** Use Assistants API with direct SDK access (see Example 3).
-
----
-
-#### ProviderResponseError
-
-```python
-from llmring.exceptions import ProviderResponseError
-
-try:
-    # Invalid file_id
-    metadata = await service.get_file("file_invalid_id")
-except ProviderResponseError as e:
-    print(f"Provider error: {e}")
-    # Handle API errors (not found, permission denied, etc.)
-```
+**Solution:** Use Anthropic or Google for file-based chat interactions.
 
 ---
 
 ## Best Practices
 
-### 1. Clean Up Files
+### 1. Clean Up Registrations
 
-Always delete files when done to avoid storage costs:
+Always deregister files when done to clean up provider uploads:
 
 ```python
-file_resp = await service.upload_file("data.csv")
+file_id = await service.register_file("data.csv")
 try:
-    # Use file
+    # Use file with various providers
     response = await service.chat(request)
 finally:
-    # Always clean up
-    await service.delete_file(file_resp.file_id)
+    # Clean up registration and all provider uploads
+    await service.deregister_file(file_id)
 ```
 
 ---
 
-### 2. Choose the Right Provider
+### 2. Register Once, Use Everywhere
 
-Match provider to your use case:
+The power of file registration is cross-provider reuse:
 
 ```python
-# Code execution → Anthropic
-file_resp = await service.upload_file(
-    "dataset.csv",
-    model="anthropic:claude-3-5-haiku-20241022"
-)
+# Register once
+file_id = await service.register_file("analysis_data.csv")
 
-# Cost optimization for repeated access → Google
-file_resp = await service.upload_file(
-    "large_doc.txt",
-    model="google:gemini-2.5-flash",
-    ttl_seconds=3600
-)
+# Use with multiple providers - uploads happen automatically
+providers = ["anthropic:claude-sonnet-4-5", "google:gemini-2.5-flash"]
 
-# Knowledge base (Assistants) → OpenAI
-file_resp = await service.upload_file(
-    "knowledge.txt",
-    model="openai:gpt-4o-mini"
-)
+for model in providers:
+    request = LLMRequest(
+        model=model,
+        messages=[Message(role="user", content="Analyze this data")],
+        files=[file_id]
+    )
+    response = await service.chat(request)
+    print(f"{model}: {response.content[:100]}...")
+
+# Clean up once
+await service.deregister_file(file_id)
 ```
 
 ---
 
-### 3. Validate Files Before Upload
+### 3. Validate Files Before Registration
 
-Check file size and format:
+Check file exists and size before registering:
 
 ```python
 from pathlib import Path
@@ -660,175 +570,205 @@ max_size = 500 * 1024 * 1024
 if file_path.stat().st_size > max_size:
     raise ValueError(f"File too large: {file_path.stat().st_size} bytes")
 
-# Upload
-file_resp = await service.upload_file(str(file_path))
+# Register
+file_id = await service.register_file(file_path)
 ```
 
 ---
 
-### 4. Reuse Files Across Requests
+### 4. Leverage Automatic Staleness Detection
 
-Upload once, use many times:
+File changes are detected automatically:
 
 ```python
-# Upload once
-file_resp = await service.upload_file("analysis_data.csv", model="anthropic:claude-3-5-haiku-20241022")
+# Register file
+file_id = await service.register_file("live_data.csv")
 
-# Use in multiple requests
-questions = [
-    "What's the total revenue?",
-    "What's the average transaction size?",
-    "Show me the top 10 customers"
-]
-
-for question in questions:
+# Use file multiple times - it's automatically re-uploaded if changed
+for i in range(5):
+    # File might be updated between requests
     request = LLMRequest(
         model="anthropic:claude-sonnet-4-5",
-        messages=[Message(role="user", content=question)],
-        files=[file_resp.file_id],
-        tools=[{"type": "code_execution"}]
+        messages=[Message(role="user", content=f"Analysis #{i+1}")],
+        files=[file_id]
     )
     response = await service.chat(request)
-    print(f"Q: {question}\nA: {response.content}\n")
+    # If file changed, it's re-hashed and re-uploaded automatically
 
-# Clean up once
-await service.delete_file(file_resp.file_id)
+await service.deregister_file(file_id)
 ```
 
 ---
 
-### 5. Handle Provider-Specific Quirks
+### 5. Use Multiple Files in Single Request
 
-Google requires text files and sufficient tokens:
+Combine multiple files for complex analysis:
 
 ```python
-# Google caching requires minimum 1024 tokens (Flash) or 4096 (Pro)
-import os
+# Register all files
+file1 = await service.register_file("sales.csv")
+file2 = await service.register_file("costs.csv")
+file3 = await service.register_file("inventory.csv")
 
-file_path = "document.txt"
-file_size = os.path.getsize(file_path)
+# Use all together
+request = LLMRequest(
+    model="anthropic:claude-sonnet-4-5",
+    messages=[Message(role="user", content="Analyze profitability across all datasets")],
+    files=[file1, file2, file3],
+    tools=[{"type": "code_execution"}]
+)
+response = await service.chat(request)
 
-# Rough estimate: 1 token ≈ 4 characters
-estimated_tokens = file_size // 4
+# Clean up all
+for file_id in [file1, file2, file3]:
+    await service.deregister_file(file_id)
+```
+
+---
+
+### 6. Handle Provider-Specific Requirements
+
+Be aware of provider limitations:
+
+```python
+from pathlib import Path
+
+file_path = Path("document.txt")
+
+# Check if file is text (required for Google)
+if file_path.suffix not in ['.txt', '.md', '.csv', '.json']:
+    print("Warning: Google only supports text files")
+
+# Check size for token requirements
+file_size = file_path.stat().st_size
+estimated_tokens = file_size // 4  # Rough estimate
 
 if estimated_tokens < 1024:
     print("Warning: File may not meet Google's minimum token requirement")
-    # Use a different approach or provider
-else:
-    file_resp = await service.upload_file(
-        file_path,
-        model="google:gemini-2.5-flash"
-    )
-```
 
----
-
-### 6. Use File-Like Objects for In-Memory Data
-
-Upload without writing to disk:
-
-```python
-import io
-import csv
-
-# Create CSV in memory
-buffer = io.BytesIO()
-writer = csv.writer(io.TextIOWrapper(buffer, encoding='utf-8'))
-writer.writerow(['Name', 'Value'])
-writer.writerow(['Item 1', '100'])
-writer.writerow(['Item 2', '200'])
-
-# Upload from memory
-buffer.seek(0)
-file_resp = await service.upload_file(
-    buffer,
-    model="anthropic:claude-3-5-haiku-20241022",
-    filename="data.csv"
-)
+# Register anyway - it works with other providers
+file_id = await service.register_file(file_path)
 ```
 
 ---
 
 ## Troubleshooting
 
-### File Upload Fails Silently
+### File Registration Rejected
 
-**Problem:** Upload completes but file not usable
+**Problem:** Registration fails immediately
 
-**Solution:** Check file_id format matches provider:
+**Solution:** Check file exists and path is valid:
 
 ```python
-file_resp = await service.upload_file("data.csv")
+from pathlib import Path
 
-# Verify correct provider
-if file_resp.provider == "anthropic":
-    assert file_resp.file_id.startswith("file_")
-elif file_resp.provider == "openai":
-    assert file_resp.file_id.startswith("file-")
-elif file_resp.provider == "google":
-    assert file_resp.file_id.startswith("cachedContents/")
+file_path = Path("data.csv")
+
+# Verify file exists
+if not file_path.exists():
+    print(f"File not found: {file_path}")
+else:
+    file_id = await service.register_file(file_path)
 ```
 
 ---
 
 ### Google Upload Fails with "UTF-8" Error
 
-**Problem:** Binary file uploaded to Google
+**Problem:** Binary file fails when used with Google
 
-**Solution:** Google only accepts text files
+**Solution:** Google only accepts text files, but you can still use the same registered file with other providers:
 
 ```python
-# ❌ Will fail
-file_resp = await service.upload_file(
-    "image.png",
-    model="google:gemini-2.5-flash"
-)
+# Register binary file
+file_id = await service.register_file("image.png")
 
-# ✅ Use text files only
-file_resp = await service.upload_file(
-    "document.txt",
-    model="google:gemini-2.5-flash"
+# ✅ Works with Anthropic
+request = LLMRequest(
+    model="anthropic:claude-sonnet-4-5",
+    messages=[Message(role="user", content="Analyze")],
+    files=[file_id]
 )
+response = await service.chat(request)
+
+# ❌ Fails with Google (requires text)
+request = LLMRequest(
+    model="google:gemini-2.5-flash",
+    messages=[Message(role="user", content="Analyze")],
+    files=[file_id]
+)
+# Will raise ValueError about UTF-8 encoding
 ```
 
 ---
 
 ### OpenAI Files Don't Work in Chat
 
-**Problem:** File uploaded but chat fails
+**Problem:** File registered but OpenAI chat fails
 
-**Solution:** OpenAI files only work with Assistants API:
+**Solution:** OpenAI Chat Completions API doesn't support file uploads:
 
 ```python
-# ❌ Won't work
+file_id = await service.register_file("document.pdf")
+
+# ❌ Won't work with OpenAI Chat
 request = LLMRequest(
     model="openai:gpt-4o",
-    files=["file-abc123"]  # Error!
+    messages=[Message(role="user", content="Analyze")],
+    files=[file_id]  # Error!
 )
 
-# ✅ Use Assistants API
-openai_client = service.get_provider("openai").client
-assistant = await openai_client.beta.assistants.create(...)
+# ✅ Use Anthropic or Google instead
+request = LLMRequest(
+    model="anthropic:claude-sonnet-4-5",
+    messages=[Message(role="user", content="Analyze")],
+    files=[file_id]
+)
+response = await service.chat(request)
 ```
 
 ---
 
-### File Not Found After Upload
+### File Changes Not Detected
 
-**Problem:** File deleted or expired
+**Problem:** Modified file not re-uploaded
 
-**Solution:** Check TTL for Google caches:
+**Solution:** File staleness detection is automatic via hash checking. If changes aren't detected, verify file was actually modified:
 
 ```python
-# Google caches expire
-file_resp = await service.upload_file(
-    "doc.txt",
-    model="google:gemini-2.5-flash",
-    ttl_seconds=3600  # Expires after 1 hour
-)
+import time
+from pathlib import Path
 
-# Check expiration
-print(f"Expires: {file_resp.metadata.get('expire_time')}")
+file_path = Path("data.csv")
+file_id = await service.register_file(file_path)
+
+# Use file
+response1 = await service.chat(request)
+
+# Modify file (ensure enough time for filesystem)
+time.sleep(0.1)
+with open(file_path, "a") as f:
+    f.write("\nnew,data")
+
+# Use again - change will be detected automatically
+response2 = await service.chat(request)
+```
+
+---
+
+### Registered File Persists After Deregistration
+
+**Problem:** File still usable after deregister
+
+**Solution:** Deregistration is async and cleans up provider uploads. Ensure you await the call:
+
+```python
+# ✅ Correct
+await service.deregister_file(file_id)
+
+# ❌ Wrong - doesn't wait for cleanup
+service.deregister_file(file_id)  # Missing await
 ```
 
 ---
