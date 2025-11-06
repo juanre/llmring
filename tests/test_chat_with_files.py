@@ -156,7 +156,7 @@ async def test_llmring_chat_with_files():
 
     async with LLMRing() as ring:
         # Register file
-        file_id = await ring.register_file("tests/fixtures/sample.txt")
+        file_id = ring.register_file("tests/fixtures/sample.txt")
 
         # Use file in chat via LLMRequest
         request = LLMRequest(
@@ -184,7 +184,7 @@ async def test_llmring_chat_with_files_openai_error():
 
     async with LLMRing() as ring:
         # Register file
-        file_id = await ring.register_file("tests/fixtures/sample.txt")
+        file_id = ring.register_file("tests/fixtures/sample.txt")
 
         # Try to use files with OpenAI
         request = LLMRequest(
@@ -211,7 +211,7 @@ async def test_chat_stream_with_files():
 
     async with LLMRing() as ring:
         # Register file
-        file_id = await ring.register_file("tests/fixtures/sample.txt")
+        file_id = ring.register_file("tests/fixtures/sample.txt")
 
         # Use file in streaming chat
         request = LLMRequest(

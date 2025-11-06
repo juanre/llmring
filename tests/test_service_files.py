@@ -13,11 +13,11 @@ async def test_register_file():
     """Test file registration returns llmring ID."""
     ring = LLMRing()
     try:
-        file_id = await ring.register_file("tests/fixtures/sample.txt")
+        file_id = ring.register_file("tests/fixtures/sample.txt")
         assert file_id.startswith("llmring-file-")
 
         # Verify file is in registered files
-        files = await ring.list_registered_files()
+        files = ring.list_registered_files()
         assert len(files) == 1
         assert files[0]["id"] == file_id
         assert files[0]["file_path"].endswith("sample.txt")
@@ -33,11 +33,11 @@ async def test_register_file_with_custom_id():
     ring = LLMRing()
     try:
         custom_id = "test-file-123"
-        file_id = await ring.register_file("tests/fixtures/sample.txt", file_id=custom_id)
+        file_id = ring.register_file("tests/fixtures/sample.txt", file_id=custom_id)
         assert file_id == custom_id
 
         # Verify file is registered
-        files = await ring.list_registered_files()
+        files = ring.list_registered_files()
         assert len(files) == 1
         assert files[0]["id"] == custom_id
 
@@ -51,7 +51,7 @@ async def test_register_file_nonexistent():
     ring = LLMRing()
     try:
         with pytest.raises(FileNotFoundError):
-            await ring.register_file("nonexistent.txt")
+            ring.register_file("nonexistent.txt")
     finally:
         await ring.close()
 
@@ -65,10 +65,10 @@ async def test_lazy_upload_anthropic():
     ring = LLMRing()
     try:
         # Register file (no upload yet)
-        file_id = await ring.register_file("tests/fixtures/sample.txt")
+        file_id = ring.register_file("tests/fixtures/sample.txt")
 
         # Verify no uploads yet
-        files = await ring.list_registered_files()
+        files = ring.list_registered_files()
         assert files[0]["uploads"] == {}
 
         # Use with Anthropic - should upload
@@ -86,7 +86,7 @@ async def test_lazy_upload_anthropic():
         assert response.model.startswith("anthropic:")
 
         # Verify file was uploaded to Anthropic
-        files = await ring.list_registered_files()
+        files = ring.list_registered_files()
         assert "anthropic" in files[0]["uploads"]
         assert files[0]["uploads"]["anthropic"]["provider_file_id"].startswith("file_")
 
@@ -111,7 +111,7 @@ async def test_cross_provider_file_usage():
         from llmring.schemas import LLMRequest, Message
 
         # Register file once
-        file_id = await ring.register_file("tests/fixtures/google_large_doc.txt")
+        file_id = ring.register_file("tests/fixtures/google_large_doc.txt")
 
         # Use with Anthropic
         r1 = await ring.chat(
@@ -136,7 +136,7 @@ async def test_cross_provider_file_usage():
         assert r2.content
 
         # Verify file was uploaded to both providers
-        files = await ring.list_registered_files()
+        files = ring.list_registered_files()
         assert "anthropic" in files[0]["uploads"]
         assert "google" in files[0]["uploads"]
         assert files[0]["uploads"]["anthropic"]["provider_file_id"].startswith("file_")
@@ -159,7 +159,7 @@ async def test_file_upload_caching():
     try:
         from llmring.schemas import LLMRequest, Message
 
-        file_id = await ring.register_file("tests/fixtures/sample.txt")
+        file_id = ring.register_file("tests/fixtures/sample.txt")
 
         # First use - should upload
         await ring.chat(
@@ -171,7 +171,7 @@ async def test_file_upload_caching():
         )
 
         # Get the provider file_id
-        files = await ring.list_registered_files()
+        files = ring.list_registered_files()
         first_provider_file_id = files[0]["uploads"]["anthropic"]["provider_file_id"]
 
         # Second use - should use cache (same provider file_id)
@@ -184,7 +184,7 @@ async def test_file_upload_caching():
         )
 
         # Verify same provider file_id was used
-        files = await ring.list_registered_files()
+        files = ring.list_registered_files()
         second_provider_file_id = files[0]["uploads"]["anthropic"]["provider_file_id"]
         assert first_provider_file_id == second_provider_file_id
 
@@ -208,7 +208,7 @@ async def test_deregister_file():
     try:
         from llmring.schemas import LLMRequest, Message
 
-        file_id = await ring.register_file("tests/fixtures/google_large_doc.txt")
+        file_id = ring.register_file("tests/fixtures/google_large_doc.txt")
 
         # Upload to two providers
         await ring.chat(
@@ -231,7 +231,7 @@ async def test_deregister_file():
         assert success
 
         # Verify file_id no longer exists
-        files = await ring.list_registered_files()
+        files = ring.list_registered_files()
         assert len(files) == 0
 
         # Trying to use it should fail
@@ -265,15 +265,15 @@ async def test_list_registered_files():
     ring = LLMRing()
     try:
         # No files initially
-        files = await ring.list_registered_files()
+        files = ring.list_registered_files()
         assert len(files) == 0
 
         # Register two files
-        file_id1 = await ring.register_file("tests/fixtures/sample.txt")
-        file_id2 = await ring.register_file("tests/fixtures/google_large_doc.txt")
+        file_id1 = ring.register_file("tests/fixtures/sample.txt")
+        file_id2 = ring.register_file("tests/fixtures/google_large_doc.txt")
 
         # List should show both
-        files = await ring.list_registered_files()
+        files = ring.list_registered_files()
         assert len(files) == 2
         file_ids = [f["id"] for f in files]
         assert file_id1 in file_ids
@@ -326,7 +326,7 @@ async def test_file_staleness_detection():
             temp_file = f.name
 
         # Register file
-        file_id = await ring.register_file(temp_file)
+        file_id = ring.register_file(temp_file)
 
         # Use with Anthropic (first upload)
         response1 = await ring.chat(
@@ -339,7 +339,7 @@ async def test_file_staleness_detection():
         assert response1.content
 
         # Get registered file to check state
-        files = await ring.list_registered_files()
+        files = ring.list_registered_files()
         reg_file = next(f for f in files if f["id"] == file_id)
         assert "anthropic" in reg_file["uploads"]
         original_hash = reg_file["content_hash"]
@@ -359,7 +359,7 @@ async def test_file_staleness_detection():
         assert response2.content
 
         # Verify hash was updated
-        files_after = await ring.list_registered_files()
+        files_after = ring.list_registered_files()
         reg_file_after = next(f for f in files_after if f["id"] == file_id)
         assert reg_file_after["content_hash"] != original_hash
 

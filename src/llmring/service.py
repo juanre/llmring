@@ -1235,7 +1235,7 @@ class LLMRing:
 
         return model_info
 
-    async def register_file(self, file: Union[str, Path], file_id: Optional[str] = None) -> str:
+    def register_file(self, file: Union[str, Path], file_id: Optional[str] = None) -> str:
         """
         Register a file for use across providers.
 
@@ -1250,7 +1250,7 @@ class LLMRing:
             llmring-managed file ID (e.g., "llmring-file-uuid-123")
 
         Example:
-            file_id = await ring.register_file("data.csv")
+            file_id = ring.register_file("data.csv")
 
             # Use with any provider
             await ring.chat(LLMRequest(
@@ -1320,7 +1320,7 @@ class LLMRing:
         logger.debug(f"Deregistered file {file_id}")
         return True
 
-    async def list_registered_files(self) -> List[Dict[str, Any]]:
+    def list_registered_files(self) -> List[Dict[str, Any]]:
         """
         List all registered files in this service instance.
 
