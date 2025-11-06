@@ -1,9 +1,11 @@
 # File Upload API Implementation Plan
 
-**Status:** Planning
-**Target:** llmring v1.4.0
-**Timeline:** 1-2 months
+**Status:** IMPLEMENTED ✅
+**Version:** llmring v1.4.0+
+**Completed:** November 2024
 **Priority:** HIGH - Essential for 2025 agent workflows
+
+**Note:** This document reflects the IMPLEMENTED design, not the original plan. The actual implementation differs from the original plan in key ways detailed below.
 
 ---
 
@@ -136,12 +138,14 @@ POST https://generativelanguage.googleapis.com/v1beta/cachedContents
 
 ---
 
-## Unified API Design
+## Implemented API Design
 
-### Core Interface
+### ACTUAL Implementation (differs from plan)
+
+**Key Change:** The implemented API uses `model` parameter instead of `purpose` and `provider`.
 
 ```python
-from typing import Literal, Optional, BinaryIO
+from typing import Optional, BinaryIO, Union, Any
 from pathlib import Path
 
 class LLMRing:
@@ -149,10 +153,9 @@ class LLMRing:
 
     async def upload_file(
         self,
-        file: Union[str, Path, BinaryIO],
-        purpose: Literal["code_execution", "assistant", "analysis", "cache"] = "analysis",
-        provider: Optional[str] = None,
-        ttl_seconds: Optional[int] = None,  # Google-specific
+        file: Union[str, Path, Any],
+        model: str,
+        ttl_seconds: int = 3600,
         filename: Optional[str] = None,
         **kwargs
     ) -> FileUploadResponse:
@@ -161,12 +164,10 @@ class LLMRing:
 
         Args:
             file: File path or file-like object
-            purpose: Intended use case:
-                - "code_execution": For Anthropic code execution tool
-                - "assistant": For OpenAI Assistants API knowledge base
-                - "analysis": General document analysis (default)
-                - "cache": For Google context caching
-            provider: Force specific provider (default: auto-detect from model)
+            model: Model alias or provider:model reference
+                - Alias: "summarizer" (provider-agnostic, recommended)
+                - Direct: "anthropic:claude-3-5-haiku-20241022"
+                Provider is auto-detected from the model parameter
             ttl_seconds: Cache TTL for Google (default: 3600)
             filename: Override filename for upload
             **kwargs: Provider-specific parameters
@@ -175,15 +176,21 @@ class LLMRing:
             FileUploadResponse with file_id and metadata
 
         Raises:
-            ProviderNotSupportedError: If provider doesn't support file uploads
             FileSizeError: If file exceeds provider limits
             InvalidFileFormatError: If file type not supported
+            FileAccessError: Cannot read file
 
         Example:
-            # Upload CSV for code execution (Anthropic)
+            # With alias (provider-agnostic)
             file_resp = await service.upload_file(
                 "data.csv",
-                purpose="code_execution"
+                model="summarizer"
+            )
+
+            # With direct model reference
+            file_resp = await service.upload_file(
+                "data.csv",
+                model="anthropic:claude-3-5-haiku-20241022"
             )
 
             # Use in request
@@ -277,7 +284,36 @@ class LLMRequest(BaseModel):
 
 ---
 
-## Implementation Plan (TDD)
+## Implementation Summary
+
+The file upload API was successfully implemented with the following key differences from the original plan:
+
+### What Changed
+
+1. **API Design:** Used `model` parameter instead of `purpose` + `provider`
+   - **Reason:** More consistent with LLMRing's existing API patterns
+   - **Benefit:** Provider is automatically detected from model, eliminating redundancy
+   - **Impact:** Simpler, more intuitive API surface
+
+2. **Default TTL:** Set to 3600 seconds (1 hour) instead of making it optional
+   - **Reason:** Provide sensible default for Google caching
+   - **Benefit:** Users don't need to specify TTL unless they want custom behavior
+
+3. **Provider Detection:** Automatic based on model parameter
+   - **Reason:** Eliminates need for explicit provider parameter
+   - **Benefit:** Less verbose API, fewer parameters to remember
+
+### What Stayed the Same
+
+1. **Core Functionality:** Upload-once-reference-many pattern ✅
+2. **Provider Support:** Anthropic, OpenAI, Google all supported ✅
+3. **File Management:** list_files(), get_file(), delete_file() all implemented ✅
+4. **Error Handling:** FileSizeError, InvalidFileFormatError, FileAccessError ✅
+5. **Documentation:** Complete docs in README.md, docs/file-uploads.md, website ✅
+
+---
+
+## Original Implementation Plan (TDD)
 
 ### Phase 1: API Design & Schemas (Week 1)
 

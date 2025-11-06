@@ -20,7 +20,7 @@ async with LLMRing() as service:
     # Upload a file
     file_resp = await service.upload_file(
         "data.csv",
-        purpose="code_execution"
+        model="anthropic:claude-3-5-haiku-20241022"
     )
 
     # Use in chat request
@@ -49,8 +49,7 @@ Upload a file and receive a `file_id` for reuse across requests.
 ```python
 async def upload_file(
     file: Union[str, Path, BinaryIO],
-    purpose: str = "analysis",
-    provider: Optional[str] = None,
+    model: str,
     ttl_seconds: Optional[int] = None,
     filename: Optional[str] = None,
     **kwargs
@@ -59,12 +58,10 @@ async def upload_file(
 
 **Parameters:**
 - `file`: File path (string/Path) or file-like object (BinaryIO)
-- `purpose`: Intended use case (default: "analysis")
-  - `"code_execution"` - For Anthropic code execution tool
-  - `"assistant"` - For OpenAI Assistants API
-  - `"analysis"` - General document analysis
-  - `"cache"` - For Google context caching
-- `provider`: Force specific provider (default: auto-detect from model)
+- `model`: Model alias or provider:model reference that will use this file
+  - Use alias: `"summarizer"` (provider-agnostic, recommended)
+  - Use direct reference: `"anthropic:claude-3-5-haiku-20241022"`
+  - Provider is auto-detected from the model
 - `ttl_seconds`: Cache TTL for Google (default: 3600)
 - `filename`: Override filename for upload
 - `**kwargs`: Provider-specific parameters
@@ -91,32 +88,30 @@ FileUploadResponse(
 **Examples:**
 
 ```python
-# Upload from file path
+# Upload from file path with alias (provider-agnostic)
 file_resp = await service.upload_file(
     "dataset.csv",
-    purpose="code_execution"
+    model="summarizer"
 )
 
 # Upload from file-like object
 with open("document.txt", "rb") as f:
     file_resp = await service.upload_file(
         f,
-        purpose="analysis",
+        model="anthropic:claude-3-5-haiku-20241022",
         filename="document.txt"
     )
 
-# Upload to specific provider
+# Upload with direct model reference
 file_resp = await service.upload_file(
     "data.json",
-    purpose="code_execution",
-    provider="anthropic"
+    model="anthropic:claude-3-5-haiku-20241022"
 )
 
 # Upload to Google with custom TTL
 file_resp = await service.upload_file(
     "large_doc.txt",
-    purpose="cache",
-    provider="google",
+    model="google:gemini-2.5-flash",
     ttl_seconds=7200  # 2 hours
 )
 ```
@@ -304,8 +299,7 @@ async with LLMRing() as service:
     # Upload dataset
     file_resp = await service.upload_file(
         "sales_data.csv",
-        purpose="code_execution",
-        provider="anthropic"
+        model="anthropic:claude-3-5-haiku-20241022"
     )
 
     print(f"Uploaded: {file_resp.file_id} ({file_resp.size_bytes} bytes)")
@@ -338,9 +332,9 @@ Reference multiple files in a single request:
 ```python
 async with LLMRing() as service:
     # Upload multiple files
-    file1 = await service.upload_file("q1_sales.csv", purpose="code_execution")
-    file2 = await service.upload_file("q2_sales.csv", purpose="code_execution")
-    file3 = await service.upload_file("q3_sales.csv", purpose="code_execution")
+    file1 = await service.upload_file("q1_sales.csv", model="anthropic:claude-3-5-haiku-20241022")
+    file2 = await service.upload_file("q2_sales.csv", model="anthropic:claude-3-5-haiku-20241022")
+    file3 = await service.upload_file("q3_sales.csv", model="anthropic:claude-3-5-haiku-20241022")
 
     # Analyze all files together
     request = LLMRequest(
@@ -375,8 +369,7 @@ async with LLMRing() as service:
     # Upload file
     file_resp = await service.upload_file(
         "knowledge_base.txt",
-        purpose="assistant",
-        provider="openai"
+        model="openai:gpt-4o-mini"
     )
 
     print(f"Uploaded to OpenAI: {file_resp.file_id}")
@@ -402,8 +395,7 @@ async with LLMRing() as service:
     # Upload file
     file_resp = await service.upload_file(
         "document.pdf",
-        purpose="assistant",
-        provider="openai"
+        model="openai:gpt-4o"
     )
 
     # Access OpenAI SDK directly
@@ -438,10 +430,8 @@ async with LLMRing() as service:
     # Upload large document (creates cache)
     file_resp = await service.upload_file(
         "legal_document.txt",  # Must be text file
-        purpose="cache",
-        provider="google",
-        ttl_seconds=7200,  # 2 hour cache
-        model="gemini-2.5-flash"
+        model="google:gemini-2.5-flash",
+        ttl_seconds=7200  # 2 hour cache
     )
 
     print(f"Cached: {file_resp.file_id}")
@@ -478,7 +468,7 @@ async with LLMRing() as service:
     # Upload file
     file_resp = await service.upload_file(
         "data.csv",
-        purpose="code_execution"
+        model="anthropic:claude-3-5-haiku-20241022"
     )
 
     # Stream response
@@ -516,7 +506,7 @@ from llmring.exceptions import FileSizeError
 try:
     file_resp = await service.upload_file(
         "huge_file.csv",
-        purpose="code_execution"
+        model="anthropic:claude-3-5-haiku-20241022"
     )
 except FileSizeError as e:
     print(f"File too large: {e.file_size} bytes")
@@ -541,8 +531,7 @@ try:
     # Google only accepts text files
     file_resp = await service.upload_file(
         "image.png",
-        purpose="cache",
-        provider="google"
+        model="google:gemini-2.5-flash"
     )
 except ValueError as e:
     print(f"Invalid format: {e}")
@@ -634,23 +623,20 @@ Match provider to your use case:
 # Code execution → Anthropic
 file_resp = await service.upload_file(
     "dataset.csv",
-    purpose="code_execution",
-    provider="anthropic"
+    model="anthropic:claude-3-5-haiku-20241022"
 )
 
 # Cost optimization for repeated access → Google
 file_resp = await service.upload_file(
     "large_doc.txt",
-    purpose="cache",
-    provider="google",
+    model="google:gemini-2.5-flash",
     ttl_seconds=3600
 )
 
 # Knowledge base (Assistants) → OpenAI
 file_resp = await service.upload_file(
     "knowledge.txt",
-    purpose="assistant",
-    provider="openai"
+    model="openai:gpt-4o-mini"
 )
 ```
 
@@ -686,7 +672,7 @@ Upload once, use many times:
 
 ```python
 # Upload once
-file_resp = await service.upload_file("analysis_data.csv")
+file_resp = await service.upload_file("analysis_data.csv", model="anthropic:claude-3-5-haiku-20241022")
 
 # Use in multiple requests
 questions = [
@@ -731,8 +717,7 @@ if estimated_tokens < 1024:
 else:
     file_resp = await service.upload_file(
         file_path,
-        purpose="cache",
-        provider="google"
+        model="google:gemini-2.5-flash"
     )
 ```
 
@@ -757,7 +742,7 @@ writer.writerow(['Item 2', '200'])
 buffer.seek(0)
 file_resp = await service.upload_file(
     buffer,
-    purpose="code_execution",
+    model="anthropic:claude-3-5-haiku-20241022",
     filename="data.csv"
 )
 ```
@@ -796,13 +781,13 @@ elif file_resp.provider == "google":
 # ❌ Will fail
 file_resp = await service.upload_file(
     "image.png",
-    provider="google"
+    model="google:gemini-2.5-flash"
 )
 
 # ✅ Use text files only
 file_resp = await service.upload_file(
     "document.txt",
-    provider="google"
+    model="google:gemini-2.5-flash"
 )
 ```
 
@@ -838,7 +823,7 @@ assistant = await openai_client.beta.assistants.create(...)
 # Google caches expire
 file_resp = await service.upload_file(
     "doc.txt",
-    provider="google",
+    model="google:gemini-2.5-flash",
     ttl_seconds=3600  # Expires after 1 hour
 )
 

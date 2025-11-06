@@ -281,7 +281,7 @@ from llmring import LLMRing, LLMRequest, Message
 
 async with LLMRing() as service:
     # Upload file once
-    file_resp = await service.upload_file("data.csv", purpose="code_execution")
+    file_resp = await service.upload_file("data.csv", model="anthropic:claude-3-5-haiku-20241022")
 
     # Use many times with different prompts
     request = LLMRequest(

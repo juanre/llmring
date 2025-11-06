@@ -84,7 +84,7 @@ Response schema from file upload operations.
 ```python
 from llmring import FileUploadResponse
 
-response = await service.upload_file(file_path, purpose="assistants")
+response = await service.upload_file(file_path, model="openai:gpt-4o")
 
 # Available fields:
 response.file_id         # str: Unique file identifier
