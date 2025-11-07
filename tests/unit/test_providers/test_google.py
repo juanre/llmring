@@ -197,16 +197,6 @@ class TestGoogleProviderUnit:
         error_msg = str(exc_info.value).lower()
         assert any(word in error_msg for word in ["error", "unsupported", "invalid"])
 
-    def test_get_token_count_fallback(self, google_provider):
-        """Test token counting fallback implementation."""
-        text = "This is a test sentence for token counting."
-        count = google_provider.get_token_count(text)
-
-        assert isinstance(count, int)
-        assert count > 0
-        # Should be a reasonable approximation (length / 4)
-        assert 5 < count < 50
-
     @pytest.mark.asyncio
     @skip_on_quota_exceeded
     async def test_chat_multi_turn_conversation(self, google_provider, multi_turn_conversation):
@@ -245,11 +235,21 @@ class TestGoogleProviderUnit:
         )
 
         assert isinstance(response, LLMResponse)
-        # Google provider estimates usage when not available
-        assert response.usage is not None
-        assert isinstance(response.usage["prompt_tokens"], int)
-        assert isinstance(response.usage["completion_tokens"], int)
-        assert isinstance(response.usage["total_tokens"], int)
+        # Provider reports usage when available from SDK; otherwise usage may be None
+        assert isinstance(response, LLMResponse)
+        if response.usage is not None:
+            assert (
+                isinstance(response.usage.get("prompt_tokens"), int)
+                or response.usage.get("prompt_tokens") is None
+            )
+            assert (
+                isinstance(response.usage.get("completion_tokens"), int)
+                or response.usage.get("completion_tokens") is None
+            )
+            assert (
+                isinstance(response.usage.get("total_tokens"), int)
+                or response.usage.get("total_tokens") is None
+            )
 
     @pytest.mark.asyncio
     async def test_get_default_model(self, google_provider):
@@ -306,5 +306,3 @@ class TestGoogleProviderUnit:
 
     # Note: model_mapping was removed in favor of registry-based validation
     # This eliminates hardcoded model mappings in favor of dynamic registry data
-
-    # NOTE: Removed test_type_conversion_helper as _convert_type_to_gemini method was removed as dead code

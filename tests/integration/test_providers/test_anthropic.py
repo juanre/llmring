@@ -206,16 +206,6 @@ class TestAnthropicProviderIntegration:
     # Model validation tests removed - we no longer gatekeep models
     # The philosophy is that providers should fail naturally if they don't support a model
 
-    def test_token_counting(self, provider):
-        """Test token counting functionality."""
-        text = "This is a test sentence for token counting."
-        count = provider.get_token_count(text)
-
-        # Should return a reasonable token count
-        assert isinstance(count, int)
-        assert count > 0
-        assert count < 100  # Should be reasonable for this short text
-
     @pytest.mark.asyncio
     async def test_json_mode_instruction(self, provider):
         """Test JSON mode handling (through instructions since Claude doesn't have native JSON mode)."""

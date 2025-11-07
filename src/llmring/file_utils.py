@@ -183,9 +183,8 @@ def validate_file_for_vision_api(file_path: str) -> None:
     if mime_type == "application/pdf":
         raise ValueError(
             f"PDF files are not supported in OpenAI Chat Completions API. "
-            f"To process PDFs, you need to either: "
-            f"1) Use OpenAI Assistants API with file uploads, or "
-            f"2) Convert PDF pages to images first. "
+            f"To process PDFs with OpenAI, use the Responses API (attachments + file_search) "
+            f"via llmring's files support, or convert PDF pages to images first. "
             f"File: {file_path}"
         )
 
@@ -196,7 +195,7 @@ def validate_file_for_vision_api(file_path: str) -> None:
         raise ValueError(
             f"Unsupported file type '{mime_type}' for OpenAI vision API. "
             f"Supported image types: {', '.join(supported_image_types)}. "
-            f"For PDF files, use OpenAI Assistants API instead. "
+            f"For PDFs with OpenAI, use Responses API attachments (llmring files) instead. "
             f"File: {file_path}"
         )
 

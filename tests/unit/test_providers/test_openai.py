@@ -158,32 +158,6 @@ class TestOpenAIProviderUnit:
         error_msg = str(exc_info.value).lower()
         assert any(word in error_msg for word in ["error", "unsupported", "invalid"])
 
-    def test_get_token_count_fallback(self, openai_provider):
-        """Test token counting fallback when tiktoken not available."""
-        text = "This is a test sentence for token counting."
-        count = openai_provider.get_token_count(text)
-
-        assert isinstance(count, int)
-        assert count > 0
-        # Should be a reasonable approximation
-        assert 5 < count < 50
-
-    def test_get_token_count_with_tiktoken(self, openai_provider):
-        """Test token counting with tiktoken if available."""
-        try:
-            import tiktoken  # type: ignore
-
-            text = "Hello world"
-            count = openai_provider.get_token_count(text)
-
-            # Should use tiktoken for accurate counting
-            encoder = tiktoken.get_encoding("cl100k_base")  # Use safe encoding
-            expected = len(encoder.encode(text))
-            assert count == expected
-        except ImportError:
-            # Skip if tiktoken not available
-            pytest.skip("tiktoken not available")
-
     @pytest.mark.asyncio
     async def test_chat_with_tool_calls_response(self, openai_provider, sample_tools):
         """Test handling of tool calls in response."""

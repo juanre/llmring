@@ -28,8 +28,6 @@ from llmring.exceptions import (
 )
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
-
-# Note: do not call load_dotenv() in library code; handle in app entrypoints
 from llmring.net.safe_fetcher import SafeFetchError
 from llmring.net.safe_fetcher import fetch_bytes as safe_fetch_bytes
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
@@ -71,21 +69,12 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         )
         super().__init__(config)
 
-        # Initialize registry client BEFORE mixin init
         self._registry_client = RegistryClient()
-
-        # Now initialize mixins that may use the registry client
         RegistryModelSelectorMixin.__init__(self)
         ProviderLoggingMixin.__init__(self, "openai")
-
-        # Store for backward compatibility
         self.api_key = api_key
-        self.default_model = model  # Will be derived from registry if None
-
-        # Initialize the client with the SDK
+        self.default_model = model
         self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-
-        # Simple circuit breaker per model
         self._breaker = CircuitBreaker()
         self._error_handler = ProviderErrorHandler("openai", self._breaker)
 
@@ -99,21 +88,16 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         if self.default_model:
             return self.default_model
 
-        # Derive from registry using policy-based selection
         try:
-            # Get models from registry
             if self._registry_client:
                 registry_models = await self._registry_client.fetch_current_models("openai")
                 if registry_models:
-                    # Extract model names from registry models
                     models = [m.model_name for m in registry_models]
-
-                    # Use registry-based selection with OpenAI-specific cost range
                     selected_model = await self.select_default_from_registry(
                         provider_name="openai",
                         available_models=models,
-                        cost_range=(0.1, 5.0),  # OpenAI's typical range
-                        fallback_model=None,  # No hardcoded fallback
+                        cost_range=(0.1, 5.0),
+                        fallback_model=None,
                     )
                     self.default_model = selected_model
                     self.log_info(f"Derived default model from registry: {selected_model}")
@@ -122,13 +106,10 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         except Exception as e:
             self.log_warning(f"Could not derive default model from registry: {e}")
 
-        # No hardcoded fallback - require explicit model specification
         raise ValueError(
             "Could not determine default model from registry. "
             "Please specify a model explicitly or check your API configuration."
         )
-
-    # Legacy method removed - now using RegistryModelSelectorMixin.select_default_from_registry()
 
     async def aclose(self) -> None:
         """Clean up provider resources."""
@@ -142,7 +123,6 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         Returns:
             Provider capabilities
         """
-        # Get models from registry if available
         supported_models = []
         if self._registry_client:
             try:
@@ -158,11 +138,11 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             supports_streaming=True,
             supports_tools=True,
             supports_vision=True,
-            supports_audio=True,  # GPT-4o models support audio
-            supports_documents=True,  # Via Responses API file_search
+            supports_audio=True,
+            supports_documents=True,
             supports_json_mode=True,
-            supports_caching=False,  # OpenAI doesn't have native caching like Anthropic
-            max_context_window=128000,  # GPT-4o context window
+            supports_caching=False,
+            max_context_window=128000,
             default_model=self.default_model,
         )
 
@@ -233,12 +213,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         max_tokens: Optional[int] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
-        """
-        Process messages containing PDFs using OpenAI's Responses API with file upload.
-
-        Note: This implementation uploads PDFs directly and processes them with the model.
-        It does not use vector stores or file_search for RAG functionality.
-        """
+        """Process messages containing PDFs using OpenAI's Responses API with file upload."""
         # Extract PDF data and text from messages
         pdf_data_list, combined_text = self._extract_pdf_content_and_text(messages)
         if not pdf_data_list:
@@ -248,11 +223,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         uploaded_files: List[Dict[str, str]] = []
         try:
-            # Upload PDFs
             for i, pdf_data in enumerate(pdf_data_list):
-                # Why: The OpenAI SDK expects a file-like object (not bytes). We create a temp file,
-                # close it, then reopen in 'rb' mode to avoid race conditions. Using delete=False
-                # gives us control over cleanup - we manually unlink after upload succeeds.
                 tmp_file = tempfile.NamedTemporaryFile(
                     suffix=f"_document_{i}.pdf", delete=False, mode="wb"
                 )
@@ -294,16 +265,11 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             )
 
             response_content = resp.output_text if hasattr(resp, "output_text") else str(resp)
-            estimated_usage = {
-                "prompt_tokens": self.get_token_count(combined_text),
-                "completion_tokens": self.get_token_count(response_content or ""),
-                "total_tokens": self.get_token_count(combined_text)
-                + self.get_token_count(response_content or ""),
-            }
+            usage = self._map_responses_usage(getattr(resp, "usage", None))
             return LLMResponse(
                 content=response_content or "",
                 model=model,
-                usage=estimated_usage,
+                usage=usage,
                 finish_reason="stop",
             )
         finally:
@@ -320,26 +286,6 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     await asyncio.gather(*tasks, return_exceptions=True)
                 except Exception:
                     pass
-
-    def get_token_count(self, text: str) -> int:
-        """
-        Get the token count for a text string.
-
-        Args:
-            text: The text to count tokens for
-
-        Returns:
-            Number of tokens (estimated)
-        """
-        try:
-            import tiktoken  # type: ignore
-
-            # Use a safe encoding for token counting
-            encoder = tiktoken.get_encoding("cl100k_base")  # GPT-4 encoding
-            return len(encoder.encode(text))
-        except ImportError:
-            # Fallback to rough estimate: ~4 characters per token for English text
-            return len(text) // 4
 
     async def _get_model_config(self, model: str) -> Dict[str, Any]:
         """
@@ -392,32 +338,13 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         """
         Handle o1* models using the Responses API.
         """
-        # Flatten conversation into an input string preserving roles
-        parts: List[str] = []
-        for msg in messages:
-            role = msg.role
-            content_str = ""
-            if isinstance(msg.content, str):
-                content_str = msg.content
-            elif isinstance(msg.content, list):
-                # Join text parts; ignore non-text for o1
-                text_bits: List[str] = []
-                for item in msg.content:
-                    if isinstance(item, str):
-                        text_bits.append(item)
-                    elif isinstance(item, dict) and item.get("type") == "text":
-                        text_bits.append(item.get("text", ""))
-                content_str = " ".join(text_bits)
-            else:
-                content_str = str(msg.content)
-            parts.append(f"{role}: {content_str}")
-
-        input_text = "\n".join(parts)
+        # Convert messages to Responses input preserving roles/content
+        responses_input = self._messages_to_responses_input(messages)
 
         try:
             request_params = {
                 "model": model,
-                "input": input_text,
+                "input": responses_input,
             }
 
             # temperature and max tokens support may vary; pass only if provided
@@ -471,16 +398,13 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             except Exception:
                 content_text = ""
 
-        estimated_usage = {
-            "prompt_tokens": self.get_token_count(input_text),
-            "completion_tokens": self.get_token_count(content_text),
-            "total_tokens": self.get_token_count(input_text) + self.get_token_count(content_text),
-        }
+        # Provider usage
+        usage: Optional[Dict[str, Any]] = self._map_responses_usage(getattr(resp, "usage", None))
 
         return LLMResponse(
             content=content_text,
             model=model,
-            usage=estimated_usage,
+            usage=usage,
             finish_reason="stop",
         )
 
@@ -620,6 +544,10 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         try:
             timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
 
+            # Enable streaming and include usage on the final chunk
+            request_params["stream"] = True
+            request_params["stream_options"] = {"include_usage": True}
+
             stream = await asyncio.wait_for(
                 self.client.chat.completions.create(**request_params),
                 timeout=timeout_s,
@@ -628,6 +556,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             # Process the stream
             accumulated_content = ""
             accumulated_tool_calls = {}
+            last_usage = None
 
             async for chunk in stream:
                 if chunk.choices and len(chunk.choices) > 0:
@@ -680,20 +609,22 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                 for idx in sorted(accumulated_tool_calls.keys())
                             ]
 
-                        # Final chunk with usage information and tool calls
+                        # Final chunk with provider-reported token usage
+                        # Guard against interrupted streams where final usage may not arrive
+                        usage_payload = (
+                            chunk.usage.model_dump()
+                            if getattr(chunk, "usage", None) is not None
+                            else None
+                        )
                         yield StreamChunk(
                             delta="",
                             model=model,
                             finish_reason=choice.finish_reason,
                             tool_calls=tool_calls_list,
-                            usage={
-                                "prompt_tokens": self.get_token_count(str(openai_messages)),
-                                "completion_tokens": self.get_token_count(accumulated_content),
-                                "total_tokens": self.get_token_count(str(openai_messages))
-                                + self.get_token_count(accumulated_content),
-                            },
+                            usage=usage_payload,
                         )
 
+                # No need to track usage across chunks; included on final when include_usage=True
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
@@ -890,16 +821,22 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         Returns:
             LLM response with complete generated content
 
-        Raises:
-            ValueError: If files parameter is provided (not supported in Chat Completions API)
+        Notes:
+            When files are provided, this method uses the OpenAI Responses API
+            with attachments + file_search to enable document grounding.
         """
-        # OpenAI Chat Completions API does not support file_ids
-        # Files are only supported in Assistants API
+        # If files are present, route through Responses API with file attachments
         if files:
-            raise ValueError(
-                "OpenAI Chat Completions API does not support file uploads. "
-                "Files are only available in the Assistants API. "
-                "To use files with OpenAI, consider embedding the file content directly in your message."
+            return await self._chat_with_files_responses_api(
+                messages=messages,
+                model=model,
+                files=files,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
+                extra_params=extra_params,
             )
 
         return await self._chat_non_streaming(
@@ -951,22 +888,27 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         Returns:
             Async iterator of stream chunks
 
-        Raises:
-            ValueError: If files parameter is provided (not supported in Chat Completions API)
-
         Example:
             >>> async for chunk in provider.chat_stream(messages, model="gpt-4o"):
             ...     print(chunk.content, end="", flush=True)
         """
-        # OpenAI Chat Completions API does not support file_ids
+        # If files are present, stream via Responses API with attachments
         if files:
-            raise ValueError(
-                "OpenAI Chat Completions API does not support file uploads. "
-                "Files are only available in the Assistants API. "
-                "To use files with OpenAI, consider embedding the file content directly in your message."
-            )
+            async for chunk in self._stream_with_files_responses_api(
+                messages=messages,
+                model=model,
+                files=files,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
+                extra_params=extra_params,
+            ):
+                yield chunk
+            return
 
-        return self._stream_chat(
+        async for chunk in self._stream_chat(
             messages=messages,
             model=model,
             temperature=temperature,
@@ -976,7 +918,402 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools=tools,
             tool_choice=tool_choice,
             extra_params=extra_params,
+        ):
+            yield chunk
+
+    def _flatten_messages_to_input_text(self, messages: List[Message]) -> str:
+        """Flatten a list of llmring messages into a single input text string."""
+        parts: List[str] = []
+        for msg in messages:
+            role = msg.role
+            content_str = ""
+            if isinstance(msg.content, str):
+                content_str = msg.content
+            elif isinstance(msg.content, list):
+                text_bits: List[str] = []
+                for item in msg.content:
+                    if isinstance(item, str):
+                        text_bits.append(item)
+                    elif isinstance(item, dict):
+                        t = item.get("text") if item.get("type") == "text" else None
+                        if isinstance(t, str):
+                            text_bits.append(t)
+                content_str = " ".join(text_bits)
+            else:
+                content_str = str(msg.content)
+            parts.append(f"{role}: {content_str}")
+        return "\n".join(parts)
+
+    def _map_responses_usage(self, usage_obj: Any) -> Optional[Dict[str, Any]]:
+        """Normalize OpenAI Responses/Chat usage object to a dict or None."""
+        if usage_obj is None:
+            return None
+        try:
+            prompt_tokens = getattr(usage_obj, "prompt_tokens", None)
+            if prompt_tokens is None:
+                prompt_tokens = getattr(usage_obj, "input_tokens", None)
+            completion_tokens = getattr(usage_obj, "completion_tokens", None)
+            if completion_tokens is None:
+                completion_tokens = getattr(usage_obj, "output_tokens", None)
+            total_tokens = getattr(usage_obj, "total_tokens", None)
+            if total_tokens is None and (
+                prompt_tokens is not None or completion_tokens is not None
+            ):
+                total_tokens = (prompt_tokens or 0) + (completion_tokens or 0)
+            return {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+            }
+        except Exception:
+            return None
+
+    def _messages_to_responses_input(self, messages: List[Message]) -> List[Dict[str, Any]]:
+        """
+        Convert llmring Message[] into OpenAI Responses input messages preserving roles
+        and multimodal content where possible.
+
+        - role mapping: system/user/assistant preserved; developer maps to system (if present upstream);
+          tool messages are mapped to user text for context.
+        - content mapping:
+          - str -> pass through as string
+          - {type: text, text} -> input_text
+          - {type: image_url, image_url: {url}} -> input_image
+          - other types are ignored here (PDF/documents are handled by separate PDF path)
+        """
+        responses_messages: List[Dict[str, Any]] = []
+        for msg in messages:
+            role = msg.role
+            # Map llmring 'tool' role to a user message with textual content
+            if role == "tool":
+                role = "user"
+
+            entry: Dict[str, Any] = {"role": role, "type": "message"}
+
+            if isinstance(msg.content, str):
+                content = msg.content
+            elif isinstance(msg.content, list):
+                content_items: List[Dict[str, Any]] = []
+                text_accum: List[str] = []
+                for part in msg.content:
+                    if isinstance(part, str):
+                        text_accum.append(part)
+                    elif isinstance(part, dict):
+                        ptype = part.get("type")
+                        if ptype == "text":
+                            text_accum.append(part.get("text", ""))
+                        elif ptype == "image_url" and isinstance(part.get("image_url"), dict):
+                            url = part["image_url"].get("url")
+                            if isinstance(url, str) and url:
+                                content_items.append({"type": "input_image", "image_url": url})
+                        # Skip 'document' here (handled by dedicated PDF path)
+                # If we accumulated text, add as input_text first
+                if text_accum:
+                    content_items.insert(0, {"type": "input_text", "text": " ".join(text_accum)})
+
+                # Choose content representation
+                content = content_items if content_items else " ".join(text_accum)
+                if content == "":
+                    content = None
+            else:
+                content = str(msg.content)
+
+            if content is None:
+                continue
+
+            entry["content"] = content
+            responses_messages.append(entry)
+
+        return responses_messages
+
+    async def _chat_with_files_responses_api(
+        self,
+        messages: List[Message],
+        model: str,
+        files: List[str],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> LLMResponse:
+        """
+        Handle chat with uploaded files using OpenAI Responses API + file_search attachments.
+        """
+        # Strip provider prefix if present
+        model = strip_provider_prefix(model, "openai")
+
+        # Convert messages to Responses input and attach files to last user message
+        responses_input = self._messages_to_responses_input(messages)
+
+        # Find last user message, else create one
+        user_idx = None
+        for i in range(len(responses_input) - 1, -1, -1):
+            if responses_input[i].get("role") == "user":
+                user_idx = i
+                break
+        if user_idx is None:
+            responses_input.append({"role": "user", "type": "message", "content": []})
+            user_idx = len(responses_input) - 1
+
+        # Ensure content is a list
+        if isinstance(responses_input[user_idx].get("content"), str):
+            text_val = responses_input[user_idx]["content"]
+            responses_input[user_idx]["content"] = [{"type": "input_text", "text": text_val}]
+        elif responses_input[user_idx].get("content") is None:
+            responses_input[user_idx]["content"] = []
+
+        # Append files: inline text files as input_text; others as input_file
+        for fid in files:
+            try:
+                content_resp = await self.client.files.content(fid)
+                file_bytes = (
+                    content_resp.read() if hasattr(content_resp, "read") else bytes(content_resp)
+                )
+            except Exception:
+                file_bytes = b""
+            # If looks like PDF, use input_file; otherwise inline as text
+            if file_bytes.startswith(b"%PDF"):
+                responses_input[user_idx]["content"].append({"type": "input_file", "file_id": fid})
+            else:
+                try:
+                    text = (
+                        file_bytes.decode("utf-8", errors="replace")
+                        if file_bytes
+                        else "[File content unavailable]"
+                    )
+                except Exception:
+                    text = "[Binary file content omitted]"
+                responses_input[user_idx]["content"].append({"type": "input_text", "text": text})
+
+        # Build request
+        request_params: Dict[str, Any] = {
+            "model": model,
+            "input": responses_input,
+        }
+
+        # Map common parameters
+        if temperature is not None:
+            request_params["temperature"] = temperature
+        if max_tokens is not None:
+            request_params["max_output_tokens"] = max_tokens
+
+        # Handle response format for Responses API
+        if response_format:
+            if response_format.get("type") in {"json_object", "json"}:
+                request_params["response_format"] = {"type": "json_object"}
+            elif response_format.get("type") == "json_schema":
+                json_schema_format = {"type": "json_schema"}
+                if "json_schema" in response_format:
+                    json_schema_format["json_schema"] = response_format["json_schema"]
+                if response_format.get("strict") is not None:
+                    json_schema_format["json_schema"]["strict"] = response_format["strict"]
+                request_params["response_format"] = json_schema_format
+            else:
+                request_params["response_format"] = response_format
+
+        # Include user tools if provided (file inputs do not require file_search)
+        if tools:
+            request_params["tools"] = self._prepare_tools(tools)
+            if tool_choice is not None:
+                request_params["tool_choice"] = self._prepare_tool_choice(tool_choice)
+
+        if extra_params:
+            request_params.update(extra_params)
+
+        timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+        try:
+            resp = await asyncio.wait_for(
+                self.client.responses.create(**request_params),
+                timeout=timeout_s,
+            )
+        except Exception as e:
+            # Fallback: if input_file is not accepted (e.g., certain text files),
+            # inline file contents as input_text and retry once.
+            try:
+                # Clone input to avoid mutating original in error paths
+                retry_input = [dict(m) for m in responses_input]
+                # Ensure last user message
+                user_idx2 = None
+                for i in range(len(retry_input) - 1, -1, -1):
+                    if retry_input[i].get("role") == "user":
+                        user_idx2 = i
+                        break
+                if user_idx2 is None:
+                    retry_input.append({"role": "user", "type": "message", "content": []})
+                    user_idx2 = len(retry_input) - 1
+                # Ensure list content
+                if isinstance(retry_input[user_idx2].get("content"), str):
+                    text_val = retry_input[user_idx2]["content"]
+                    retry_input[user_idx2]["content"] = [{"type": "input_text", "text": text_val}]
+                elif retry_input[user_idx2].get("content") is None:
+                    retry_input[user_idx2]["content"] = []
+
+                # Fetch and inline file contents
+                for fid in files:
+                    try:
+                        content_resp = await self.client.files.content(fid)
+                        # content_resp is an httpx response-like; get bytes
+                        file_bytes = (
+                            content_resp.read()
+                            if hasattr(content_resp, "read")
+                            else bytes(content_resp)
+                        )
+                        try:
+                            text = file_bytes.decode("utf-8", errors="replace")
+                        except Exception:
+                            text = "[Binary file content omitted]"
+                        retry_input[user_idx2]["content"].append(
+                            {
+                                "type": "input_text",
+                                "text": text,
+                            }
+                        )
+                    except Exception:
+                        # If content retrieval fails, skip inlining for that file
+                        pass
+
+                retry_params = dict(request_params)
+                retry_params["input"] = retry_input
+                resp = await asyncio.wait_for(
+                    self.client.responses.create(**retry_params),
+                    timeout=timeout_s,
+                )
+            except Exception:
+                await self._error_handler.handle_error(e, model)
+
+        # Extract text
+        content_text: str
+        if hasattr(resp, "output_text") and resp.output_text is not None:
+            content_text = resp.output_text
+        else:
+            try:
+                content_text = str(resp)
+            except Exception:
+                content_text = ""
+
+        # Normalize usage fields into llmring format
+        usage = self._map_responses_usage(getattr(resp, "usage", None))
+
+        return LLMResponse(
+            content=content_text,
+            model=model,
+            usage=usage,
+            finish_reason="stop",
         )
+
+    async def _stream_with_files_responses_api(
+        self,
+        messages: List[Message],
+        model: str,
+        files: List[str],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """Stream via Responses API using file attachments and file_search."""
+        # Strip provider prefix if present
+        model = strip_provider_prefix(model, "openai")
+
+        # Convert messages to Responses input and attach files
+        responses_input = self._messages_to_responses_input(messages)
+        # Find last user message
+        user_idx = None
+        for i in range(len(responses_input) - 1, -1, -1):
+            if responses_input[i].get("role") == "user":
+                user_idx = i
+                break
+        if user_idx is None:
+            responses_input.append({"role": "user", "type": "message", "content": []})
+            user_idx = len(responses_input) - 1
+
+        # Ensure list content
+        if isinstance(responses_input[user_idx].get("content"), str):
+            text_val = responses_input[user_idx]["content"]
+            responses_input[user_idx]["content"] = [{"type": "input_text", "text": text_val}]
+        elif responses_input[user_idx].get("content") is None:
+            responses_input[user_idx]["content"] = []
+
+        for fid in files:
+            try:
+                content_resp = await self.client.files.content(fid)
+                file_bytes = (
+                    content_resp.read() if hasattr(content_resp, "read") else bytes(content_resp)
+                )
+            except Exception:
+                file_bytes = b""
+            if file_bytes.startswith(b"%PDF"):
+                responses_input[user_idx]["content"].append({"type": "input_file", "file_id": fid})
+            else:
+                try:
+                    text = (
+                        file_bytes.decode("utf-8", errors="replace")
+                        if file_bytes
+                        else "[File content unavailable]"
+                    )
+                except Exception:
+                    text = "[Binary file content omitted]"
+                responses_input[user_idx]["content"].append({"type": "input_text", "text": text})
+
+        request_params: Dict[str, Any] = {
+            "model": model,
+            "input": responses_input,
+        }
+        if temperature is not None:
+            request_params["temperature"] = temperature
+        if max_tokens is not None:
+            request_params["max_output_tokens"] = max_tokens
+        if response_format:
+            if response_format.get("type") in {"json_object", "json"}:
+                request_params["response_format"] = {"type": "json_object"}
+            elif response_format.get("type") == "json_schema":
+                json_schema_format = {"type": "json_schema"}
+                if "json_schema" in response_format:
+                    json_schema_format["json_schema"] = response_format["json_schema"]
+                if response_format.get("strict") is not None:
+                    json_schema_format["json_schema"]["strict"] = response_format["strict"]
+                request_params["response_format"] = json_schema_format
+            else:
+                request_params["response_format"] = response_format
+        if tools:
+            request_params["tools"] = self._prepare_tools(tools)
+            if tool_choice is not None:
+                request_params["tool_choice"] = self._prepare_tool_choice(tool_choice)
+        if extra_params:
+            request_params.update(extra_params)
+
+        # Stream using the SDK stream context manager
+        try:
+            # Async streaming context
+            async with self.client.responses.stream(**request_params) as stream:
+                async for event in stream:
+                    etype = getattr(event, "type", "")
+                    if etype.endswith("response.output_text.delta"):
+                        delta = getattr(event, "delta", None)
+                        if delta:
+                            yield StreamChunk(delta=delta, model=model)
+                    elif etype.endswith("response.error"):
+                        err = getattr(event, "error", None)
+                        msg = (
+                            getattr(err, "message", "OpenAI streaming error")
+                            if err
+                            else "OpenAI streaming error"
+                        )
+                        raise ProviderResponseError(msg, provider="openai")
+
+                # Completed; fetch final response for usage
+                final = await stream.get_final_response()
+                usage = None
+                u = getattr(final, "usage", None)
+                usage = self._map_responses_usage(u)
+                # Emit a final empty chunk with usage/finish
+                yield StreamChunk(delta="", model=model, finish_reason="stop", usage=usage)
+        except Exception as e:
+            await self._error_handler.handle_error(e, model)
 
     async def _chat_non_streaming(
         self,
@@ -1039,7 +1376,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 extra_params=extra_params,
             )
 
-        # Check if messages contain PDF content - if so, route to Assistants API
+        # Check if messages contain PDF content - if so, route to Responses API path
         if self._contains_pdf_content(messages):
             # Tools and response_format are not supported in the Responses+file_search PDF path
             if tools or response_format:

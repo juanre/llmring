@@ -312,20 +312,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             default_model=await self.get_default_model(),
         )
 
-    def get_token_count(self, text: str) -> int:
-        """
-        Get the token count for a text string.
-
-        Args:
-            text: The text to count tokens for
-
-        Returns:
-            Number of tokens (estimated)
-        """
-        # Rough estimate: ~4 characters per token for English text
-        return len(text) // 4
-
-    # NOTE: Removed unused _convert_type_to_gemini method to reduce dead code
+    # Token counting not used for Google provider; usage is taken from SDK when available.
 
     async def chat(
         self,
@@ -813,17 +800,32 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         # Finish reason indicates end of stream
                         if hasattr(candidate, "finish_reason") and candidate.finish_reason:
                             finish_reason = str(candidate.finish_reason).lower()
+                            # Map usage metadata on final streamed response if present
+                            usage_payload = None
+                            um = getattr(chunk, "usage_metadata", None) or getattr(
+                                chunk, "usageMetadata", None
+                            )
+                            if um is not None:
+                                prompt = getattr(um, "prompt_token_count", None) or getattr(
+                                    um, "promptTokens", None
+                                )
+                                candidates_tok = getattr(
+                                    um, "candidates_token_count", None
+                                ) or getattr(um, "candidatesTokens", None)
+                                total = getattr(um, "total_token_count", None) or getattr(
+                                    um, "totalTokens", None
+                                )
+                                usage_payload = {
+                                    "prompt_tokens": prompt,
+                                    "completion_tokens": candidates_tok,
+                                    "total_tokens": total,
+                                }
                             yield StreamChunk(
                                 delta="",
                                 model=model,
                                 finish_reason=finish_reason,
                                 tool_calls=tool_calls if tool_calls else None,
-                                usage={
-                                    "prompt_tokens": self.get_token_count(str(google_messages)),
-                                    "completion_tokens": self.get_token_count(accumulated_content),
-                                    "total_tokens": self.get_token_count(str(google_messages))
-                                    + self.get_token_count(accumulated_content),
-                                },
+                                usage=usage_payload,
                             )
                             break
             finally:
@@ -1197,13 +1199,21 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         except Exception:
             response_text_accum = ""
 
-        # Simple usage tracking (google-genai doesn't provide detailed token counts)
-        usage = {
-            "prompt_tokens": self.get_token_count("\n".join([str(m.content) for m in messages])),
-            "completion_tokens": self.get_token_count(response_text_accum or ""),
-            "total_tokens": 0,
-        }
-        usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
+        # Usage from SDK if available (usage_metadata)
+        usage = None
+        um = getattr(response, "usage_metadata", None) or getattr(response, "usageMetadata", None)
+        if um is not None:
+            # Map common fields (names differ by SDK)
+            prompt = getattr(um, "prompt_token_count", None) or getattr(um, "promptTokens", None)
+            candidates = getattr(um, "candidates_token_count", None) or getattr(
+                um, "candidatesTokens", None
+            )
+            total = getattr(um, "total_token_count", None) or getattr(um, "totalTokens", None)
+            usage = {
+                "prompt_tokens": prompt,
+                "completion_tokens": candidates,
+                "total_tokens": total,
+            }
 
         # Prepare the response
         llm_response = LLMResponse(

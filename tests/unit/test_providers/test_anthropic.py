@@ -165,30 +165,6 @@ class TestAnthropicProviderUnit:
         error_msg = str(exc_info.value).lower()
         assert any(word in error_msg for word in ["error", "unsupported", "invalid"])
 
-    def test_get_token_count_fallback(self, anthropic_provider):
-        """Test token counting fallback implementation."""
-        text = "This is a test sentence for token counting."
-        count = anthropic_provider.get_token_count(text)
-
-        assert isinstance(count, int)
-        assert count > 0
-        # Should be a reasonable approximation
-        assert 5 < count < 50
-
-    def test_get_token_count_with_tokenizer(self, anthropic_provider):
-        """Test token counting with anthropic tokenizer if available."""
-        try:
-            # Anthropic doesn't have a public tokenizer, so this tests the fallback
-            text = "Hello world"
-            count = anthropic_provider.get_token_count(text)
-
-            # Should use fallback method (length / 4 + 1)
-            expected = len(text) // 4 + 1
-            assert count == expected
-        except ImportError:
-            # Skip if tokenizer not available
-            pytest.skip("Anthropic tokenizer not available")
-
     @pytest.mark.asyncio
     async def test_chat_with_tool_calls_response(self, anthropic_provider, sample_tools):
         """Test handling of tool calls in response."""

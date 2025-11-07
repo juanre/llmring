@@ -87,6 +87,7 @@ class TestValidationService:
         """Should skip validation when no model specified."""
         request = LLMRequest(
             messages=[Message(role="user", content="Hello")],
+            model="",  # empty model -> treated as no model by validator
         )
 
         error = await validator.validate_context_limit(request)
@@ -329,6 +330,7 @@ class TestValidationService:
         """Should skip validation when no model specified."""
         request = LLMRequest(
             messages=[Message(role="user", content="Hello")],
+            model="",  # empty model -> treated as no model by validator
         )
 
         error = await validator.validate_model_capabilities(request)

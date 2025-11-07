@@ -485,26 +485,23 @@ except ValueError as e:
 
 ---
 
-#### OpenAI Chat Completions Not Supported
+#### OpenAI Files via Responses API
 
 ```python
-# OpenAI files don't work with Chat Completions API
+# OpenAI files are supported via Responses API (`input_file` items)
 file_id = service.register_file("document.pdf")
 
 request = LLMRequest(
     model="openai:gpt-4o",
-    messages=[Message(role="user", content="Analyze this")],
-    files=[file_id]
+    messages=[Message(role="user", content="Analyze this document")],
+    files=[file_id],  # llmring uploads lazily and includes as input_file
 )
 
-try:
-    response = await service.chat(request)
-except ValueError as e:
-    print(e)
-    # "OpenAI Chat Completions API does not support file uploads"
+response = await service.chat(request)
+print(response.content)
 ```
 
-**Solution:** Use Anthropic or Google for file-based chat interactions.
+llmring automatically switches to the Responses API for OpenAI when `files` are present, adding them as `input_file` items and merging any custom tools you pass.
 
 ---
 

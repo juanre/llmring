@@ -497,7 +497,8 @@ class TestVisionAPIValidation:
         error_msg = str(exc_info.value)
         assert "PDF files are not supported" in error_msg
         assert "OpenAI Chat Completions API" in error_msg
-        assert "Assistants API" in error_msg
+        # Suggest Responses API path for PDFs now
+        assert "Responses API" in error_msg
 
     @patch("llmring.file_utils.get_file_mime_type")
     @patch("os.path.exists")

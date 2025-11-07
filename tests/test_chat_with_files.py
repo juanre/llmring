@@ -86,28 +86,33 @@ async def test_anthropic_chat_with_multiple_files():
 
 
 @pytest.mark.asyncio
-async def test_openai_chat_with_files_raises_error():
-    """Test that OpenAI chat rejects file_ids with clear error message."""
+async def test_openai_chat_with_files():
+    """Test OpenAI chat with uploaded files using Responses API attachments."""
     if not os.getenv("OPENAI_API_KEY"):
         pytest.skip("OPENAI_API_KEY not set")
 
     provider = OpenAIProvider()
     try:
-        # Try to use files with OpenAI Chat Completions
+        # Upload test file to OpenAI
+        upload_response = await provider.upload_file(
+            file="tests/fixtures/sample.txt",
+            purpose="analysis",
+        )
+
         messages = [Message(role="user", content="What is in this file?")]
+        response = await provider.chat(
+            messages=messages,
+            model="gpt-4o",
+            files=[upload_response.file_id],
+        )
 
-        with pytest.raises(ValueError) as exc_info:
-            await provider.chat(
-                messages=messages,
-                model="gpt-4o",
-                files=["file-xyz123"],  # Fake file ID
-            )
+        # Verify response
+        assert response.content is not None
+        assert len(response.content) > 0
+        assert response.model == "gpt-4o"
 
-        # Verify error message is helpful
-        error_message = str(exc_info.value)
-        assert "Chat Completions API does not support file uploads" in error_message
-        assert "Assistants API" in error_message
-
+        # Cleanup uploaded file
+        await provider.delete_file(upload_response.file_id)
     finally:
         await provider.aclose()
 
@@ -130,6 +135,7 @@ async def test_google_chat_with_cached_content():
             file="tests/fixtures/google_large_doc.txt",
             purpose="cache",
             ttl_seconds=3600,
+            model="gemini-2.5-flash",  # Specify model that supports caching
         )
 
         # Use cached content in chat via files parameter
@@ -177,27 +183,26 @@ async def test_llmring_chat_with_files():
 
 
 @pytest.mark.asyncio
-async def test_llmring_chat_with_files_openai_error():
-    """Test LLMRing.chat() properly propagates OpenAI file error."""
+async def test_llmring_chat_with_files_openai():
+    """Test LLMRing.chat() uses Responses API for OpenAI when files are present."""
     if not os.getenv("OPENAI_API_KEY"):
         pytest.skip("OPENAI_API_KEY not set")
 
     async with LLMRing() as ring:
-        # Register file
+        # Register file (lazy upload)
         file_id = ring.register_file("tests/fixtures/sample.txt")
 
-        # Try to use files with OpenAI
+        # Use files with OpenAI via LLMRing
         request = LLMRequest(
             model="openai:gpt-4o",
             messages=[Message(role="user", content="What is in this file?")],
             files=[file_id],
         )
 
-        with pytest.raises(ValueError) as exc_info:
-            await ring.chat(request)
-
-        # Verify error message
-        assert "Chat Completions API does not support file uploads" in str(exc_info.value)
+        response = await ring.chat(request)
+        assert response.content is not None
+        assert len(response.content) > 0
+        assert "openai" in f"openai:{response.model}"
 
         # Cleanup
         await ring.deregister_file(file_id)

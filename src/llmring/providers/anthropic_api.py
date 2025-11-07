@@ -787,24 +787,8 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         return llm_response
 
-    def get_token_count(self, text: str) -> int:
-        """
-        Get an estimated token count for the text.
-
-        Args:
-            text: The text to count tokens for
-
-        Returns:
-            Estimated token count
-        """
-        try:
-            # Try to use Anthropic's tokenizer if available
-            from anthropic.tokenizer import count_tokens
-
-            return count_tokens(text)
-        except ImportError:
-            # Fall back to rough estimation - around 4 characters per token
-            return len(text) // 4 + 1
+    # Token counting is not needed for Anthropic provider; usage is returned by the SDK,
+    # including cache-related token fields.
 
     def _create_files_client(self) -> httpx.AsyncClient:
         """
