@@ -1,5 +1,5 @@
-# ABOUTME: Pydantic schemas for LLM requests, responses, messages, and file handling.
-# ABOUTME: Defines data models used across llmring for type safety and validation.
+"""Pydantic schemas for requests, responses, and file handling."""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union

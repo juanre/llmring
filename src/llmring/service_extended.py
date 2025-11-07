@@ -61,8 +61,6 @@ class LLMRingSession(LLMRing):
         self.enable_conversations = enable_conversations
         self.message_logging_level = message_logging_level
 
-        # Note: server_client is now inherited from parent (LLMRing)
-        # No need to initialize separately
         if self.enable_conversations and not self.server_client:
             logger.warning(
                 "Conversation tracking requested but no llmring-server configured. "

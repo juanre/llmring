@@ -1,13 +1,4 @@
-# ABOUTME: Provider detection and response normalization for decorator-based logging.
-# ABOUTME: Supports auto-detection and normalization from OpenAI, Anthropic, and Google SDKs.
-"""
-Provider detection and response normalization for decorator-based logging.
-
-Supports auto-detection and normalization of responses from:
-- OpenAI SDK
-- Anthropic SDK
-- Google Gemini SDK
-"""
+"""Provider detection and response normalization for decorator-based logging."""
 
 import inspect
 import logging

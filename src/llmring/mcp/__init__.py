@@ -1,2 +1,1 @@
-# ABOUTME: MCP (Model Context Protocol) package initialization.
-# ABOUTME: Exports MCP client, server, and tools for protocol integration.
+"""MCP (Model Context Protocol) client, server, and tools."""

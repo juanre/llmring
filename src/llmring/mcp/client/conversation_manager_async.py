@@ -124,8 +124,7 @@ class AsyncConversationManager:
         include_messages: bool = True,
     ) -> Optional[Conversation]:
         """Get a conversation with messages via HTTP API"""
-        # Note: This would need a dedicated endpoint in llmring-server
-        # For now, we'll construct from messages
+        # Construct a conversation view from messages
         messages = await self.http_client.get_conversation_messages(
             conversation_id=UUID(conversation_id)
         )
@@ -202,14 +201,12 @@ class AsyncConversationManager:
         offset: int = 0,
     ) -> List[ConversationSummary]:
         """List conversations for a user via HTTP API"""
-        # Note: This would need a dedicated endpoint in llmring-server
-        # For now, return empty list
+        # Placeholder until server endpoint exists
         return []
 
     async def delete_conversation(self, conversation_id: str) -> bool:
         """Delete a conversation via HTTP API"""
-        # Note: This would need a dedicated endpoint in llmring-server
-        # For now, return False
+        # Placeholder until server endpoint exists
         return False
 
     async def update_conversation(
@@ -222,8 +219,7 @@ class AsyncConversationManager:
         tool_config: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Update conversation settings via HTTP API"""
-        # Note: This would need a dedicated endpoint in llmring-server
-        # For now, return False
+        # Placeholder until server endpoint exists
         return False
 
     async def close(self):

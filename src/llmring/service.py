@@ -1,5 +1,5 @@
-# ABOUTME: Main LLM service that manages providers and routes requests to OpenAI, Anthropic, Google, and Ollama.
-# ABOUTME: Provides unified interface for chat, streaming, file uploads, and model resolution with lockfile support.
+"""Main LLM service managing providers, chat, streaming, and files."""
+
 """
 LLM service that manages providers and routes requests.
 """

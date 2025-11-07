@@ -15,8 +15,8 @@ JSONRPCMessage = Dict[str, Any]
 
 # Type for message callbacks
 MessageCallback = Union[
-    Callable[[JSONRPCMessage], None],  # Legacy: message only
-    Callable[[JSONRPCMessage, Any], None],  # New: message with context
+    Callable[[JSONRPCMessage], None],
+    Callable[[JSONRPCMessage, Any], None],
 ]
 
 
@@ -138,7 +138,6 @@ class Transport(abc.ABC):
                     # New style callback that accepts context
                     self._message_callback(message, context)
                 else:
-                    # Legacy callback without context
                     self._message_callback(message)
             except Exception as e:
                 self.logger.exception(f"Error in message callback: {str(e)}")

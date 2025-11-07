@@ -1,7 +1,7 @@
 # ABOUTME: HTTP transport for MCP server.
 # ABOUTME: Implements MCP over HTTP with request/response.
 """
-HTTP+SSE transport implementation for MCP (Legacy).
+HTTP+SSE transport implementation for MCP.
 
 This transport implements the older HTTP+SSE specification which uses separate
 endpoints for messages and SSE streams. It combines HTTP POST for client-to-server
@@ -168,7 +168,7 @@ class SessionManager:
 
 class HTTPTransport(Transport):
     """
-    Legacy HTTP+SSE transport implementation for MCP.
+    HTTP+SSE transport implementation for MCP.
 
     This implements the older HTTP+SSE specification which uses:
     - HTTP POST endpoint for client-to-server requests

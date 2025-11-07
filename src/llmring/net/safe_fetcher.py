@@ -1,5 +1,3 @@
-# ABOUTME: Safe HTTP fetcher with validation and security checks.
-# ABOUTME: Prevents SSRF and validates responses before processing.
 """Centralized safe HTTP fetcher for controlled remote downloads.
 
 Default posture is deny. Only enable via configuration and enforce:

@@ -22,8 +22,7 @@ class LoggingService:
     - Metadata-only: logs usage data (tokens, cost, model, alias)
     - Full conversations: logs messages + responses + metadata (includes usage logs)
 
-    Note: log_conversations=True implies logging both conversation content AND usage metadata.
-    This ensures usage records exist for analytics and cost tracking.
+
     """
 
     def __init__(
@@ -42,7 +41,7 @@ class LoggingService:
             log_conversations: Whether to log full conversations (also logs usage metadata)
             origin: Origin identifier for tracking
 
-        Note: If log_conversations=True, usage metadata will be logged regardless of log_metadata value.
+
         """
         self.server_client = server_client
         self.log_metadata = log_metadata

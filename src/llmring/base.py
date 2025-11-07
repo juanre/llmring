@@ -1,8 +1,4 @@
-# ABOUTME: Base classes for LLM providers defining the provider interface.
-# ABOUTME: Includes abstract methods for chat, streaming, and capability queries.
-"""
-Base class for LLM providers.
-"""
+"""Base classes for LLM providers (interface and config)."""
 
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Dict, List, Optional, Union

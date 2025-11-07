@@ -70,22 +70,12 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         )
         super().__init__(config)
 
-        # Initialize registry client BEFORE mixin init
         self._registry_client = RegistryClient()
-
-        # Now initialize mixins that may use the registry client
         RegistryModelSelectorMixin.__init__(self)
         ProviderLoggingMixin.__init__(self, "anthropic")
-
-        # Store for backward compatibility
         self.api_key = api_key
-        self.default_model = model  # Will be derived from registry if None
+        self.default_model = model
 
-        # Initialize the client with the SDK
-        # Include beta headers for prompt caching and files API
-        # Why: The anthropic-beta header is required to access experimental features.
-        # Anthropic uses beta headers to gate features before they become generally available.
-        # We need both prompt caching (2024-07-31) and files API (2025-04-14) support.
         self.client = AsyncAnthropic(
             api_key=api_key,
             base_url=base_url,
@@ -105,12 +95,10 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         if self.default_model:
             return self.default_model
 
-        # Derive from registry using policy-based selection
         try:
             if self._registry_client:
                 registry_models = await self._registry_client.fetch_current_models("anthropic")
                 if registry_models:
-                    # Extract model names from registry models
                     models = [m.model_name for m in registry_models]
                 else:
                     models = []
@@ -118,12 +106,11 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                 models = []
 
             if models:
-                # Use registry-based selection with Anthropic-specific cost range
                 selected_model = await self.select_default_from_registry(
                     provider_name="anthropic",
                     available_models=models,
-                    cost_range=(0.1, 20.0),  # Anthropic's typical range
-                    fallback_model=None,  # No hardcoded fallback
+                    cost_range=(0.1, 20.0),
+                    fallback_model=None,
                 )
                 self.default_model = selected_model
                 self.log_info(f"Derived default model from registry: {selected_model}")
@@ -132,7 +119,6 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         except Exception as e:
             self.log_warning(f"Could not derive default model from registry: {e}")
 
-        # No hardcoded fallback - require explicit model specification
         raise ValueError(
             "Could not determine default model from registry. "
             "Please specify a model explicitly or check your API configuration."

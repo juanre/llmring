@@ -1,5 +1,5 @@
-# ABOUTME: Common constants used throughout llmring including lockfile names and paths.
-# ABOUTME: Defines project root indicators, error message formats, and default values.
+"""Common constants used throughout llmring."""
+
 """
 Common constants used throughout the LLMRing package.
 """

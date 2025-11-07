@@ -1,11 +1,4 @@
-# ABOUTME: Exception hierarchy for llmring with structured error classes.
-# ABOUTME: Defines provider, model, registry, lockfile, MCP, and server exceptions with context preservation.
-"""
-Exception hierarchy for LLMRing.
-
-Clean, well-structured exception classes for proper error handling.
-Enhanced with specific exceptions for all components.
-"""
+"""Exception hierarchy for llmring with structured error classes."""
 
 from typing import Any, Optional
 

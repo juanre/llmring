@@ -1,12 +1,4 @@
-# ABOUTME: MCP client package initialization.
-# ABOUTME: Exports MCP client classes for connecting to MCP servers.
-"""
-MCP Client Library
-
-A Python library for interacting with Model Context Protocol (MCP) servers,
-providing both synchronous and asynchronous clients with conversation management,
-and an enhanced LLM interface for modules.
-"""
+"""MCP client library for interacting with MCP servers."""
 
 __version__ = "0.1.0"
 

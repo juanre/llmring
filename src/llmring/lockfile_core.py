@@ -158,11 +158,7 @@ class Lockfile(BaseModel):
 
     @classmethod
     def create_default(cls) -> "Lockfile":
-        """Create a default lockfile with empty profiles.
-
-        Note: This creates an empty lockfile. For registry-based defaults,
-        use create_default_async() instead.
-        """
+        """Create a default lockfile with empty profiles."""
         lockfile = cls()
 
         # Create empty default profile

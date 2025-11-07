@@ -1,5 +1,5 @@
-# ABOUTME: Interactive chat application for MCP servers.
-# ABOUTME: Provides terminal-based chat interface with tool calling.
+"""Interactive chat application for MCP servers."""
+
 """
 Main chat application for MCP client.
 """

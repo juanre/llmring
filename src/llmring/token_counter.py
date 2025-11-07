@@ -36,9 +36,7 @@ def count_tokens_openai(messages: List[Dict[str, Any]], model: str) -> int:
         logger.warning("tiktoken not installed, using character estimation")
         return _estimate_tokens_from_messages(messages)
 
-    # Get the correct encoding for the model
-    # NOTE: Hardcoded model name patterns below are an accepted exception per
-    # source-of-truth.md line 285 (token counting heuristics require model-specific encodings)
+    # Select encoding for the model
     try:
         if "gpt-4o" in model:
             encoding = tiktoken.get_encoding("o200k_base")
@@ -93,8 +91,7 @@ def count_tokens_anthropic(messages: List[Dict[str, Any]], model: str) -> int:
     """
     Count tokens for Anthropic models.
 
-    Note: Anthropic doesn't provide a public tokenizer, so we use estimation.
-    Their token count is generally similar to OpenAI's cl100k_base encoding.
+
 
     Args:
         messages: List of message dictionaries

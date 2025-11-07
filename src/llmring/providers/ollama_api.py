@@ -51,16 +51,11 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         )
         super().__init__(config)
 
-        # Initialize registry client BEFORE mixin init
         self._registry_client = RegistryClient()
-
-        # Now initialize mixins that may use the registry client
         RegistryModelSelectorMixin.__init__(self)
         ProviderLoggingMixin.__init__(self, "ollama")
-
-        # Store for backward compatibility
         self.base_url = base_url
-        self.default_model = model  # Will be derived from registry if None
+        self.default_model = model
 
         # Initialize the client with the SDK
         self.client = AsyncClient(host=base_url)
@@ -80,7 +75,6 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         if self.default_model:
             return self.default_model
 
-        # Derive from registry using policy-based selection
         try:
             # For Ollama, try registry first, then fall back to actual available models
             models = []
@@ -100,12 +94,11 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     pass
 
             if models:
-                # Use registry-based selection with Ollama-specific cost range (usually free local models)
                 selected_model = await self.select_default_from_registry(
                     provider_name="ollama",
                     available_models=models,
-                    cost_range=(0.0, 0.1),  # Ollama models are typically free/local
-                    fallback_model=None,  # No hardcoded fallback
+                    cost_range=(0.0, 0.1),
+                    fallback_model=None,
                 )
                 self.default_model = selected_model
                 self.log_info(f"Derived default model from registry: {selected_model}")
@@ -114,8 +107,6 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         except Exception as e:
             self.log_warning(f"Could not derive default model from registry: {e}")
 
-        # For Ollama, we can be more lenient since models are local
-        # Just use the first available model if any
         if models:
             self.default_model = models[0]
             self.log_warning(f"Using first available Ollama model: {self.default_model}")

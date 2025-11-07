@@ -1,11 +1,4 @@
-# ABOUTME: File handling utilities for LLM requests with base64 encoding and validation.
-# ABOUTME: Provides functions for images, PDFs, data URLs, and multi-file content creation.
-"""
-File handling utilities for the LLM Service.
-
-This module provides utilities for working with files in LLM requests,
-including automatic conversion to base64, file validation, and format detection.
-"""
+"""File handling utilities for LLM requests (images, PDFs, data URLs)."""
 
 import base64
 import mimetypes

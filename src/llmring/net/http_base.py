@@ -1,11 +1,4 @@
-# ABOUTME: Base HTTP client with authentication and error handling.
-# ABOUTME: Provides common HTTP methods for server communication.
-"""
-Base HTTP client for all LLMRing HTTP operations.
-
-This module provides a unified base class for HTTP operations,
-consolidating the various HTTP client implementations across the codebase.
-"""
+# Base HTTP client utilities.
 
 import logging
 from contextlib import asynccontextmanager

@@ -20,15 +20,15 @@ __all__ = [
 # Optional HTTP transports - require FastAPI (currently not exposed)
 # These imports are kept for potential future use but not exported
 # try:
-#     from .http import HTTPTransport, SessionManager  # Legacy, deprecated
 #     from .streamable_http import ResponseMode, StreamableHTTPTransport
 #
 #     __all__.extend(
 #         [
 #             "StreamableHTTPTransport",
 #             "ResponseMode",
-#             "HTTPTransport",  # Legacy, deprecated
-#             "SessionManager",  # Legacy, deprecated
+#     from .http import HTTPTransport, SessionManager
+#             "HTTPTransport",
+#             "SessionManager",
 #         ]
 #     )
 # except ImportError:

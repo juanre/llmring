@@ -196,18 +196,13 @@ class HTTPTransport(Transport):
         """Close the HTTP transport."""
         self._set_state(ConnectionState.DISCONNECTED)
 
-        # Note: We don't close the client here if it's from a pool
-        # The pool manages the lifecycle of shared clients
         if self.client and not self.pool:
             await self.client.aclose()
 
         self.client = None
 
 
-# Import ConnectionPool from client module to avoid circular imports
-# We'll need to refactor this in the next step
 try:
     from ..client import ConnectionPool
 except ImportError:
-    # Fallback for when ConnectionPool is moved
     ConnectionPool = None

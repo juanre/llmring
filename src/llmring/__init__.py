@@ -1,5 +1,5 @@
-# ABOUTME: Package initialization for llmring, exports core classes and utilities.
-# ABOUTME: Provides LLMRing service, schemas, exceptions, and file handling functions.
+"""Package exports for llmring core classes and utilities."""
+
 """The llmring package."""
 
 __version__ = "1.2.0"

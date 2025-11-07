@@ -1,10 +1,4 @@
-# ABOUTME: Decorators for logging LLM calls to llmring-server from any SDK.
-# ABOUTME: Enables usage tracking without requiring migration to LLMRing abstraction.
-"""
-Decorators for logging LLM calls to llmring-server.
-
-Enables LLMRing logging for any LLM SDK without requiring migration to LLMRing abstraction.
-"""
+"""Decorators for logging LLM calls to llmring-server."""
 
 import asyncio
 import functools

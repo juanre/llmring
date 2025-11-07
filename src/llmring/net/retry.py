@@ -1,5 +1,5 @@
-# ABOUTME: Retry logic with exponential backoff for transient failures.
-# ABOUTME: Handles rate limits, timeouts, and network errors gracefully.
+"""Retry logic with exponential backoff for transient failures."""
+
 from __future__ import annotations
 
 import asyncio

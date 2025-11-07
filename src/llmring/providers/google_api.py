@@ -78,24 +78,16 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         )
         super().__init__(config)
 
-        # Initialize registry client BEFORE mixin init
         self._registry_client = RegistryClient()
-
-        # Now initialize mixins that may use the registry client
         RegistryModelSelectorMixin.__init__(self)
         ProviderLoggingMixin.__init__(self, "google")
-
-        # Store for backward compatibility
         self.api_key = api_key
         self.project_id = project_id or os.environ.get("GOOGLE_PROJECT_ID", "")
-        self.default_model = model  # Will be derived from registry if None
+        self.default_model = model
 
         # Initialize the client
         self.client = genai.Client(api_key=api_key)
 
-        # Registry client already initialized before mixins
-
-        # Note: Model name mapping removed - rely on registry for model availability
         self._breaker = CircuitBreaker()
         self._error_handler = ProviderErrorHandler("google", self._breaker)
 
@@ -184,12 +176,10 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         if self.default_model:
             return self.default_model
 
-        # Derive from registry using policy-based selection
         try:
             if self._registry_client:
                 registry_models = await self._registry_client.fetch_current_models("google")
                 if registry_models:
-                    # Extract model names from registry models
                     models = [m.model_name for m in registry_models]
                 else:
                     models = []
@@ -197,12 +187,11 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 models = []
 
             if models:
-                # Use registry-based selection with Google-specific cost range
                 selected_model = await self.select_default_from_registry(
                     provider_name="google",
                     available_models=models,
-                    cost_range=(0.05, 2.0),  # Google's typical range
-                    fallback_model=None,  # No hardcoded fallback
+                    cost_range=(0.05, 2.0),
+                    fallback_model=None,
                 )
                 self.default_model = selected_model
                 self.log_info(f"Derived default model from registry: {selected_model}")
@@ -211,13 +200,10 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         except Exception as e:
             self.log_warning(f"Could not derive default model from registry: {e}")
 
-        # No hardcoded fallback - require explicit model specification
         raise ValueError(
             "Could not determine default model from registry. "
             "Please specify a model explicitly or check your API configuration."
         )
-
-    # Legacy method removed - now using RegistryModelSelectorMixin.select_default_from_registry()
 
     async def aclose(self) -> None:
         """Clean up provider resources."""
