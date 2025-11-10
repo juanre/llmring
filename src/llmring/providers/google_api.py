@@ -9,6 +9,7 @@ import base64
 import json
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
@@ -35,6 +36,15 @@ from llmring.utils import strip_provider_prefix
 # Note: do not call load_dotenv() in library code; handle in app entrypoints
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class UploadedFileInfo:
+    """Track Google uploaded files for expiration management."""
+
+    file_name: str  # Google file name (e.g., "files/abc123")
+    expiration_time: datetime  # When file expires (48h from upload)
+    local_path: Optional[str]  # Original file path for re-upload (None for file-like objects)
 
 
 class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggingMixin):
@@ -87,6 +97,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Initialize the client
         self.client = genai.Client(api_key=api_key)
+
+        # File upload tracking for expiration management
+        self._uploaded_files: Dict[str, UploadedFileInfo] = {}
 
         self._breaker = CircuitBreaker()
         self._error_handler = ProviderErrorHandler("google", self._breaker)
