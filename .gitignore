@@ -159,6 +159,9 @@ llmring.db
 pgdbm
 mcp-client
 
+# Git worktrees
+.worktrees/
+
 # uv
 uv.lock
 
