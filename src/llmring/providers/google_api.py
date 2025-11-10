@@ -1274,119 +1274,158 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
     async def upload_file(
         self,
         file: Union[str, Path, BinaryIO],
-        purpose: str = "cache",
+        purpose: str = "analysis",
         filename: Optional[str] = None,
-        ttl_seconds: int = 3600,
         **kwargs,
-    ) -> "FileUploadResponse":
+    ) -> FileUploadResponse:
         """
-        Create context cache from file (Google's file upload equivalent).
-
-        Google doesn't have discrete file uploads like Anthropic/OpenAI.
-        Instead, we create a context cache from the file content.
+        Upload file to Google File API (supports binary files up to 2GB).
 
         Args:
             file: File path, Path object, or file-like object
-            purpose: Purpose of the file (always "cache" for Google)
-            filename: Optional filename (for metadata)
-            ttl_seconds: Cache TTL in seconds (default: 3600 = 1 hour)
+            purpose: Purpose of the file (not used by Google, for API consistency)
+            filename: Optional filename (required for file-like objects)
             **kwargs: Additional provider-specific parameters
 
         Returns:
-            FileUploadResponse with file_id=cache_id
+            FileUploadResponse with file_id, size, etc.
 
         Raises:
-            ValueError: If file is not text or encoding fails
-            ProviderAuthenticationError: If authentication fails
-            ProviderResponseError: If cache creation fails
+            FileSizeError: If file exceeds 2GB limit
+            FileNotFoundError: If file path doesn't exist
+            ProviderResponseError: If upload fails
         """
-        # Read file content (text only for caching)
+        from llmring.exceptions import FileSizeError
+
+        # Google File API max size is 2GB
+        MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # 2GB in bytes
+
+        # Handle file path or file-like object
         if isinstance(file, (str, Path)):
             file_path = Path(file)
             if not file_path.exists():
                 raise FileNotFoundError(f"File not found: {file_path}")
 
-            # Read as text
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-            except UnicodeDecodeError as e:
-                raise ValueError(
-                    f"Google context caching only supports text files. "
-                    f"File {file_path} could not be decoded as UTF-8: {e}"
+            # Check file size
+            file_size = file_path.stat().st_size
+            if file_size > MAX_FILE_SIZE:
+                raise FileSizeError(
+                    f"File size {file_size} bytes exceeds Google limit of {MAX_FILE_SIZE} bytes",
+                    file_size=file_size,
+                    max_size=MAX_FILE_SIZE,
+                    provider="google",
+                    filename=str(file_path),
                 )
 
             actual_filename = filename or file_path.name
-            file_size = len(content.encode("utf-8"))
+            local_path = str(file_path.absolute())
+
+            # Upload using genai SDK
+            try:
+                # Run synchronous SDK call in thread pool
+                loop = asyncio.get_event_loop()
+
+                def _upload():
+                    return self.client.files.upload(file=str(file_path))
+
+                uploaded_file = await loop.run_in_executor(None, _upload)
+            except Exception as e:
+                await self._error_handler.handle_error(e, "files")
+
         else:
             # File-like object
             if filename is None:
                 raise ValueError("filename parameter is required for file-like objects")
 
-            # Read content
-            if hasattr(file, "read"):
-                content_bytes = file.read()
-                if isinstance(content_bytes, bytes):
-                    try:
-                        content = content_bytes.decode("utf-8")
-                    except UnicodeDecodeError as e:
-                        raise ValueError(
-                            f"Google context caching only supports text files. "
-                            f"Could not decode content as UTF-8: {e}"
-                        )
-                else:
-                    content = str(content_bytes)
-            else:
-                raise ValueError("File-like object must have a read() method")
+            # Read content to check size
+            current_pos = file.tell() if hasattr(file, "tell") else 0
+            file_content = file.read()
+            file_size = len(file_content)
+
+            # Reset file position if possible
+            if hasattr(file, "seek"):
+                file.seek(current_pos)
+
+            # Check size
+            if file_size > MAX_FILE_SIZE:
+                raise FileSizeError(
+                    f"File size {file_size} bytes exceeds Google limit of {MAX_FILE_SIZE} bytes",
+                    file_size=file_size,
+                    max_size=MAX_FILE_SIZE,
+                    provider="google",
+                    filename=filename,
+                )
 
             actual_filename = filename
-            file_size = len(content.encode("utf-8"))
+            local_path = None  # Can't re-upload file-like objects
 
-        # Get model for caching - use default model or from kwargs
-        model = kwargs.get("model") or self.default_model
-        if not model:
-            model = await self.get_default_model()
+            # Upload using genai SDK
+            try:
+                loop = asyncio.get_event_loop()
 
-        # Strip provider prefix from model if present
-        model = strip_provider_prefix(model, "google")
-        model = strip_provider_prefix(model, "gemini")
+                def _upload():
+                    # Reset position again before upload
+                    if hasattr(file, "seek"):
+                        file.seek(current_pos)
+                    return self.client.files.upload(file=file)
 
+                uploaded_file = await loop.run_in_executor(None, _upload)
+            except Exception as e:
+                await self._error_handler.handle_error(e, "files")
+
+        # Parse expiration time
         try:
-            # Create context cache using Google SDK
-            # Run synchronous SDK call in thread pool
-            loop = asyncio.get_event_loop()
+            expiration_str = uploaded_file.expiration_time
+            if isinstance(expiration_str, str):
+                expiration_time = datetime.fromisoformat(expiration_str.replace("Z", "+00:00"))
+            else:
+                # Might be a datetime object already
+                expiration_time = expiration_str
+        except Exception:
+            # Fallback: 48 hours from now
+            from datetime import timedelta, timezone
 
-            def _create_cache():
-                config = types.CreateCachedContentConfig(
-                    contents=content,
-                    ttl=f"{ttl_seconds}s",
-                )
-                return self.client.caches.create(model=model, config=config)
+            expiration_time = datetime.now(timezone.utc) + timedelta(hours=48)
 
-            cache_resp = await loop.run_in_executor(None, _create_cache)
+        # Store metadata for expiration tracking
+        self._uploaded_files[uploaded_file.name] = UploadedFileInfo(
+            file_name=uploaded_file.name,
+            expiration_time=expiration_time,
+            local_path=local_path,
+        )
 
-            # Parse response
-            # Google SDK returns datetime objects, not strings
-            create_time = cache_resp.create_time
-            if isinstance(create_time, str):
-                create_time = datetime.fromisoformat(create_time.replace("Z", "+00:00"))
+        # Parse created_at time
+        try:
+            create_time_str = uploaded_file.create_time
+            if isinstance(create_time_str, str):
+                created_at = datetime.fromisoformat(create_time_str.replace("Z", "+00:00"))
+            else:
+                created_at = create_time_str
+        except Exception:
+            created_at = datetime.now()
 
-            return FileUploadResponse(
-                file_id=cache_resp.name,  # e.g., "cachedContents/abc123"
-                provider="google",
-                filename=actual_filename,
-                size_bytes=file_size,
-                created_at=create_time,
-                purpose="cache",
-                metadata={
-                    "ttl_seconds": ttl_seconds,
-                    "model": model,
-                    "expire_time": str(cache_resp.expire_time) if cache_resp.expire_time else None,
-                },
-            )
-
-        except Exception as e:
-            await self._error_handler.handle_error(e, "caching")
+        # Return standardized response
+        return FileUploadResponse(
+            file_id=uploaded_file.name,
+            provider="google",
+            filename=actual_filename,
+            size_bytes=(
+                int(uploaded_file.size_bytes) if hasattr(uploaded_file, "size_bytes") else file_size
+            ),
+            created_at=created_at,
+            purpose=purpose,
+            metadata={
+                "mime_type": (
+                    uploaded_file.mime_type if hasattr(uploaded_file, "mime_type") else None
+                ),
+                "expiration_time": str(expiration_time),
+                "state": (
+                    uploaded_file.state.name
+                    if hasattr(uploaded_file, "state") and uploaded_file.state
+                    else "ACTIVE"
+                ),
+            },
+        )
 
     async def list_files(
         self, purpose: Optional[str] = None, limit: int = 100

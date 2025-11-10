@@ -3,11 +3,8 @@
 import os
 
 import pytest
-from dotenv import load_dotenv
 
 from llmring.providers.google_api import GoogleProvider
-
-load_dotenv()
 
 
 @pytest.mark.skipif(
