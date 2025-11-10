@@ -1427,6 +1427,74 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             },
         )
 
+    async def _ensure_file_available(self, file_id: str) -> Any:
+        """
+        Ensure file is available, re-uploading if expired.
+
+        Args:
+            file_id: Google file ID (e.g., "files/abc123")
+
+        Returns:
+            Google file object ready for use in contents array
+
+        Raises:
+            ValueError: If file not found or expired without re-upload path
+        """
+        from datetime import timezone
+
+        # Check if we have metadata for this file
+        if file_id not in self._uploaded_files:
+            # File uploaded elsewhere or before provider restart
+            # Try to get it from Google
+            try:
+                loop = asyncio.get_event_loop()
+
+                def _get_file():
+                    return self.client.files.get(name=file_id)
+
+                return await loop.run_in_executor(None, _get_file)
+            except Exception:
+                raise ValueError(
+                    f"File '{file_id}' not found. It may have expired or been deleted."
+                )
+
+        file_info = self._uploaded_files[file_id]
+
+        # Check expiration
+        if datetime.now(timezone.utc) >= file_info.expiration_time:
+            # File expired - re-upload if we have the local path
+            if not file_info.local_path:
+                raise ValueError(
+                    f"File '{file_id}' expired and cannot be re-uploaded "
+                    "(original was uploaded from file-like object)"
+                )
+
+            logger.info(f"Re-uploading expired file: {file_info.local_path}")
+
+            # Re-upload
+            new_upload = await self.upload_file(file=file_info.local_path)
+
+            # Update mapping - old file_id now points to new file metadata
+            # This preserves llmring file_id → Google file_id mapping in service.py
+            self._uploaded_files[file_id] = self._uploaded_files[new_upload.file_id]
+            del self._uploaded_files[new_upload.file_id]
+
+            # Get the file object
+            loop = asyncio.get_event_loop()
+
+            def _get_file():
+                return self.client.files.get(name=file_id)
+
+            return await loop.run_in_executor(None, _get_file)
+
+        # File still valid
+        loop = asyncio.get_event_loop()
+
+        def _get_file():
+            return self.client.files.get(name=file_id)
+
+        return await loop.run_in_executor(None, _get_file)
+
     async def list_files(
         self, purpose: Optional[str] = None, limit: int = 100
     ) -> "List[FileMetadata]":
