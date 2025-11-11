@@ -353,18 +353,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             cached_content IDs (starting with "cachedContents/"). Use the cache parameter
             with {"cached_content": "cachedContents/..."} or pass files directly.
         """
-        # Google uses cached_content for files, merge files into cache if provided
-        merged_cache = cache or {}
-        if files:
-            # Use the first file as cached_content (Google's file mechanism)
-            if len(files) > 1:
-                logger.warning(
-                    "Google provider only supports one cached_content at a time. Using first file: %s, ignoring others: %s",
-                    files[0],
-                    files[1:],
-                )
-            merged_cache["cached_content"] = files[0]
-
+        # Files will be handled in _chat_non_streaming
         return await self._chat_non_streaming(
             messages=messages,
             model=model,
@@ -375,8 +364,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools=tools,
             tool_choice=tool_choice,
             json_response=json_response,
-            cache=merged_cache if merged_cache else None,
+            cache=cache,
             extra_params=extra_params,
+            files=files,
         )
 
     async def chat_stream(
@@ -418,18 +408,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             >>> async for chunk in provider.chat_stream(messages, model="gemini-2.5-pro"):
             ...     print(chunk.content, end="", flush=True)
         """
-        # Google uses cached_content for files, merge files into cache if provided
-        merged_cache = cache or {}
-        if files:
-            # Use the first file as cached_content (Google's file mechanism)
-            if len(files) > 1:
-                logger.warning(
-                    "Google provider only supports one cached_content at a time. Using first file: %s, ignoring others: %s",
-                    files[0],
-                    files[1:],
-                )
-            merged_cache["cached_content"] = files[0]
-
+        # Files will be handled in _stream_chat
         return self._stream_chat(
             messages=messages,
             model=model,
@@ -440,8 +419,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools=tools,
             tool_choice=tool_choice,
             json_response=json_response,
-            cache=merged_cache if merged_cache else None,
+            cache=cache,
             extra_params=extra_params,
+            files=files,
         )
 
     async def _stream_chat(
@@ -457,6 +437,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """Real streaming implementation using Google SDK."""
         # reasoning_tokens is ignored for Google models
@@ -659,6 +640,15 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         ],
                     )
                 )
+
+        # Handle files - get file objects and prepend to contents
+        if files:
+            file_objects = []
+            for file_id in files:
+                file_obj = await self._ensure_file_available(file_id)
+                file_objects.append(file_obj)
+            # Prepend file objects to google_messages
+            google_messages = file_objects + google_messages
 
         try:
             key = f"google:{model}"
@@ -887,6 +877,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
         # reasoning_tokens is ignored for Google models
@@ -1010,6 +1001,23 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 # Convert content to Google format
                 converted_content = self._convert_content_to_google_format(msg.content)
 
+                # Handle files - get file objects and add to contents
+                contents_list = []
+                if files:
+                    for file_id in files:
+                        file_obj = await self._ensure_file_available(file_id)
+                        contents_list.append(file_obj)
+
+                # Add message content
+                if isinstance(converted_content, str):
+                    contents_list.append(converted_content)
+                elif isinstance(converted_content, list):
+                    contents_list.extend(converted_content)
+                else:
+                    contents_list.append(converted_content)
+
+                final_contents = contents_list if files else converted_content
+
                 # Run synchronous operation in thread pool
                 total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
 
@@ -1019,7 +1027,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                             None,
                             lambda: self.client.models.generate_content(
                                 model=api_model,
-                                contents=converted_content,
+                                contents=final_contents,
                                 config=config,
                             ),
                         ),
@@ -1112,6 +1120,13 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                             )
                         )
 
+                # Handle files - get file objects
+                file_objects = []
+                if files:
+                    for file_id in files:
+                        file_obj = await self._ensure_file_available(file_id)
+                        file_objects.append(file_obj)
+
                 # Create chat with history and send the current message
                 def _run_chat():
                     chat = self.client.chats.create(model=api_model, config=config, history=history)
@@ -1136,11 +1151,24 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                 )
                             )
                         ]
+                        # Add file objects if present
+                        if file_objects:
+                            return chat.send_message(file_objects + parts)
                         return chat.send_message(parts)
                     else:
                         converted_content = self._convert_content_to_google_format(
                             current_message.content
                         )
+                        # Add file objects if present
+                        if file_objects:
+                            contents_list = list(file_objects)
+                            if isinstance(converted_content, str):
+                                contents_list.append(converted_content)
+                            elif isinstance(converted_content, list):
+                                contents_list.extend(converted_content)
+                            else:
+                                contents_list.append(converted_content)
+                            return chat.send_message(contents_list)
                         return chat.send_message(converted_content)
 
                 # Run the chat in thread pool
