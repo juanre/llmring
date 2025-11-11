@@ -1597,24 +1597,29 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
     async def delete_file(self, file_id: str) -> bool:
         """
-        Delete cache (Google's delete file equivalent).
+        Delete uploaded file.
 
         Args:
-            file_id: Cache ID to delete (format: "cachedContents/abc123")
+            file_id: File ID to delete (format: "files/abc123")
 
         Returns:
             True on success
         """
         try:
-            # Delete cache using Google SDK
-            # Run synchronous SDK call in thread pool
+            # Delete file using Google SDK
             loop = asyncio.get_event_loop()
 
-            def _delete_cache():
-                self.client.caches.delete(name=file_id)
+            def _delete_file():
+                self.client.files.delete(name=file_id)
                 return True
 
-            return await loop.run_in_executor(None, _delete_cache)
+            result = await loop.run_in_executor(None, _delete_file)
+
+            # Remove from tracking
+            if file_id in self._uploaded_files:
+                del self._uploaded_files[file_id]
+
+            return result
 
         except Exception as e:
-            await self._error_handler.handle_error(e, "caching")
+            await self._error_handler.handle_error(e, "files")
