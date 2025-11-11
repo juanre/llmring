@@ -1479,19 +1479,20 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             self._uploaded_files[file_id] = self._uploaded_files[new_upload.file_id]
             del self._uploaded_files[new_upload.file_id]
 
-            # Get the file object
+            # Get the NEW file object (not the expired old one)
             loop = asyncio.get_event_loop()
 
             def _get_file():
-                return self.client.files.get(name=file_id)
+                return self.client.files.get(name=new_upload.file_id)
 
             return await loop.run_in_executor(None, _get_file)
 
-        # File still valid
+        # File still valid - use the actual Google file_name from metadata
+        # (handles case where file was previously re-uploaded)
         loop = asyncio.get_event_loop()
 
         def _get_file():
-            return self.client.files.get(name=file_id)
+            return self.client.files.get(name=file_info.file_name)
 
         return await loop.run_in_executor(None, _get_file)
 
