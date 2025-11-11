@@ -342,16 +342,16 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration with cached_content name
-            files: Optional list of cached_content IDs (Google uses cache mechanism for files)
+            files: Optional list of file IDs from upload_file() (e.g., "files/abc123")
             extra_params: Provider-specific parameters
 
         Returns:
             LLM response with complete generated content
 
         Note:
-            Google uses cached_content for file handling. The files parameter should contain
-            cached_content IDs (starting with "cachedContents/"). Use the cache parameter
-            with {"cached_content": "cachedContents/..."} or pass files directly.
+            Files uploaded via upload_file() are automatically handled. File objects
+            are retrieved and included in the contents array. Context caching (via
+            cache parameter) is separate from file uploads.
         """
         # Files will be handled in _chat_non_streaming
         return await self._chat_non_streaming(
@@ -398,7 +398,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
             cache: Optional cache configuration with cached_content name
-            files: Optional list of cached_content IDs (Google uses cache mechanism for files)
+            files: Optional list of file IDs from upload_file() (e.g., "files/abc123")
             extra_params: Provider-specific parameters
 
         Returns:
@@ -1611,45 +1611,67 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
     async def get_file(self, file_id: str) -> "FileMetadata":
         """
-        Get cache metadata (Google's get file equivalent).
+        Get file metadata.
 
         Args:
-            file_id: Cache ID to retrieve (format: "cachedContents/abc123")
+            file_id: File ID to retrieve (format: "files/abc123")
 
         Returns:
             FileMetadata object
         """
         try:
-            # Get cache using Google SDK
+            # Get file using Google SDK
             # Run synchronous SDK call in thread pool
             loop = asyncio.get_event_loop()
 
-            def _get_cache():
-                return self.client.caches.get(name=file_id)
+            def _get_file():
+                return self.client.files.get(name=file_id)
 
-            cache = await loop.run_in_executor(None, _get_cache)
+            file_obj = await loop.run_in_executor(None, _get_file)
 
-            # Parse response
-            create_time = cache.create_time
-            if isinstance(create_time, str):
-                create_time = datetime.fromisoformat(create_time.replace("Z", "+00:00"))
+            # Parse timestamps
+            try:
+                create_time_str = file_obj.create_time
+                if isinstance(create_time_str, str):
+                    created_at = datetime.fromisoformat(create_time_str.replace("Z", "+00:00"))
+                else:
+                    created_at = create_time_str
+            except Exception:
+                created_at = datetime.now()
+
+            # Map Google state to llmring status
+            state_name = (
+                file_obj.state.name if hasattr(file_obj, "state") and file_obj.state else "ACTIVE"
+            )
+            status_map = {
+                "ACTIVE": "ready",
+                "PROCESSING": "processing",
+                "FAILED": "error",
+            }
+            status = status_map.get(state_name, "ready")
 
             return FileMetadata(
-                file_id=cache.name,
+                file_id=file_obj.name,
                 provider="google",
-                filename=cache.name.split("/")[-1],  # Use cache ID as filename
-                size_bytes=0,  # Google doesn't expose cache size
-                created_at=create_time,
-                purpose="cache",
-                status="ready",
+                filename=(
+                    file_obj.display_name
+                    if hasattr(file_obj, "display_name") and file_obj.display_name
+                    else file_obj.name.split("/")[-1]
+                ),
+                size_bytes=(int(file_obj.size_bytes) if hasattr(file_obj, "size_bytes") else 0),
+                created_at=created_at,
+                purpose="file",
+                status=status,
                 metadata={
-                    "model": cache.model,
-                    "expire_time": str(cache.expire_time) if cache.expire_time else None,
+                    "mime_type": (file_obj.mime_type if hasattr(file_obj, "mime_type") else None),
+                    "expiration_time": (
+                        file_obj.expiration_time if hasattr(file_obj, "expiration_time") else None
+                    ),
                 },
             )
 
         except Exception as e:
-            await self._error_handler.handle_error(e, "caching")
+            await self._error_handler.handle_error(e, "files")
 
     async def delete_file(self, file_id: str) -> bool:
         """
