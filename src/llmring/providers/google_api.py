@@ -1500,58 +1500,86 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         self, purpose: Optional[str] = None, limit: int = 100
     ) -> "List[FileMetadata]":
         """
-        List context caches (Google's file list equivalent).
+        List uploaded files.
 
         Args:
-            purpose: Optional filter by purpose (ignored for Google, always "cache")
-            limit: Maximum number of caches to return (default 100)
+            purpose: Optional filter by purpose (not used by Google)
+            limit: Maximum number of files to return (default 100)
 
         Returns:
-            List of FileMetadata objects representing caches
+            List of FileMetadata objects
         """
         try:
-            # List caches using Google SDK
-            # Run synchronous SDK call in thread pool
+            # List files using Google SDK
             loop = asyncio.get_event_loop()
 
-            def _list_caches():
-                return self.client.caches.list()
+            def _list_files():
+                return self.client.files.list()
 
-            cache_list = await loop.run_in_executor(None, _list_caches)
+            files_list = await loop.run_in_executor(None, _list_files)
 
             # Parse response
-            # Google SDK returns a Pager object that can be iterated
-            files = []
-            for cache in cache_list:
-                # Extract metadata
-                create_time = cache.create_time
-                if isinstance(create_time, str):
-                    create_time = datetime.fromisoformat(create_time.replace("Z", "+00:00"))
+            result = []
+            for file_obj in files_list:
+                # Parse timestamps
+                try:
+                    create_time_str = file_obj.create_time
+                    if isinstance(create_time_str, str):
+                        created_at = datetime.fromisoformat(create_time_str.replace("Z", "+00:00"))
+                    else:
+                        created_at = create_time_str
+                except Exception:
+                    created_at = datetime.now()
 
-                files.append(
+                # Map Google state to llmring status
+                state_name = (
+                    file_obj.state.name
+                    if hasattr(file_obj, "state") and file_obj.state
+                    else "ACTIVE"
+                )
+                status_map = {
+                    "ACTIVE": "ready",
+                    "PROCESSING": "processing",
+                    "FAILED": "error",
+                }
+                status = status_map.get(state_name, "ready")
+
+                result.append(
                     FileMetadata(
-                        file_id=cache.name,  # e.g., "cachedContents/abc123"
+                        file_id=file_obj.name,
                         provider="google",
-                        filename=cache.name.split("/")[-1],  # Use cache ID as filename
-                        size_bytes=0,  # Google doesn't expose cache size
-                        created_at=create_time,
-                        purpose="cache",
-                        status="ready",  # Caches are always ready once created
+                        filename=(
+                            file_obj.display_name
+                            if hasattr(file_obj, "display_name") and file_obj.display_name
+                            else file_obj.name.split("/")[-1]
+                        ),
+                        size_bytes=(
+                            int(file_obj.size_bytes) if hasattr(file_obj, "size_bytes") else 0
+                        ),
+                        created_at=created_at,
+                        purpose="file",  # Google doesn't have purpose field
+                        status=status,
                         metadata={
-                            "model": cache.model,
-                            "expire_time": str(cache.expire_time) if cache.expire_time else None,
+                            "mime_type": (
+                                file_obj.mime_type if hasattr(file_obj, "mime_type") else None
+                            ),
+                            "expiration_time": (
+                                file_obj.expiration_time
+                                if hasattr(file_obj, "expiration_time")
+                                else None
+                            ),
                         },
                     )
                 )
 
                 # Limit results
-                if len(files) >= limit:
+                if len(result) >= limit:
                     break
 
-            return files
+            return result
 
         except Exception as e:
-            await self._error_handler.handle_error(e, "caching")
+            await self._error_handler.handle_error(e, "files")
 
     async def get_file(self, file_id: str) -> "FileMetadata":
         """
