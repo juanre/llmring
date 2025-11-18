@@ -1044,11 +1044,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
                 final_contents = contents_list if files else converted_content
 
-                # Run synchronous operation in thread pool
-                total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
-
+                # Run synchronous operation in thread pool with timeout handling
                 async def _do_call():
-                    return await asyncio.wait_for(
+                    return await self._await_with_timeout(
                         loop.run_in_executor(
                             None,
                             lambda: self.client.models.generate_content(
@@ -1057,7 +1055,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                 config=config,
                             ),
                         ),
-                        timeout=total_timeout,
+                        timeout,
                     )
 
                 key = f"google:{api_model}"
@@ -1197,12 +1195,10 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                             return chat.send_message(contents_list)
                         return chat.send_message(converted_content)
 
-                # Run the chat in thread pool
-                total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
-
+                # Run the chat in thread pool with timeout handling
                 async def _do_chat():
-                    return await asyncio.wait_for(
-                        loop.run_in_executor(None, _run_chat), timeout=total_timeout
+                    return await self._await_with_timeout(
+                        loop.run_in_executor(None, _run_chat), timeout
                     )
 
                 key = f"google:{api_model}"
