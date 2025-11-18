@@ -100,6 +100,11 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # File upload tracking for expiration management
         self._uploaded_files: Dict[str, UploadedFileInfo] = {}
+        # Per-file locks guard against concurrent re-uploads of the same file_id.
+        # Rationale: multiple overlapping chats referring to an expired file could
+        # otherwise trigger duplicate re-uploads and inconsistent mappings.
+        # Locks are only stored for tracked files; untracked IDs do not allocate locks.
+        self._file_locks: Dict[str, asyncio.Lock] = {}
 
         self._breaker = CircuitBreaker()
         self._error_handler = ProviderErrorHandler("google", self._breaker)
@@ -1354,6 +1359,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 loop = asyncio.get_event_loop()
 
                 def _upload():
+                    # Note: google-genai Files API does not accept display_name here.
+                    # Filename is still available from the returned object.
                     return self.client.files.upload(file=str(file_path))
 
                 uploaded_file = await loop.run_in_executor(None, _upload)
@@ -1365,17 +1372,22 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             if filename is None:
                 raise ValueError("filename parameter is required for file-like objects")
 
-            # Read content to check size
-            current_pos = file.tell() if hasattr(file, "tell") else 0
-            file_content = file.read()
-            file_size = len(file_content)
+            # Determine size safely if possible (avoid full read for large streams)
+            file_size: Optional[int] = None
+            start_pos = None
+            if hasattr(file, "seek") and hasattr(file, "tell"):
+                try:
+                    start_pos = file.tell()
+                    file.seek(0, 2)  # seek to end
+                    file_size = file.tell()
+                    if start_pos is not None:
+                        file.seek(start_pos)
+                except Exception:
+                    # Non-seekable streams fall back to unknown size
+                    file_size = None
 
-            # Reset file position if possible
-            if hasattr(file, "seek"):
-                file.seek(current_pos)
-
-            # Check size
-            if file_size > MAX_FILE_SIZE:
+            # Enforce max size only if known
+            if file_size is not None and file_size > MAX_FILE_SIZE:
                 raise FileSizeError(
                     f"File size {file_size} bytes exceeds Google limit of {MAX_FILE_SIZE} bytes",
                     file_size=file_size,
@@ -1393,8 +1405,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
                 def _upload():
                     # Reset position again before upload
-                    if hasattr(file, "seek"):
-                        file.seek(current_pos)
+                    if start_pos is not None and hasattr(file, "seek"):
+                        file.seek(start_pos)
+                    # Note: display_name is not supported as an argument.
                     return self.client.files.upload(file=file)
 
                 uploaded_file = await loop.run_in_executor(None, _upload)
@@ -1438,7 +1451,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             provider="google",
             filename=actual_filename,
             size_bytes=(
-                int(uploaded_file.size_bytes) if hasattr(uploaded_file, "size_bytes") else file_size
+                int(uploaded_file.size_bytes)
+                if hasattr(uploaded_file, "size_bytes") and getattr(uploaded_file, "size_bytes")
+                else (file_size if file_size is not None else 0)
             ),
             created_at=created_at,
             purpose=purpose,
@@ -1470,10 +1485,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         """
         from datetime import timezone
 
-        # Check if we have metadata for this file
+        # For files not tracked by this instance, do not allocate or store a lock.
+        # Just attempt retrieval directly.
         if file_id not in self._uploaded_files:
-            # File uploaded elsewhere or before provider restart
-            # Try to get it from Google
             try:
                 loop = asyncio.get_event_loop()
 
@@ -1486,43 +1500,46 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     f"File '{file_id}' not found. It may have expired or been deleted."
                 )
 
-        file_info = self._uploaded_files[file_id]
+        # Tracked file: serialize re-upload operations for this id
+        lock = self._file_locks.setdefault(file_id, asyncio.Lock())
+        async with lock:
+            file_info = self._uploaded_files[file_id]
 
-        # Check expiration
-        if datetime.now(timezone.utc) >= file_info.expiration_time:
-            # File expired - re-upload if we have the local path
-            if not file_info.local_path:
-                raise ValueError(
-                    f"File '{file_id}' expired and cannot be re-uploaded "
-                    "(original was uploaded from file-like object)"
-                )
+            # Check expiration
+            if datetime.now(timezone.utc) >= file_info.expiration_time:
+                # File expired - re-upload if we have the local path
+                if not file_info.local_path:
+                    raise ValueError(
+                        f"File '{file_id}' expired and cannot be re-uploaded "
+                        "(original was uploaded from file-like object)"
+                    )
 
-            logger.info(f"Re-uploading expired file: {file_info.local_path}")
+                logger.info(f"Re-uploading expired file: {file_info.local_path}")
 
-            # Re-upload
-            new_upload = await self.upload_file(file=file_info.local_path)
+                # Re-upload
+                new_upload = await self.upload_file(file=file_info.local_path)
 
-            # Update mapping - old file_id now points to new file metadata
-            # This preserves llmring file_id → Google file_id mapping in service.py
-            self._uploaded_files[file_id] = self._uploaded_files[new_upload.file_id]
-            del self._uploaded_files[new_upload.file_id]
+                # Update mapping - old file_id now points to new file metadata
+                # This preserves llmring file_id → Google file_id mapping in service.py
+                self._uploaded_files[file_id] = self._uploaded_files[new_upload.file_id]
+                del self._uploaded_files[new_upload.file_id]
 
-            # Get the NEW file object (not the expired old one)
+                # Get the NEW file object (not the expired old one)
+                loop = asyncio.get_event_loop()
+
+                def _get_file_new():
+                    return self.client.files.get(name=new_upload.file_id)
+
+                return await loop.run_in_executor(None, _get_file_new)
+
+            # File still valid - use the actual Google file_name from metadata
+            # (handles case where file was previously re-uploaded)
             loop = asyncio.get_event_loop()
 
-            def _get_file():
-                return self.client.files.get(name=new_upload.file_id)
+            def _get_file_current():
+                return self.client.files.get(name=file_info.file_name)
 
-            return await loop.run_in_executor(None, _get_file)
-
-        # File still valid - use the actual Google file_name from metadata
-        # (handles case where file was previously re-uploaded)
-        loop = asyncio.get_event_loop()
-
-        def _get_file():
-            return self.client.files.get(name=file_info.file_name)
-
-        return await loop.run_in_executor(None, _get_file)
+            return await loop.run_in_executor(None, _get_file_current)
 
     async def list_files(
         self, purpose: Optional[str] = None, limit: int = 100
@@ -1693,9 +1710,11 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
             result = await loop.run_in_executor(None, _delete_file)
 
-            # Remove from tracking
+            # Remove from tracking and cleanup lock to prevent unbounded growth
             if file_id in self._uploaded_files:
                 del self._uploaded_files[file_id]
+            if file_id in self._file_locks:
+                del self._file_locks[file_id]
 
             return result
 
