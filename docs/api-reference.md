@@ -13,7 +13,8 @@ from llmring.service import LLMRing
 async with LLMRing(
     origin="myapp",                    # Optional: Origin identifier
     registry_url=None,                 # Optional: Custom registry URL
-    lockfile_path="/path/to/custom.lock"  # Optional: Explicit lockfile path
+    lockfile_path="/path/to/custom.lock",  # Optional: Explicit lockfile path
+    timeout=120.0                      # Optional: Default request timeout
 ) as service:
     # Use service here
     response = await service.chat(request)
@@ -30,6 +31,8 @@ try:
 finally:
     await service.close()  # Ensure resources are cleaned up
 ```
+
+The `timeout` parameter controls how long LLMRing waits for provider responses. It defaults to 60 seconds, honors the `LLMRING_PROVIDER_TIMEOUT_S` environment value when unspecified, and can be set to `None` to disable the timer entirely.
 
 **Methods:**
 - `async chat(request: LLMRequest, profile: str | None = None) -> LLMResponse`
@@ -56,10 +59,13 @@ request = LLMRequest(
     response_format={"type": "json_object"}, # Optional: Response format
     tools=[...],                             # Optional: Available functions
     tool_choice="auto",                      # Optional: Tool usage mode
+    timeout=None,                            # Optional: Override or disable timeout
     extra_params={}                          # Optional: Provider-specific params
 )
 ```
 > Note: streaming is handled via `LLMRing.chat_stream(...)`, not by passing a `stream` flag on the request.
+
+`timeout` inherits the service default when omitted and can be set to `None` to wait indefinitely for a single request.
 
 ### LLMResponse
 

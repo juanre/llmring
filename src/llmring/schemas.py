@@ -66,6 +66,14 @@ class LLMRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     json_response: Optional[bool] = None
     files: Optional[List[str]] = None  # List of file_ids
+    timeout: Optional[float] = Field(
+        default=None,
+        description=(
+            "Override request timeout in seconds. "
+            "When omitted, inherits from the LLMRing default. "
+            "Set explicitly to None to disable timeout for this request."
+        ),
+    )
     extra_params: Dict[str, Any] = Field(default_factory=dict)  # Provider-specific parameters
 
 

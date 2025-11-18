@@ -9,6 +9,7 @@ import base64
 import json
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
@@ -16,7 +17,13 @@ from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
 from google import genai
 from google.genai import types
 
-from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
+from llmring.base import (
+    TIMEOUT_UNSET,
+    BaseLLMProvider,
+    ProviderCapabilities,
+    ProviderConfig,
+    resolve_timeout_config,
+)
 from llmring.exceptions import (
     CircuitBreakerError,
     ProviderAuthenticationError,
@@ -37,6 +44,15 @@ from llmring.utils import strip_provider_prefix
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class UploadedFileInfo:
+    """Track Google uploaded files for expiration management."""
+
+    file_name: str  # Google file name (e.g., "files/abc123")
+    expiration_time: datetime  # When file expires (48h from upload)
+    local_path: Optional[str]  # Original file path for re-upload (None for file-like objects)
+
+
 class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggingMixin):
     """Implementation of Google Gemini API provider using the official google-genai library."""
 
@@ -46,6 +62,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         base_url: Optional[str] = None,
         project_id: Optional[str] = None,
         model: Optional[str] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ):
         """
         Initialize the Google Gemini provider.
@@ -74,7 +91,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             api_key=api_key,
             base_url=base_url,
             default_model=model,
-            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60")),
+            timeout_seconds=resolve_timeout_config(
+                timeout, os.getenv("LLMRING_PROVIDER_TIMEOUT_S")
+            ),
         )
         super().__init__(config)
 
@@ -87,6 +106,14 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Initialize the client
         self.client = genai.Client(api_key=api_key)
+
+        # File upload tracking for expiration management
+        self._uploaded_files: Dict[str, UploadedFileInfo] = {}
+        # Per-file locks guard against concurrent re-uploads of the same file_id.
+        # Rationale: multiple overlapping chats referring to an expired file could
+        # otherwise trigger duplicate re-uploads and inconsistent mappings.
+        # Locks are only stored for tracked files; untracked IDs do not allocate locks.
+        self._file_locks: Dict[str, asyncio.Lock] = {}
 
         self._breaker = CircuitBreaker()
         self._error_handler = ProviderErrorHandler("google", self._breaker)
@@ -314,6 +341,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ) -> LLMResponse:
         """
         Send a chat request to the Google Gemini API using the official SDK.
@@ -328,29 +356,15 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
-            cache: Optional cache configuration with cached_content name
-            files: Optional list of cached_content IDs (Google uses cache mechanism for files)
+            cache: Optional cache configuration (unrelated to files)
+            files: Optional list of file IDs from upload_file() (e.g., "files/abc123")
             extra_params: Provider-specific parameters
 
         Returns:
             LLM response with complete generated content
 
-        Note:
-            Google uses cached_content for file handling. The files parameter should contain
-            cached_content IDs (starting with "cachedContents/"). Use the cache parameter
-            with {"cached_content": "cachedContents/..."} or pass files directly.
         """
-        # Google uses cached_content for files, merge files into cache if provided
-        merged_cache = cache or {}
-        if files:
-            # Use the first file as cached_content (Google's file mechanism)
-            if len(files) > 1:
-                logger.warning(
-                    "Google provider only supports one cached_content at a time. Using first file: %s, ignoring others: %s",
-                    files[0],
-                    files[1:],
-                )
-            merged_cache["cached_content"] = files[0]
+        resolved_timeout = self._resolve_timeout_value(timeout)
 
         return await self._chat_non_streaming(
             messages=messages,
@@ -362,8 +376,10 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools=tools,
             tool_choice=tool_choice,
             json_response=json_response,
-            cache=merged_cache if merged_cache else None,
+            cache=cache,
             extra_params=extra_params,
+            files=files,
+            timeout=resolved_timeout,
         )
 
     async def chat_stream(
@@ -380,6 +396,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         cache: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ) -> AsyncIterator[StreamChunk]:
         """
         Send a streaming chat request to the Google Gemini API.
@@ -394,8 +411,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools: Optional list of tools
             tool_choice: Optional tool choice parameter
             json_response: Optional flag to request JSON response
-            cache: Optional cache configuration with cached_content name
-            files: Optional list of cached_content IDs (Google uses cache mechanism for files)
+            cache: Optional cache configuration (unrelated to files)
+            files: Optional list of file IDs from upload_file() (e.g., "files/abc123")
             extra_params: Provider-specific parameters
 
         Returns:
@@ -405,17 +422,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             >>> async for chunk in provider.chat_stream(messages, model="gemini-2.5-pro"):
             ...     print(chunk.content, end="", flush=True)
         """
-        # Google uses cached_content for files, merge files into cache if provided
-        merged_cache = cache or {}
-        if files:
-            # Use the first file as cached_content (Google's file mechanism)
-            if len(files) > 1:
-                logger.warning(
-                    "Google provider only supports one cached_content at a time. Using first file: %s, ignoring others: %s",
-                    files[0],
-                    files[1:],
-                )
-            merged_cache["cached_content"] = files[0]
+        resolved_timeout = self._resolve_timeout_value(timeout)
 
         return self._stream_chat(
             messages=messages,
@@ -427,8 +434,10 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools=tools,
             tool_choice=tool_choice,
             json_response=json_response,
-            cache=merged_cache if merged_cache else None,
+            cache=cache,
+            files=files,
             extra_params=extra_params,
+            timeout=resolved_timeout,
         )
 
     async def _stream_chat(
@@ -443,7 +452,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> AsyncIterator[StreamChunk]:
         """Real streaming implementation using Google SDK."""
         # reasoning_tokens is ignored for Google models
@@ -646,6 +657,15 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         ],
                     )
                 )
+
+        # Handle files - get file objects and prepend to contents
+        if files:
+            file_objects = []
+            for file_id in files:
+                file_obj = await self._ensure_file_available(file_id)
+                file_objects.append(file_obj)
+            # Prepend file objects to google_messages
+            google_messages = file_objects + google_messages
 
         try:
             key = f"google:{model}"
@@ -873,7 +893,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
         # reasoning_tokens is ignored for Google models
@@ -997,20 +1019,35 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 # Convert content to Google format
                 converted_content = self._convert_content_to_google_format(msg.content)
 
-                # Run synchronous operation in thread pool
-                total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+                # Handle files - get file objects and add to contents
+                contents_list = []
+                if files:
+                    for file_id in files:
+                        file_obj = await self._ensure_file_available(file_id)
+                        contents_list.append(file_obj)
 
+                # Add message content
+                if isinstance(converted_content, str):
+                    contents_list.append(converted_content)
+                elif isinstance(converted_content, list):
+                    contents_list.extend(converted_content)
+                else:
+                    contents_list.append(converted_content)
+
+                final_contents = contents_list if files else converted_content
+
+                # Run synchronous operation in thread pool
                 async def _do_call():
-                    return await asyncio.wait_for(
+                    return await self._await_with_timeout(
                         loop.run_in_executor(
                             None,
                             lambda: self.client.models.generate_content(
                                 model=api_model,
-                                contents=converted_content,
+                                contents=final_contents,
                                 config=config,
                             ),
                         ),
-                        timeout=total_timeout,
+                        timeout,
                     )
 
                 key = f"google:{api_model}"
@@ -1099,6 +1136,13 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                             )
                         )
 
+                # Handle files - get file objects
+                file_objects = []
+                if files:
+                    for file_id in files:
+                        file_obj = await self._ensure_file_available(file_id)
+                        file_objects.append(file_obj)
+
                 # Create chat with history and send the current message
                 def _run_chat():
                     chat = self.client.chats.create(model=api_model, config=config, history=history)
@@ -1123,19 +1167,30 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                 )
                             )
                         ]
+                        # Add file objects if present
+                        if file_objects:
+                            return chat.send_message(file_objects + parts)
                         return chat.send_message(parts)
                     else:
                         converted_content = self._convert_content_to_google_format(
                             current_message.content
                         )
+                        # Add file objects if present
+                        if file_objects:
+                            contents_list = list(file_objects)
+                            if isinstance(converted_content, str):
+                                contents_list.append(converted_content)
+                            elif isinstance(converted_content, list):
+                                contents_list.extend(converted_content)
+                            else:
+                                contents_list.append(converted_content)
+                            return chat.send_message(contents_list)
                         return chat.send_message(converted_content)
 
                 # Run the chat in thread pool
-                total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
-
                 async def _do_chat():
-                    return await asyncio.wait_for(
-                        loop.run_in_executor(None, _run_chat), timeout=total_timeout
+                    return await self._await_with_timeout(
+                        loop.run_in_executor(None, _run_chat), timeout
                     )
 
                 key = f"google:{api_model}"
@@ -1258,242 +1313,428 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         return _walk(exc)
 
+    # Removed legacy cache-emulation upload; Google Files API is used below
+
     async def upload_file(
         self,
         file: Union[str, Path, BinaryIO],
-        purpose: str = "cache",
+        purpose: str = "analysis",
         filename: Optional[str] = None,
-        ttl_seconds: int = 3600,
         **kwargs,
-    ) -> "FileUploadResponse":
+    ) -> FileUploadResponse:
         """
-        Create context cache from file (Google's file upload equivalent).
-
-        Google doesn't have discrete file uploads like Anthropic/OpenAI.
-        Instead, we create a context cache from the file content.
+        Upload file to Google File API (supports binary files up to 2GB).
 
         Args:
             file: File path, Path object, or file-like object
-            purpose: Purpose of the file (always "cache" for Google)
-            filename: Optional filename (for metadata)
-            ttl_seconds: Cache TTL in seconds (default: 3600 = 1 hour)
+            purpose: Purpose of the file (not used by Google, for API consistency)
+            filename: Optional filename (required for file-like objects)
             **kwargs: Additional provider-specific parameters
 
         Returns:
-            FileUploadResponse with file_id=cache_id
+            FileUploadResponse with file_id, size, etc.
 
         Raises:
-            ValueError: If file is not text or encoding fails
-            ProviderAuthenticationError: If authentication fails
-            ProviderResponseError: If cache creation fails
+            FileSizeError: If file exceeds 2GB limit
+            FileNotFoundError: If file path doesn't exist
+            ProviderResponseError: If upload fails
         """
-        # Read file content (text only for caching)
+        from llmring.exceptions import FileSizeError
+
+        # Google File API max size is 2GB
+        MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # 2GB in bytes
+
+        # Handle file path or file-like object
         if isinstance(file, (str, Path)):
             file_path = Path(file)
             if not file_path.exists():
                 raise FileNotFoundError(f"File not found: {file_path}")
 
-            # Read as text
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-            except UnicodeDecodeError as e:
-                raise ValueError(
-                    f"Google context caching only supports text files. "
-                    f"File {file_path} could not be decoded as UTF-8: {e}"
+            # Check file size
+            file_size = file_path.stat().st_size
+            if file_size > MAX_FILE_SIZE:
+                raise FileSizeError(
+                    f"File size {file_size} bytes exceeds Google limit of {MAX_FILE_SIZE} bytes",
+                    file_size=file_size,
+                    max_size=MAX_FILE_SIZE,
+                    provider="google",
+                    filename=str(file_path),
                 )
 
             actual_filename = filename or file_path.name
-            file_size = len(content.encode("utf-8"))
+            local_path = str(file_path.absolute())
+
+            # Upload using genai SDK
+            try:
+                # Run synchronous SDK call in thread pool
+                loop = asyncio.get_event_loop()
+
+                def _upload():
+                    # Note: google-genai Files API does not accept display_name here.
+                    # Filename is still available from the returned object.
+                    return self.client.files.upload(file=str(file_path))
+
+                uploaded_file = await loop.run_in_executor(None, _upload)
+            except Exception as e:
+                await self._error_handler.handle_error(e, "files")
+
         else:
             # File-like object
             if filename is None:
                 raise ValueError("filename parameter is required for file-like objects")
 
-            # Read content
-            if hasattr(file, "read"):
-                content_bytes = file.read()
-                if isinstance(content_bytes, bytes):
-                    try:
-                        content = content_bytes.decode("utf-8")
-                    except UnicodeDecodeError as e:
-                        raise ValueError(
-                            f"Google context caching only supports text files. "
-                            f"Could not decode content as UTF-8: {e}"
-                        )
-                else:
-                    content = str(content_bytes)
-            else:
-                raise ValueError("File-like object must have a read() method")
+            # Determine size safely if possible (avoid full read for large streams)
+            file_size: Optional[int] = None
+            start_pos = None
+            if hasattr(file, "seek") and hasattr(file, "tell"):
+                try:
+                    start_pos = file.tell()
+                    file.seek(0, 2)  # seek to end
+                    file_size = file.tell()
+                    if start_pos is not None:
+                        file.seek(start_pos)
+                except Exception:
+                    # Non-seekable streams fall back to unknown size
+                    file_size = None
+
+            # Enforce max size only if known
+            if file_size is not None and file_size > MAX_FILE_SIZE:
+                raise FileSizeError(
+                    f"File size {file_size} bytes exceeds Google limit of {MAX_FILE_SIZE} bytes",
+                    file_size=file_size,
+                    max_size=MAX_FILE_SIZE,
+                    provider="google",
+                    filename=filename,
+                )
 
             actual_filename = filename
-            file_size = len(content.encode("utf-8"))
+            local_path = None  # Can't re-upload file-like objects
 
-        # Get model for caching - use default model or from kwargs
-        model = kwargs.get("model") or self.default_model
-        if not model:
-            model = await self.get_default_model()
+            # Upload using genai SDK
+            try:
+                loop = asyncio.get_event_loop()
 
-        # Strip provider prefix from model if present
-        model = strip_provider_prefix(model, "google")
-        model = strip_provider_prefix(model, "gemini")
+                def _upload():
+                    # Reset position again before upload
+                    if start_pos is not None and hasattr(file, "seek"):
+                        file.seek(start_pos)
+                    # Note: display_name is not supported as an argument.
+                    return self.client.files.upload(file=file)
 
+                uploaded_file = await loop.run_in_executor(None, _upload)
+            except Exception as e:
+                await self._error_handler.handle_error(e, "files")
+
+        # Parse expiration time
         try:
-            # Create context cache using Google SDK
-            # Run synchronous SDK call in thread pool
+            expiration_str = uploaded_file.expiration_time
+            if isinstance(expiration_str, str):
+                expiration_time = datetime.fromisoformat(expiration_str.replace("Z", "+00:00"))
+            else:
+                # Might be a datetime object already
+                expiration_time = expiration_str
+        except Exception:
+            # Fallback: 48 hours from now
+            from datetime import timedelta, timezone
+
+            expiration_time = datetime.now(timezone.utc) + timedelta(hours=48)
+
+        # Store metadata for expiration tracking
+        self._uploaded_files[uploaded_file.name] = UploadedFileInfo(
+            file_name=uploaded_file.name,
+            expiration_time=expiration_time,
+            local_path=local_path,
+        )
+
+        # Parse created_at time
+        try:
+            create_time_str = uploaded_file.create_time
+            if isinstance(create_time_str, str):
+                created_at = datetime.fromisoformat(create_time_str.replace("Z", "+00:00"))
+            else:
+                created_at = create_time_str
+        except Exception:
+            created_at = datetime.now()
+
+        # Return standardized response
+        return FileUploadResponse(
+            file_id=uploaded_file.name,
+            provider="google",
+            filename=actual_filename,
+            size_bytes=(
+                int(uploaded_file.size_bytes)
+                if hasattr(uploaded_file, "size_bytes") and getattr(uploaded_file, "size_bytes")
+                else (file_size if file_size is not None else 0)
+            ),
+            created_at=created_at,
+            purpose=purpose,
+            metadata={
+                "mime_type": (
+                    uploaded_file.mime_type if hasattr(uploaded_file, "mime_type") else None
+                ),
+                "expiration_time": str(expiration_time),
+                "state": (
+                    uploaded_file.state.name
+                    if hasattr(uploaded_file, "state") and uploaded_file.state
+                    else "ACTIVE"
+                ),
+            },
+        )
+
+    async def _ensure_file_available(self, file_id: str) -> Any:
+        """
+        Ensure file is available, re-uploading if expired.
+
+        Args:
+            file_id: Google file ID (e.g., "files/abc123")
+
+        Returns:
+            Google file object ready for use in contents array
+
+        Raises:
+            ValueError: If file not found or expired without re-upload path
+        """
+        from datetime import timezone
+
+        # For files not tracked by this instance, do not allocate or store a lock.
+        # Just attempt retrieval directly.
+        if file_id not in self._uploaded_files:
+            try:
+                loop = asyncio.get_event_loop()
+
+                def _get_file():
+                    return self.client.files.get(name=file_id)
+
+                return await loop.run_in_executor(None, _get_file)
+            except Exception:
+                raise ValueError(
+                    f"File '{file_id}' not found. It may have expired or been deleted."
+                )
+
+        # Tracked file: serialize re-upload operations for this id
+        lock = self._file_locks.setdefault(file_id, asyncio.Lock())
+        async with lock:
+            file_info = self._uploaded_files[file_id]
+
+            # Check expiration
+            if datetime.now(timezone.utc) >= file_info.expiration_time:
+                # File expired - re-upload if we have the local path
+                if not file_info.local_path:
+                    raise ValueError(
+                        f"File '{file_id}' expired and cannot be re-uploaded "
+                        "(original was uploaded from file-like object)"
+                    )
+
+                logger.info(f"Re-uploading expired file: {file_info.local_path}")
+
+                # Re-upload
+                new_upload = await self.upload_file(file=file_info.local_path)
+
+                # Update mapping - old file_id now points to new file metadata
+                # This preserves llmring file_id → Google file_id mapping in service.py
+                self._uploaded_files[file_id] = self._uploaded_files[new_upload.file_id]
+                del self._uploaded_files[new_upload.file_id]
+
+                # Get the NEW file object (not the expired old one)
+                loop = asyncio.get_event_loop()
+
+                def _get_file_new():
+                    return self.client.files.get(name=new_upload.file_id)
+
+                return await loop.run_in_executor(None, _get_file_new)
+
+            # File still valid - use the actual Google file_name from metadata
+            # (handles case where file was previously re-uploaded)
             loop = asyncio.get_event_loop()
 
-            def _create_cache():
-                config = types.CreateCachedContentConfig(
-                    contents=content,
-                    ttl=f"{ttl_seconds}s",
-                )
-                return self.client.caches.create(model=model, config=config)
+            def _get_file_current():
+                return self.client.files.get(name=file_info.file_name)
 
-            cache_resp = await loop.run_in_executor(None, _create_cache)
-
-            # Parse response
-            # Google SDK returns datetime objects, not strings
-            create_time = cache_resp.create_time
-            if isinstance(create_time, str):
-                create_time = datetime.fromisoformat(create_time.replace("Z", "+00:00"))
-
-            return FileUploadResponse(
-                file_id=cache_resp.name,  # e.g., "cachedContents/abc123"
-                provider="google",
-                filename=actual_filename,
-                size_bytes=file_size,
-                created_at=create_time,
-                purpose="cache",
-                metadata={
-                    "ttl_seconds": ttl_seconds,
-                    "model": model,
-                    "expire_time": str(cache_resp.expire_time) if cache_resp.expire_time else None,
-                },
-            )
-
-        except Exception as e:
-            await self._error_handler.handle_error(e, "caching")
+            return await loop.run_in_executor(None, _get_file_current)
 
     async def list_files(
         self, purpose: Optional[str] = None, limit: int = 100
     ) -> "List[FileMetadata]":
         """
-        List context caches (Google's file list equivalent).
+        List uploaded files.
 
         Args:
-            purpose: Optional filter by purpose (ignored for Google, always "cache")
-            limit: Maximum number of caches to return (default 100)
+            purpose: Optional filter by purpose (not used by Google)
+            limit: Maximum number of files to return (default 100)
 
         Returns:
-            List of FileMetadata objects representing caches
+            List of FileMetadata objects
         """
         try:
-            # List caches using Google SDK
+            # List files using Google SDK
             # Run synchronous SDK call in thread pool
             loop = asyncio.get_event_loop()
 
-            def _list_caches():
-                return self.client.caches.list()
+            def _list_files():
+                return self.client.files.list()
 
-            cache_list = await loop.run_in_executor(None, _list_caches)
+            files_list = await loop.run_in_executor(None, _list_files)
 
             # Parse response
-            # Google SDK returns a Pager object that can be iterated
-            files = []
-            for cache in cache_list:
-                # Extract metadata
-                create_time = cache.create_time
-                if isinstance(create_time, str):
-                    create_time = datetime.fromisoformat(create_time.replace("Z", "+00:00"))
+            result: List[FileMetadata] = []
+            for file_obj in files_list:
+                # Parse timestamps
+                try:
+                    create_time_str = file_obj.create_time
+                    if isinstance(create_time_str, str):
+                        created_at = datetime.fromisoformat(create_time_str.replace("Z", "+00:00"))
+                    else:
+                        created_at = create_time_str
+                except Exception:
+                    created_at = datetime.now()
 
-                files.append(
+                # Map Google state to llmring status
+                state_name = (
+                    file_obj.state.name
+                    if hasattr(file_obj, "state") and file_obj.state
+                    else "ACTIVE"
+                )
+                status_map = {
+                    "ACTIVE": "ready",
+                    "PROCESSING": "processing",
+                    "FAILED": "error",
+                }
+                status = status_map.get(state_name, "ready")
+
+                result.append(
                     FileMetadata(
-                        file_id=cache.name,  # e.g., "cachedContents/abc123"
+                        file_id=file_obj.name,
                         provider="google",
-                        filename=cache.name.split("/")[-1],  # Use cache ID as filename
-                        size_bytes=0,  # Google doesn't expose cache size
-                        created_at=create_time,
-                        purpose="cache",
-                        status="ready",  # Caches are always ready once created
+                        filename=(
+                            file_obj.display_name
+                            if hasattr(file_obj, "display_name") and file_obj.display_name
+                            else file_obj.name.split("/")[-1]
+                        ),
+                        size_bytes=(
+                            int(file_obj.size_bytes) if hasattr(file_obj, "size_bytes") else 0
+                        ),
+                        created_at=created_at,
+                        purpose="file",  # Google doesn't have purpose field
+                        status=status,
                         metadata={
-                            "model": cache.model,
-                            "expire_time": str(cache.expire_time) if cache.expire_time else None,
+                            "mime_type": (
+                                file_obj.mime_type if hasattr(file_obj, "mime_type") else None
+                            ),
+                            "expiration_time": (
+                                file_obj.expiration_time
+                                if hasattr(file_obj, "expiration_time")
+                                else None
+                            ),
                         },
                     )
                 )
 
                 # Limit results
-                if len(files) >= limit:
+                if len(result) >= limit:
                     break
 
-            return files
+            return result
 
         except Exception as e:
-            await self._error_handler.handle_error(e, "caching")
+            await self._error_handler.handle_error(e, "files")
 
     async def get_file(self, file_id: str) -> "FileMetadata":
         """
-        Get cache metadata (Google's get file equivalent).
+        Get file metadata.
 
         Args:
-            file_id: Cache ID to retrieve (format: "cachedContents/abc123")
+            file_id: File ID to retrieve (format: "files/abc123")
 
         Returns:
             FileMetadata object
         """
         try:
-            # Get cache using Google SDK
+            # Get file using Google SDK
             # Run synchronous SDK call in thread pool
             loop = asyncio.get_event_loop()
 
-            def _get_cache():
-                return self.client.caches.get(name=file_id)
+            def _get_file():
+                return self.client.files.get(name=file_id)
 
-            cache = await loop.run_in_executor(None, _get_cache)
+            file_obj = await loop.run_in_executor(None, _get_file)
 
-            # Parse response
-            create_time = cache.create_time
-            if isinstance(create_time, str):
-                create_time = datetime.fromisoformat(create_time.replace("Z", "+00:00"))
+            # Parse timestamps
+            try:
+                create_time_str = file_obj.create_time
+                if isinstance(create_time_str, str):
+                    created_at = datetime.fromisoformat(create_time_str.replace("Z", "+00:00"))
+                else:
+                    created_at = create_time_str
+            except Exception:
+                created_at = datetime.now()
+
+            # Map Google state to llmring status
+            state_name = (
+                file_obj.state.name if hasattr(file_obj, "state") and file_obj.state else "ACTIVE"
+            )
+            status_map = {
+                "ACTIVE": "ready",
+                "PROCESSING": "processing",
+                "FAILED": "error",
+            }
+            status = status_map.get(state_name, "ready")
 
             return FileMetadata(
-                file_id=cache.name,
+                file_id=file_obj.name,
                 provider="google",
-                filename=cache.name.split("/")[-1],  # Use cache ID as filename
-                size_bytes=0,  # Google doesn't expose cache size
-                created_at=create_time,
-                purpose="cache",
-                status="ready",
+                filename=(
+                    file_obj.display_name
+                    if hasattr(file_obj, "display_name") and file_obj.display_name
+                    else file_obj.name.split("/")[-1]
+                ),
+                size_bytes=(int(file_obj.size_bytes) if hasattr(file_obj, "size_bytes") else 0),
+                created_at=created_at,
+                purpose="file",
+                status=status,
                 metadata={
-                    "model": cache.model,
-                    "expire_time": str(cache.expire_time) if cache.expire_time else None,
+                    "mime_type": (file_obj.mime_type if hasattr(file_obj, "mime_type") else None),
+                    "expiration_time": (
+                        file_obj.expiration_time if hasattr(file_obj, "expiration_time") else None
+                    ),
                 },
             )
 
         except Exception as e:
-            await self._error_handler.handle_error(e, "caching")
+            await self._error_handler.handle_error(e, "files")
 
     async def delete_file(self, file_id: str) -> bool:
         """
-        Delete cache (Google's delete file equivalent).
+        Delete uploaded file.
 
         Args:
-            file_id: Cache ID to delete (format: "cachedContents/abc123")
+            file_id: File ID to delete (format: "files/abc123")
 
         Returns:
             True on success
         """
         try:
-            # Delete cache using Google SDK
-            # Run synchronous SDK call in thread pool
+            # Delete file using Google SDK
             loop = asyncio.get_event_loop()
 
-            def _delete_cache():
-                self.client.caches.delete(name=file_id)
+            def _delete_file():
+                self.client.files.delete(name=file_id)
                 return True
 
-            return await loop.run_in_executor(None, _delete_cache)
+            result = await loop.run_in_executor(None, _delete_file)
+
+            # Remove from tracking and cleanup lock to prevent unbounded growth
+            if file_id in self._uploaded_files:
+                del self._uploaded_files[file_id]
+            if file_id in self._file_locks:
+                del self._file_locks[file_id]
+
+            return result
 
         except Exception as e:
-            await self._error_handler.handle_error(e, "caching")
+            await self._error_handler.handle_error(e, "files")
+
+    # Removed legacy cache-emulation list; Files API list is defined later
+
+    # Removed legacy cache-emulation get; Files API get is defined later
+
+    # Removed legacy cache-emulation delete; Files API delete is defined later

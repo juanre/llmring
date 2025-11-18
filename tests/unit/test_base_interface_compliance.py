@@ -58,6 +58,7 @@ class TestBaseInterfaceCompliance:
             "cache",
             "extra_params",
             "files",
+            "timeout",
         ]
 
         assert (

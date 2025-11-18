@@ -13,7 +13,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, Union
 
-from llmring.base import BaseLLMProvider
+from llmring.base import (
+    DEFAULT_TIMEOUT_SECONDS,
+    TIMEOUT_UNSET,
+    BaseLLMProvider,
+    resolve_timeout_config,
+)
 from llmring.constants import LOCKFILE_NAME
 from llmring.exceptions import ProviderNotFoundError
 from llmring.lockfile_core import Lockfile
@@ -67,6 +72,7 @@ class LLMRing:
         log_conversations: bool = False,
         alias_cache_size: int = 100,
         alias_cache_ttl: int = 3600,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ):
         """
         Initialize the LLM service.
@@ -81,6 +87,7 @@ class LLMRing:
             log_conversations: Enable logging of full conversations (messages + responses) to server
             alias_cache_size: Maximum number of cached alias resolutions (default: 100)
             alias_cache_ttl: TTL for alias cache entries in seconds (default: 3600)
+            timeout: Default timeout in seconds for all requests (None disables; defaults to env or 60s)
         """
         self.origin = origin
         self.providers: Dict[str, BaseLLMProvider] = {}
@@ -91,6 +98,11 @@ class LLMRing:
         self._alias_to_model: Dict[str, Dict[str, str]] = {}
         # File registration for provider-agnostic file handling
         self._registered_files: Dict[str, RegisteredFile] = {}
+
+        env_timeout = os.getenv("LLMRING_PROVIDER_TIMEOUT_S")
+        self.default_timeout: Optional[float] = resolve_timeout_config(
+            timeout, env_timeout, DEFAULT_TIMEOUT_SECONDS
+        )
 
         # Resolve server configuration (explicit args override environment)
         prefer_saas = _env_flag_enabled(os.getenv("LLMRING_PREFER_SAAS"))
@@ -274,6 +286,8 @@ class LLMRing:
             **kwargs: Provider-specific configuration
         """
         # Create provider instance
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = self.default_timeout
         if provider_type == "anthropic":
             provider = AnthropicProvider(**kwargs)
         elif provider_type == "openai":
@@ -357,6 +371,14 @@ class LLMRing:
             ValueError: If model string is not in provider:model format
         """
         return parse_model_string(model)
+
+    def _determine_request_timeout(self, request: LLMRequest) -> Optional[float]:
+        """
+        Compute the effective timeout for a request, respecting per-request overrides.
+        """
+        if hasattr(request, "model_fields_set") and "timeout" in request.model_fields_set:
+            return request.timeout
+        return self.default_timeout
 
     def _hash_file(self, file_path: str) -> str:
         """
@@ -598,6 +620,8 @@ class LLMRing:
         # Get provider
         provider = self.get_provider(provider_type)
 
+        effective_timeout = self._determine_request_timeout(request)
+
         # Set pinned registry version (scoped to this request)
         pinned_state = self._scoped_pinned_version(provider, provider_type, profile)
 
@@ -676,6 +700,7 @@ class LLMRing:
                 cache=adapted_request.cache,
                 files=adapted_request.files,
                 extra_params=adapted_request.extra_params,
+                timeout=effective_timeout,
             )
 
             # Post-process structured output if adapter was used
@@ -829,6 +854,7 @@ class LLMRing:
                 cache=adapted_request.cache,
                 files=adapted_request.files,
                 extra_params=adapted_request.extra_params,
+                timeout=effective_timeout,
             )
 
             # Track usage for logging

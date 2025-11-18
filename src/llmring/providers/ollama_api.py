@@ -11,7 +11,13 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from ollama import AsyncClient, ResponseError
 
-from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
+from llmring.base import (
+    TIMEOUT_UNSET,
+    BaseLLMProvider,
+    ProviderCapabilities,
+    ProviderConfig,
+    resolve_timeout_config,
+)
 from llmring.exceptions import CircuitBreakerError, ProviderResponseError, ProviderTimeoutError
 from llmring.net.circuit_breaker import CircuitBreaker
 from llmring.net.retry import retry_async
@@ -30,6 +36,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         api_key: Optional[str] = None,  # Not used for Ollama, included for API compatibility
         base_url: Optional[str] = None,
         model: Optional[str] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ):
         """
         Initialize the Ollama provider.
@@ -47,7 +54,9 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             api_key=None,
             base_url=base_url,
             default_model=model,
-            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60")),
+            timeout_seconds=resolve_timeout_config(
+                timeout, os.getenv("LLMRING_PROVIDER_TIMEOUT_S")
+            ),
         )
         super().__init__(config)
 
@@ -210,6 +219,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ) -> LLMResponse:
         """
         Send a chat request to the Ollama API using the official SDK.
@@ -230,6 +240,8 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         Returns:
             LLM response with complete generated content
         """
+        resolved_timeout = self._resolve_timeout_value(timeout)
+
         return await self._chat_non_streaming(
             messages=messages,
             model=model,
@@ -242,6 +254,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             json_response=json_response,
             cache=cache,
             extra_params=extra_params,
+            timeout=resolved_timeout,
         )
 
     async def chat_stream(
@@ -257,6 +270,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ) -> AsyncIterator[StreamChunk]:
         """
         Send a streaming chat request to the Ollama API.
@@ -281,6 +295,8 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             >>> async for chunk in provider.chat_stream(messages, model="llama3.3"):
             ...     print(chunk.content, end="", flush=True)
         """
+        resolved_timeout = self._resolve_timeout_value(timeout)
+
         return self._stream_chat(
             messages=messages,
             model=model,
@@ -293,6 +309,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             json_response=json_response,
             cache=cache,
             extra_params=extra_params,
+            timeout=resolved_timeout,
         )
 
     async def _stream_chat(
@@ -308,6 +325,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> AsyncIterator[StreamChunk]:
         """Real streaming implementation using Ollama SDK."""
         # reasoning_tokens is ignored for Ollama models
@@ -382,8 +400,6 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 request_params.update(extra_params)
 
         try:
-            float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
-
             key = f"ollama:{model}"
             if not await self._breaker.allow(key):
                 raise CircuitBreakerError(
@@ -458,6 +474,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
         # reasoning_tokens is ignored for Ollama models
@@ -553,7 +570,6 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         try:
             # Use the Ollama SDK's chat method with a total deadline and retries
-            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
 
             # Build request parameters
             request_params = {
@@ -571,9 +587,9 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 request_params.update(extra_params)
 
             async def _do_call():
-                return await asyncio.wait_for(
+                return await self._await_with_timeout(
                     self.client.chat(**request_params),
-                    timeout=timeout_s,
+                    timeout,
                 )
 
             key = f"ollama:{model}"

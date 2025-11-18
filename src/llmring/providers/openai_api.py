@@ -17,7 +17,13 @@ from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 
-from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
+from llmring.base import (
+    TIMEOUT_UNSET,
+    BaseLLMProvider,
+    ProviderCapabilities,
+    ProviderConfig,
+    resolve_timeout_config,
+)
 from llmring.exceptions import (
     CircuitBreakerError,
     FileSizeError,
@@ -46,6 +52,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ):
         """
         Initialize the OpenAI provider.
@@ -65,7 +72,9 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             api_key=api_key,
             base_url=base_url,
             default_model=model,
-            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60")),
+            timeout_seconds=resolve_timeout_config(
+                timeout, os.getenv("LLMRING_PROVIDER_TIMEOUT_S")
+            ),
         )
         super().__init__(config)
 
@@ -212,6 +221,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> LLMResponse:
         """Process messages containing PDFs using OpenAI's Responses API with file upload."""
         # Extract PDF data and text from messages
@@ -243,8 +253,6 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             for info in uploaded_files:
                 content_items.append({"type": "input_file", "file_id": info["file_id"]})
 
-            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
-
             request_params = {
                 "model": model,
                 "input": [{"role": "user", "content": content_items}],
@@ -259,9 +267,9 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             if extra_params:
                 request_params.update(extra_params)
 
-            resp = await asyncio.wait_for(
+            resp = await self._await_with_timeout(
                 self.client.responses.create(**request_params),
-                timeout=timeout_s,
+                timeout,
             )
 
             response_content = resp.output_text if hasattr(resp, "output_text") else str(resp)
@@ -334,6 +342,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> LLMResponse:
         """
         Handle o1* models using the Responses API.
@@ -358,7 +367,9 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             if extra_params:
                 request_params.update(extra_params)
 
-            resp = await self.client.responses.create(**request_params)
+            resp = await self._await_with_timeout(
+                self.client.responses.create(**request_params), timeout
+            )
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
@@ -419,6 +430,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         Stream a chat response from OpenAI.
@@ -465,6 +477,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 tools=tools,
                 tool_choice=tool_choice,
                 extra_params=extra_params,
+                timeout=timeout,
             )
             # Return the full response as a single chunk
             yield StreamChunk(
@@ -542,15 +555,13 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Make the streaming API call
         try:
-            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
-
             # Enable streaming and include usage on the final chunk
             request_params["stream"] = True
             request_params["stream_options"] = {"include_usage": True}
 
-            stream = await asyncio.wait_for(
+            stream = await self._await_with_timeout(
                 self.client.chat.completions.create(**request_params),
-                timeout=timeout_s,
+                timeout,
             )
 
             # Process the stream
@@ -800,6 +811,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ) -> LLMResponse:
         """
         Send a chat request to the OpenAI API using the official SDK.
@@ -825,6 +837,8 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             When files are provided, this method uses the OpenAI Responses API
             with attachments + file_search to enable document grounding.
         """
+        resolved_timeout = self._resolve_timeout_value(timeout)
+
         # If files are present, route through Responses API with file attachments
         if files:
             return await self._chat_with_files_responses_api(
@@ -837,6 +851,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 tools=tools,
                 tool_choice=tool_choice,
                 extra_params=extra_params,
+                timeout=resolved_timeout,
             )
 
         return await self._chat_non_streaming(
@@ -851,6 +866,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             json_response=json_response,
             cache=cache,
             extra_params=extra_params,
+            timeout=resolved_timeout,
         )
 
     async def chat_stream(
@@ -867,6 +883,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         cache: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ) -> AsyncIterator[StreamChunk]:
         """
         Send a streaming chat request to the OpenAI API.
@@ -892,6 +909,8 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             >>> async for chunk in provider.chat_stream(messages, model="gpt-4o"):
             ...     print(chunk.content, end="", flush=True)
         """
+        resolved_timeout = self._resolve_timeout_value(timeout)
+
         # If files are present, stream via Responses API with attachments
         if files:
             async for chunk in self._stream_with_files_responses_api(
@@ -904,6 +923,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 tools=tools,
                 tool_choice=tool_choice,
                 extra_params=extra_params,
+                timeout=resolved_timeout,
             ):
                 yield chunk
             return
@@ -918,6 +938,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools=tools,
             tool_choice=tool_choice,
             extra_params=extra_params,
+            timeout=resolved_timeout,
         ):
             yield chunk
 
@@ -1037,6 +1058,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> LLMResponse:
         """
         Handle chat with uploaded files using OpenAI Responses API + file_search attachments.
@@ -1122,11 +1144,10 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         if extra_params:
             request_params.update(extra_params)
 
-        timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
         try:
-            resp = await asyncio.wait_for(
+            resp = await self._await_with_timeout(
                 self.client.responses.create(**request_params),
-                timeout=timeout_s,
+                timeout,
             )
         except Exception as e:
             # Fallback: if input_file is not accepted (e.g., certain text files),
@@ -1176,9 +1197,9 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
                 retry_params = dict(request_params)
                 retry_params["input"] = retry_input
-                resp = await asyncio.wait_for(
+                resp = await self._await_with_timeout(
                     self.client.responses.create(**retry_params),
-                    timeout=timeout_s,
+                    timeout,
                 )
             except Exception:
                 await self._error_handler.handle_error(e, model)
@@ -1214,6 +1235,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> AsyncIterator[StreamChunk]:
         """Stream via Responses API using file attachments and file_search."""
         # Strip provider prefix if present
@@ -1288,8 +1310,9 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Stream using the SDK stream context manager
         try:
-            # Async streaming context
-            async with self.client.responses.stream(**request_params) as stream:
+            async with self._context_with_timeout(
+                self.client.responses.stream(**request_params), timeout
+            ) as stream:
                 async for event in stream:
                     etype = getattr(event, "type", "")
                     if etype.endswith("response.output_text.delta"):
@@ -1328,6 +1351,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> LLMResponse:
         """
         Send a non-streaming chat request to the OpenAI API.
@@ -1374,6 +1398,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 temperature=temperature,
                 max_tokens=max_tokens,
                 extra_params=extra_params,
+                timeout=timeout,
             )
 
         # Check if messages contain PDF content - if so, route to Responses API path
@@ -1391,6 +1416,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 temperature=temperature,
                 max_tokens=max_tokens,
                 extra_params=extra_params,
+                timeout=timeout,
             )
 
         # Convert messages to OpenAI format using helper method
@@ -1460,12 +1486,10 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Make the API call using the SDK
         try:
-            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
 
             async def _do_call():
-                return await asyncio.wait_for(
-                    self.client.chat.completions.create(**request_params),
-                    timeout=timeout_s,
+                return await self._await_with_timeout(
+                    self.client.chat.completions.create(**request_params), timeout
                 )
 
             # Circuit breaker key per model

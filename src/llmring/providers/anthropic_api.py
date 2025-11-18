@@ -16,7 +16,13 @@ import httpx
 from anthropic import AsyncAnthropic
 from anthropic.types import Message as AnthropicMessage
 
-from llmring.base import BaseLLMProvider, ProviderCapabilities, ProviderConfig
+from llmring.base import (
+    TIMEOUT_UNSET,
+    BaseLLMProvider,
+    ProviderCapabilities,
+    ProviderConfig,
+    resolve_timeout_config,
+)
 from llmring.exceptions import (
     CircuitBreakerError,
     FileSizeError,
@@ -45,6 +51,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ):
         """
         Initialize the Anthropic provider.
@@ -66,7 +73,9 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             api_key=api_key,
             base_url=base_url,
             default_model=model,
-            timeout_seconds=float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60")),
+            timeout_seconds=resolve_timeout_config(
+                timeout, os.getenv("LLMRING_PROVIDER_TIMEOUT_S")
+            ),
         )
         super().__init__(config)
 
@@ -176,6 +185,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ) -> LLMResponse:
         """
         Send a chat request to the Anthropic Claude API using the official SDK.
@@ -198,6 +208,8 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             LLM response with complete generated content
         """
         # reasoning_tokens is ignored for Anthropic models
+        resolved_timeout = self._resolve_timeout_value(timeout)
+
         return await self._chat_non_streaming(
             messages=messages,
             model=model,
@@ -210,6 +222,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             cache=cache,
             files=files,
             extra_params=extra_params,
+            timeout=resolved_timeout,
         )
 
     async def chat_stream(
@@ -226,6 +239,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         cache: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ) -> AsyncIterator[StreamChunk]:
         """
         Send a streaming chat request to the Anthropic Claude API.
@@ -252,6 +266,8 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             ...     print(chunk.content, end="", flush=True)
         """
         # reasoning_tokens is ignored for Anthropic models
+        resolved_timeout = self._resolve_timeout_value(timeout)
+
         return self._stream_chat(
             messages=messages,
             model=model,
@@ -264,6 +280,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             cache=cache,
             files=files,
             extra_params=extra_params,
+            timeout=resolved_timeout,
         )
 
     async def _stream_chat(
@@ -279,6 +296,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         cache: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> AsyncIterator[StreamChunk]:
         """Stream a chat response from Anthropic."""
         # Process model name
@@ -349,10 +367,8 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         # Make streaming API call
         try:
-            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
-
-            stream = await asyncio.wait_for(
-                self.client.messages.create(**request_params), timeout=timeout_s
+            stream = await self._await_with_timeout(
+                self.client.messages.create(**request_params), timeout
             )
 
             # Process the stream
@@ -629,6 +645,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         cache: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
         # Process model name
@@ -698,11 +715,10 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         # Make the API call using the SDK
         try:
-            timeout_s = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
 
             async def _do_call():
-                return await asyncio.wait_for(
-                    self.client.messages.create(**request_params), timeout=timeout_s
+                return await self._await_with_timeout(
+                    self.client.messages.create(**request_params), timeout
                 )
 
             breaker_key = f"anthropic:{model}"
@@ -789,7 +805,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                 "anthropic-beta": "files-api-2025-04-14",
                 "x-api-key": self.api_key,
             },
-            timeout=60.0,
+            timeout=self.config.timeout_seconds,
         )
 
     async def upload_file(

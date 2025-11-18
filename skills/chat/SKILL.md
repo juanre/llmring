@@ -74,6 +74,22 @@ async with LLMRing() as service:
 
 **⚠️ Important:** The bundled lockfile that ships with llmring is ONLY for running `llmring lock chat`. Real applications must create their own lockfile.
 
+### Timeout Control
+
+The library enforces a 60-second timeout by default. Override it when processing large documents, running expensive reasoning chains, or forwarding calls to slower local models.
+
+```python
+async with LLMRing(timeout=300.0) as service:  # default for this context manager
+    request = LLMRequest(
+        model="summarizer",
+        messages=[Message(role="user", content=huge_thread)],
+        timeout=None,                            # disable timeout for this request
+    )
+    response = await service.chat(request)
+```
+
+You can also set `LLMRING_PROVIDER_TIMEOUT_S=120` in the environment to establish a default when you don't pass the constructor argument.
+
 ## Complete API Documentation
 
 ### LLMRing
@@ -91,7 +107,8 @@ LLMRing(
     log_metadata: bool = True,
     log_conversations: bool = False,
     alias_cache_size: int = 100,
-    alias_cache_ttl: int = 3600
+    alias_cache_ttl: int = 3600,
+    timeout: Optional[float] = 60.0
 )
 ```
 
@@ -105,6 +122,7 @@ LLMRing(
 - `log_conversations` (bool, default: False): Enable logging of full conversations (requires server_url)
 - `alias_cache_size` (int, default: 100): Maximum cached alias resolutions
 - `alias_cache_ttl` (int, default: 3600): Cache TTL in seconds
+- `timeout` (float | None, default: 60.0): Default request timeout in seconds (`None` disables)
 
 **Example:**
 ```python
@@ -182,6 +200,7 @@ LLMRequest(
     cache: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
     json_response: Optional[bool] = None,
+    timeout: Optional[float] = None,
     extra_params: Dict[str, Any] = {}
 )
 ```
@@ -198,6 +217,7 @@ LLMRequest(
 - `cache` (dict, optional): Caching configuration
 - `metadata` (dict, optional): Request metadata
 - `json_response` (bool, optional): Request JSON format response
+- `timeout` (float | None, optional): Override service-level timeout; `None` waits indefinitely
 - `extra_params` (dict, default: {}): Provider-specific parameters
 
 **Example:**

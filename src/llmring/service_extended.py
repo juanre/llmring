@@ -16,6 +16,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from llmring.base import TIMEOUT_UNSET
 from llmring.schemas import LLMRequest, LLMResponse
 from llmring.service import LLMRing
 
@@ -41,6 +42,7 @@ class LLMRingSession(LLMRing):
         api_key: Optional[str] = None,
         enable_conversations: bool = True,
         message_logging_level: str = "full",
+        timeout: Optional[float] = TIMEOUT_UNSET,
     ):
         """
         Initialize the session-based LLM service.
@@ -53,9 +55,17 @@ class LLMRingSession(LLMRing):
             api_key: API key for llmring-server or llmring-api
             enable_conversations: Whether to enable conversation tracking (default: True)
             message_logging_level: Level of message logging (none, metadata, full)
+            timeout: Default timeout for requests (None disables)
         """
         # Pass server_url and api_key to parent for usage logging
-        super().__init__(origin, registry_url, lockfile_path, server_url, api_key)
+        super().__init__(
+            origin=origin,
+            registry_url=registry_url,
+            lockfile_path=lockfile_path,
+            server_url=server_url,
+            api_key=api_key,
+            timeout=timeout,
+        )
 
         # Session-specific features
         self.enable_conversations = enable_conversations
