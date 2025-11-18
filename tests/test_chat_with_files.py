@@ -118,8 +118,8 @@ async def test_openai_chat_with_files():
 
 
 @pytest.mark.asyncio
-async def test_google_chat_with_cached_content():
-    """Test Google chat with cached content (file mechanism)."""
+async def test_google_chat_with_files():
+    """Test Google chat with uploaded file references."""
     if not (
         os.getenv("GEMINI_API_KEY")
         or os.getenv("GOOGLE_API_KEY")
@@ -129,21 +129,18 @@ async def test_google_chat_with_cached_content():
 
     provider = GoogleProvider()
     try:
-        # Upload file to create cached content
-        # Google requires minimum 4096 tokens for caching
+        # Upload a test file via Google Files API
         upload_response = await provider.upload_file(
             file="tests/fixtures/google_large_doc.txt",
-            purpose="cache",
-            ttl_seconds=3600,
-            model="gemini-2.5-flash",  # Specify model that supports caching
+            purpose="analysis",
         )
 
-        # Use cached content in chat via files parameter
-        messages = [Message(role="user", content="What is in the cached file?")]
+        # Use uploaded file reference in chat
+        messages = [Message(role="user", content="What is in the file?")]
         response = await provider.chat(
             messages=messages,
             model="gemini-2.5-flash",
-            files=[upload_response.file_id],  # cached_content ID
+            files=[upload_response.file_id],
         )
 
         # Verify response

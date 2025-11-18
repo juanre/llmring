@@ -359,13 +359,19 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             cache: Optional cache configuration (unrelated to files)
             files: Optional list of file IDs from upload_file() (e.g., "files/abc123")
             extra_params: Provider-specific parameters
+            timeout: Optional timeout in seconds
 
         Returns:
             LLM response with complete generated content
 
+        Note:
+            Files uploaded via upload_file() are automatically handled. File objects
+            are retrieved and included in the contents array. Context caching (via
+            cache parameter) is separate from file uploads.
         """
         resolved_timeout = self._resolve_timeout_value(timeout)
 
+        # Files will be handled in _chat_non_streaming
         return await self._chat_non_streaming(
             messages=messages,
             model=model,
@@ -414,6 +420,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             cache: Optional cache configuration (unrelated to files)
             files: Optional list of file IDs from upload_file() (e.g., "files/abc123")
             extra_params: Provider-specific parameters
+            timeout: Optional timeout in seconds
 
         Returns:
             Async iterator of stream chunks
@@ -424,6 +431,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         """
         resolved_timeout = self._resolve_timeout_value(timeout)
 
+        # Files will be handled in _stream_chat
         return self._stream_chat(
             messages=messages,
             model=model,
@@ -435,8 +443,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tool_choice=tool_choice,
             json_response=json_response,
             cache=cache,
-            files=files,
             extra_params=extra_params,
+            files=files,
             timeout=resolved_timeout,
         )
 
@@ -452,8 +460,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         timeout: Optional[float] = None,
     ) -> AsyncIterator[StreamChunk]:
         """Real streaming implementation using Google SDK."""
@@ -893,8 +901,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
+        files: Optional[List[str]] = None,
         timeout: Optional[float] = None,
     ) -> LLMResponse:
         """Non-streaming chat implementation."""
@@ -1037,8 +1045,10 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 final_contents = contents_list if files else converted_content
 
                 # Run synchronous operation in thread pool
+                total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+
                 async def _do_call():
-                    return await self._await_with_timeout(
+                    return await asyncio.wait_for(
                         loop.run_in_executor(
                             None,
                             lambda: self.client.models.generate_content(
@@ -1047,7 +1057,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                 config=config,
                             ),
                         ),
-                        timeout,
+                        timeout=total_timeout,
                     )
 
                 key = f"google:{api_model}"
@@ -1188,9 +1198,11 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         return chat.send_message(converted_content)
 
                 # Run the chat in thread pool
+                total_timeout = float(os.getenv("LLMRING_PROVIDER_TIMEOUT_S", "60"))
+
                 async def _do_chat():
-                    return await self._await_with_timeout(
-                        loop.run_in_executor(None, _run_chat), timeout
+                    return await asyncio.wait_for(
+                        loop.run_in_executor(None, _run_chat), timeout=total_timeout
                     )
 
                 key = f"google:{api_model}"
@@ -1312,8 +1324,6 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             return f"{type(e).__name__} (no message available)"
 
         return _walk(exc)
-
-    # Removed legacy cache-emulation upload; Google Files API is used below
 
     async def upload_file(
         self,
@@ -1567,7 +1577,6 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         """
         try:
             # List files using Google SDK
-            # Run synchronous SDK call in thread pool
             loop = asyncio.get_event_loop()
 
             def _list_files():
@@ -1576,7 +1585,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             files_list = await loop.run_in_executor(None, _list_files)
 
             # Parse response
-            result: List[FileMetadata] = []
+            result = []
             for file_obj in files_list:
                 # Parse timestamps
                 try:
@@ -1732,9 +1741,3 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         except Exception as e:
             await self._error_handler.handle_error(e, "files")
-
-    # Removed legacy cache-emulation list; Files API list is defined later
-
-    # Removed legacy cache-emulation get; Files API get is defined later
-
-    # Removed legacy cache-emulation delete; Files API delete is defined later
