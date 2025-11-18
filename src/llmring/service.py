@@ -777,6 +777,8 @@ class LLMRing:
         # Get provider
         provider = self.get_provider(provider_type)
 
+        effective_timeout = self._determine_request_timeout(request)
+
         # Set pinned registry version (scoped to this request)
         pinned_state = self._scoped_pinned_version(provider, provider_type, profile)
 
