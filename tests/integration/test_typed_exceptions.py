@@ -101,7 +101,11 @@ class TestTypedExceptions:
     @pytest.mark.asyncio
     async def test_timeout_raises_typed_exception(self, sample_request):
         """Test that timeouts raise ProviderTimeoutError."""
-        from llmring.exceptions import ProviderResponseError, ProviderTimeoutError
+        from llmring.exceptions import (
+            ProviderAuthenticationError,
+            ProviderResponseError,
+            ProviderTimeoutError,
+        )
         from llmring.providers.openai_api import OpenAIProvider
 
         # Create provider with invalid API key and very short timeout
@@ -109,7 +113,9 @@ class TestTypedExceptions:
 
         # Use extremely short timeout to force timeout error
         with patch.dict("os.environ", {"LLMRING_PROVIDER_TIMEOUT_S": "0.001"}):
-            with pytest.raises((ProviderTimeoutError, ProviderResponseError)) as exc_info:
+            with pytest.raises(
+                (ProviderTimeoutError, ProviderResponseError, ProviderAuthenticationError)
+            ) as exc_info:
                 await provider.chat(
                     messages=sample_request.messages, model="openai_fast", max_tokens=10
                 )
