@@ -1,5 +1,5 @@
-# ABOUTME: Unit tests for Google file listing.
-# ABOUTME: Tests that list_files uses File API not Cache API.
+"""Unit tests for Google file listing. Tests that list_files uses File API not Cache API."""
+
 from datetime import datetime
 from unittest.mock import Mock, patch
 

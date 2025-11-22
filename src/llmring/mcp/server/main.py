@@ -1,5 +1,5 @@
-# ABOUTME: Main entry point for standalone MCP server.
-# ABOUTME: Runs MCP server with configurable transports and registries.
+"""Main entry point for standalone MCP server. Runs MCP server with configurable transports and registries."""
+
 """
 CLI entry point for mcp-server command.
 

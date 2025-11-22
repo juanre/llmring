@@ -1,5 +1,5 @@
-# ABOUTME: Input validation for LLM requests with size limits and format checks.
-# ABOUTME: Validates messages, base64 data, file sizes, and registry URLs.
+"""Input validation for LLM requests with size limits and format checks. Validates messages, base64 data, file sizes, and registry URLs."""
+
 """
 Input validation and security hardening utilities.
 

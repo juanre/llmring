@@ -1,5 +1,5 @@
-# ABOUTME: HTTP transport for MCP server.
-# ABOUTME: Implements MCP over HTTP with request/response.
+"""HTTP transport for MCP server. Implements MCP over HTTP with request/response."""
+
 """
 HTTP+SSE transport implementation for MCP.
 

@@ -1,5 +1,5 @@
-# ABOUTME: Server-Sent Events transport for MCP streaming.
-# ABOUTME: Implements MCP over SSE for server-initiated messages.
+"""Server-Sent Events transport for MCP streaming. Implements MCP over SSE for server-initiated messages."""
+
 """
 Server-Sent Events (SSE) transport implementation for MCP client.
 

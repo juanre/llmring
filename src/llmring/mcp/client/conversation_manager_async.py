@@ -1,5 +1,5 @@
-# ABOUTME: Async conversation manager for MCP-enhanced chat sessions.
-# ABOUTME: Manages multi-turn conversations with MCP tool integration.
+"""Async conversation manager for MCP-enhanced chat sessions. Manages multi-turn conversations with MCP tool integration."""
+
 """
 Async Conversation Manager for MCP Client
 

@@ -1,5 +1,5 @@
-# ABOUTME: Extended LLM service with conversation session management and server-side persistence.
-# ABOUTME: Provides LLMRingSession for multi-turn conversations with history tracking on llmring-server.
+"""Extended LLM service with conversation session management and server-side persistence. Provides LLMRingSession for multi-turn conversations with history tracking on llmring-server."""
+
 """
 LLM service with conversation session management.
 

@@ -1,5 +1,5 @@
-# ABOUTME: Lockfile MCP server implementation.
-# ABOUTME: Provides MCP tools for lockfile CRUD operations.
+"""Lockfile MCP server implementation. Provides MCP tools for lockfile CRUD operations."""
+
 #!/usr/bin/env python3
 """
 MCP Server for conversational lockfile management.

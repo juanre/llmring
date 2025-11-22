@@ -1,2 +1,3 @@
 - We always use uv instead of pip, so we install with "uv add package" and we make sure that the project is up to date with "uv sync"
 - We never mock in tests.
+- We do not add ABOUTME to files, we add a standard docstring explaining what the file does.

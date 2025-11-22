@@ -1,5 +1,5 @@
-# ABOUTME: Standard I/O transport for MCP subprocess communication.
-# ABOUTME: Implements MCP over stdin/stdout for local processes.
+"""Standard I/O transport for MCP subprocess communication. Implements MCP over stdin/stdout for local processes."""
+
 """
 STDIO transport implementation for MCP client.
 

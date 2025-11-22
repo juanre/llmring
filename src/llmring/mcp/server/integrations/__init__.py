@@ -1,5 +1,5 @@
-# ABOUTME: MCP server integrations package.
-# ABOUTME: Exports framework integrations for FastAPI and others.
+"""MCP server integrations package. Exports framework integrations for FastAPI and others."""
+
 """
 MCP Server Engine integrations with web frameworks.
 """

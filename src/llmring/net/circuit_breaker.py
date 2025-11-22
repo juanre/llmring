@@ -1,5 +1,5 @@
-# ABOUTME: Circuit breaker implementation for provider resilience.
-# ABOUTME: Prevents cascading failures by temporarily disabling failing providers.
+"""Circuit breaker implementation for provider resilience. Prevents cascading failures by temporarily disabling failing providers."""
+
 from __future__ import annotations
 
 import asyncio

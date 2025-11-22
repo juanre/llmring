@@ -1,5 +1,5 @@
-# ABOUTME: Lockfile management tools for MCP.
-# ABOUTME: Provides MCP tools for reading and updating lockfiles.
+"""Lockfile management tools for MCP. Provides MCP tools for reading and updating lockfiles."""
+
 """
 MCP tools for conversational lockfile management.
 

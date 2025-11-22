@@ -1,5 +1,5 @@
-# ABOUTME: Resource registry for MCP resources.
-# ABOUTME: Manages resource registration and access.
+"""Resource registry for MCP resources. Manages resource registration and access."""
+
 """
 Resource registry for MCP Server Engine.
 Provides management of resources that can be exposed via MCP.

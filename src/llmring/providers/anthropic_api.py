@@ -1,5 +1,5 @@
-# ABOUTME: Anthropic provider implementation for Claude models.
-# ABOUTME: Handles chat, streaming, prompt caching, and thinking tokens.
+"""Anthropic provider implementation for Claude models. Handles chat, streaming, prompt caching, and thinking tokens."""
+
 """
 Anthropic Claude API provider implementation using the official SDK.
 """

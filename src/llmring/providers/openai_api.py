@@ -1,5 +1,5 @@
-# ABOUTME: OpenAI provider implementation for GPT models.
-# ABOUTME: Handles chat, streaming, vision, reasoning tokens, and function calling.
+"""OpenAI provider implementation for GPT models. Handles chat, streaming, vision, reasoning tokens, and function calling."""
+
 """
 OpenAI API provider implementation using the official SDK.
 """

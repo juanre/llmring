@@ -1,5 +1,4 @@
-# ABOUTME: Integration tests for OpenAI Files API support.
-# ABOUTME: Tests upload, list, get, and delete operations without mocks.
+"""Integration tests for OpenAI Files API support. Tests upload, list, get, and delete operations without mocks."""
 
 import os
 

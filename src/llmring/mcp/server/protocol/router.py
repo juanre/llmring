@@ -1,5 +1,5 @@
-# ABOUTME: Request router for MCP protocol messages.
-# ABOUTME: Routes incoming requests to appropriate handlers.
+"""Request router for MCP protocol messages. Routes incoming requests to appropriate handlers."""
+
 """
 JSON-RPC router for handling MCP requests.
 """

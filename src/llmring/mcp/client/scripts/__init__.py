@@ -1,2 +1,1 @@
-# ABOUTME: MCP client scripts package.
-# ABOUTME: Exports utility scripts for MCP setup and configuration.
+"""MCP client scripts package. Exports utility scripts for MCP setup and configuration."""

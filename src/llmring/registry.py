@@ -1,5 +1,5 @@
-# ABOUTME: Registry client for fetching model metadata from GitHub Pages.
-# ABOUTME: Provides caching, version management, and drift detection for provider models.
+"""Registry client for fetching model metadata from GitHub Pages. Provides caching, version management, and drift detection for provider models."""
+
 """
 Registry client for fetching model information from GitHub Pages.
 

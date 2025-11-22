@@ -1,5 +1,5 @@
-# ABOUTME: Schema adaptation service for converting between provider formats.
-# ABOUTME: Normalizes requests and responses across OpenAI, Anthropic, Google, and Ollama.
+"""Schema adaptation service for converting between provider formats. Normalizes requests and responses across OpenAI, Anthropic, Google, and Ollama."""
+
 """
 Schema adaptation service for LLMRing.
 

@@ -1,5 +1,5 @@
-# ABOUTME: Unit tests for Google file deletion.
-# ABOUTME: Tests that delete_file removes file from tracking dict.
+"""Unit tests for Google file deletion. Tests that delete_file removes file from tracking dict."""
+
 from datetime import datetime, timezone
 from unittest.mock import patch
 

@@ -1,5 +1,4 @@
-# ABOUTME: Integration tests for chat() with file references.
-# ABOUTME: Tests file handling in chat across providers without mocks.
+"""Integration tests for chat() with file references. Tests file handling in chat across providers without mocks."""
 
 import os
 

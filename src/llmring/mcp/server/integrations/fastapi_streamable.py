@@ -1,5 +1,5 @@
-# ABOUTME: FastAPI integration for MCP server with streaming support.
-# ABOUTME: Mounts MCP server as FastAPI endpoint with SSE.
+"""FastAPI integration for MCP server with streaming support. Mounts MCP server as FastAPI endpoint with SSE."""
+
 """
 FastAPI integration for MCP Streamable HTTP transport.
 

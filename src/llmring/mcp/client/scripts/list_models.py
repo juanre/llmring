@@ -1,5 +1,5 @@
-# ABOUTME: Script to list available models from MCP servers.
-# ABOUTME: Queries MCP servers and displays model capabilities.
+"""Script to list available models from MCP servers. Queries MCP servers and displays model capabilities."""
+
 #!/usr/bin/env python3
 """
 MCP Client LLM Models List Script

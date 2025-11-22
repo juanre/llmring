@@ -1,5 +1,5 @@
-# ABOUTME: Utility functions package for llmring.
-# ABOUTME: Exports model parsing and string manipulation functions.
+"""Utility functions package for llmring. Exports model parsing and string manipulation functions."""
+
 """Utility functions for LLMRing."""
 
 from llmring.utils.model_parsing import parse_model_string, strip_provider_prefix

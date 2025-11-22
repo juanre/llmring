@@ -1,5 +1,5 @@
-# ABOUTME: Google Gemini provider implementation.
-# ABOUTME: Handles chat, streaming, and multimodal content for Gemini models.
+"""Google Gemini provider implementation. Handles chat, streaming, and multimodal content for Gemini models."""
+
 """
 Google Gemini API provider implementation using the official SDK.
 """

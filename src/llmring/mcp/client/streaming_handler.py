@@ -1,5 +1,5 @@
-# ABOUTME: Streaming response handler for MCP operations.
-# ABOUTME: Processes streaming MCP responses with backpressure handling.
+"""Streaming response handler for MCP operations. Processes streaming MCP responses with backpressure handling."""
+
 """
 Streaming handler for MCP Enhanced LLM.
 

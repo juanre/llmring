@@ -1,5 +1,5 @@
-# ABOUTME: MCP tools package initialization.
-# ABOUTME: Exports MCP tool implementations.
+"""MCP tools package initialization. Exports MCP tool implementations."""
+
 """
 MCP Tools for LLMRing.
 

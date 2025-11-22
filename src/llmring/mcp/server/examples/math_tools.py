@@ -1,5 +1,5 @@
-# ABOUTME: Example math tools for MCP server.
-# ABOUTME: Demonstrates tool registration and implementation patterns.
+"""Example math tools for MCP server. Demonstrates tool registration and implementation patterns."""
+
 """
 Example math tools for MCP server testing.
 

@@ -1,5 +1,5 @@
-# ABOUTME: Transport factory for creating MCP connections.
-# ABOUTME: Creates appropriate transport based on URL scheme.
+"""Transport factory for creating MCP connections. Creates appropriate transport based on URL scheme."""
+
 """
 Transport factory for creating and managing transport instances.
 

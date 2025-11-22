@@ -1,2 +1,1 @@
-# ABOUTME: Providers package initialization.
-# ABOUTME: Exports provider classes for OpenAI, Anthropic, Google, and Ollama.
+"""Providers package initialization. Exports provider classes for OpenAI, Anthropic, Google, and Ollama."""

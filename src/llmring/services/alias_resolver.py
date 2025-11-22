@@ -1,5 +1,5 @@
-# ABOUTME: Alias resolution service with fallback support for model pools.
-# ABOUTME: Resolves aliases to available models based on configured API keys.
+"""Alias resolution service with fallback support for model pools. Resolves aliases to available models based on configured API keys."""
+
 """
 Alias resolution service for LLMRing.
 

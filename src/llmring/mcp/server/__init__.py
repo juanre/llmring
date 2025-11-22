@@ -1,5 +1,5 @@
-# ABOUTME: MCP server package initialization.
-# ABOUTME: Exports MCP server implementation and integrations.
+"""MCP server package initialization. Exports MCP server implementation and integrations."""
+
 """
 MCP Server - Core Model Context Protocol implementation.
 

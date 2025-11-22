@@ -1,5 +1,5 @@
-# ABOUTME: Ollama provider implementation for local models.
-# ABOUTME: Handles chat and streaming with local Ollama server.
+"""Ollama provider implementation for local models. Handles chat and streaming with local Ollama server."""
+
 """
 Ollama API provider implementation using the official SDK.
 """

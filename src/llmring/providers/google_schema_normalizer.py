@@ -1,5 +1,5 @@
-# ABOUTME: Schema normalization for Google Gemini API requests and responses.
-# ABOUTME: Converts between llmring format and Google's specific schema requirements.
+"""Schema normalization for Google Gemini API requests and responses. Converts between llmring format and Google's specific schema requirements."""
+
 """
 Google Gemini JSON Schema normalization utilities.
 

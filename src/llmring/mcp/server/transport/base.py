@@ -1,5 +1,5 @@
-# ABOUTME: Base transport interface for MCP servers.
-# ABOUTME: Defines abstract transport for protocol implementation.
+"""Base transport interface for MCP servers. Defines abstract transport for protocol implementation."""
+
 """
 Base transport interface for MCP communication.
 Defines the common interface that all transport implementations must follow.

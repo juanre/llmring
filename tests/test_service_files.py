@@ -1,5 +1,4 @@
-# ABOUTME: Integration tests for provider-agnostic file registration in LLMRing service layer.
-# ABOUTME: Tests register, deregister, list operations and cross-provider file usage without mocks.
+"""Integration tests for provider-agnostic file registration in LLMRing service layer. Tests register, deregister, list operations and cross-provider file usage without mocks."""
 
 import os
 

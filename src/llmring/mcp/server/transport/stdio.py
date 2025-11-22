@@ -1,5 +1,5 @@
-# ABOUTME: Standard I/O transport for MCP server.
-# ABOUTME: Implements MCP over stdin/stdout for CLI usage.
+"""Standard I/O transport for MCP server. Implements MCP over stdin/stdout for CLI usage."""
+
 """
 STDIO transport implementation for MCP Server Engine.
 

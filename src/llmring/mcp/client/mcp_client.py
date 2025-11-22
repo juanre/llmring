@@ -1,5 +1,5 @@
-# ABOUTME: Core MCP client for protocol communication.
-# ABOUTME: Implements MCP protocol client with transport abstraction.
+"""Core MCP client for protocol communication. Implements MCP protocol client with transport abstraction."""
+
 """
 MCP (Model Context Protocol) client implementation.
 

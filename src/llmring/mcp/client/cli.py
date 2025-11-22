@@ -1,5 +1,5 @@
-# ABOUTME: Command-line interface for MCP client.
-# ABOUTME: Provides interactive MCP server exploration and testing.
+"""Command-line interface for MCP client. Provides interactive MCP server exploration and testing."""
+
 #!/usr/bin/env python3
 """
 MCP Client CLI - Database-agnostic command-line interface.

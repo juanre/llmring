@@ -1,2 +1,0 @@
-- We always use uv instead of pip, so we install with "uv add package" and we make sure that the project is up to date with "uv sync"
-- We never mock in tests.

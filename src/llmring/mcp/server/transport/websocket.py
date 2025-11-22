@@ -1,5 +1,5 @@
-# ABOUTME: WebSocket transport for MCP server.
-# ABOUTME: Implements MCP over WebSocket for bidirectional communication.
+"""WebSocket transport for MCP server. Implements MCP over WebSocket for bidirectional communication."""
+
 """WebSocket transport implementation for MCP Server Engine."""
 
 from llmring.mcp.server.transport.base import Transport

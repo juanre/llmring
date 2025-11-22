@@ -1,5 +1,5 @@
-# ABOUTME: MCP registries package initialization.
-# ABOUTME: Exports tool, prompt, and resource registries.
+"""MCP registries package initialization. Exports tool, prompt, and resource registries."""
+
 """
 In-memory registries for MCP Server Engine.
 """

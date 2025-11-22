@@ -1,5 +1,5 @@
-# ABOUTME: Terminal styling for MCP chat interface.
-# ABOUTME: Defines colors and formatting for chat messages.
+"""Terminal styling for MCP chat interface. Defines colors and formatting for chat messages."""
+
 """
 Styling for MCP chat interface using rich.
 """

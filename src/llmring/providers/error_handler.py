@@ -1,5 +1,5 @@
-# ABOUTME: Error handling and retry logic for provider API calls.
-# ABOUTME: Converts provider-specific errors to llmring exceptions with retry support.
+"""Error handling and retry logic for provider API calls. Converts provider-specific errors to llmring exceptions with retry support."""
+
 """
 Unified error handling for all LLM providers.
 

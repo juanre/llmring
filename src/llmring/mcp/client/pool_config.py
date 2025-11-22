@@ -1,5 +1,5 @@
-# ABOUTME: Connection pool configuration for MCP clients.
-# ABOUTME: Manages multiple MCP server connections efficiently.
+"""Connection pool configuration for MCP clients. Manages multiple MCP server connections efficiently."""
+
 """
 Placeholder pool configurations for compatibility.
 

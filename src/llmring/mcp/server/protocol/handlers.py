@@ -1,5 +1,5 @@
-# ABOUTME: Protocol message handlers for MCP server.
-# ABOUTME: Processes initialize, tools/list, and execute requests.
+"""Protocol message handlers for MCP server. Processes initialize, tools/list, and execute requests."""
+
 """
 MCP Protocol handlers for standard methods.
 

@@ -1,5 +1,5 @@
-# ABOUTME: Middleware interface for MCP request processing.
-# ABOUTME: Defines abstract middleware for request/response transformation.
+"""Middleware interface for MCP request processing. Defines abstract middleware for request/response transformation."""
+
 """
 Middleware interface for MCP Server Engine.
 """

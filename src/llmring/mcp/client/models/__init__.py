@@ -1,2 +1,1 @@
-# ABOUTME: MCP data models package.
-# ABOUTME: Exports Pydantic schemas for MCP protocol messages.
+"""MCP data models package. Exports Pydantic schemas for MCP protocol messages."""

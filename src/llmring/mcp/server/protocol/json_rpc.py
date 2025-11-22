@@ -1,5 +1,5 @@
-# ABOUTME: JSON-RPC utilities for MCP protocol.
-# ABOUTME: Handles JSON-RPC request/response formatting.
+"""JSON-RPC utilities for MCP protocol. Handles JSON-RPC request/response formatting."""
+
 """
 JSON-RPC 2.0 protocol implementation for MCP.
 """

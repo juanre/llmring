@@ -1,5 +1,5 @@
-# ABOUTME: Integration tests for Google chat with files.
-# ABOUTME: Tests chat request with uploaded file using File API.
+"""Integration tests for Google chat with files. Tests chat request with uploaded file using File API."""
+
 import os
 
 import pytest

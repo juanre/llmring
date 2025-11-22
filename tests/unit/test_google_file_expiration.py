@@ -1,5 +1,5 @@
-# ABOUTME: Unit tests for Google file expiration handling.
-# ABOUTME: Tests file expiration detection and automatic re-upload logic.
+"""Unit tests for Google file expiration handling. Tests file expiration detection and automatic re-upload logic."""
+
 import os
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch

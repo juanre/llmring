@@ -1,5 +1,5 @@
-# ABOUTME: Authentication interface for MCP servers.
-# ABOUTME: Defines abstract auth provider for MCP requests.
+"""Authentication interface for MCP servers. Defines abstract auth provider for MCP requests."""
+
 """
 Authentication provider interface for MCP Server Engine.
 """

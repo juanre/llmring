@@ -1,5 +1,5 @@
-# ABOUTME: Base provider mixin with common functionality.
-# ABOUTME: Provides shared methods for provider implementations.
+"""Base provider mixin with common functionality. Provides shared methods for provider implementations."""
+
 """
 Mixin classes for provider implementations to reduce code duplication.
 """
