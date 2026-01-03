@@ -328,8 +328,7 @@ class TestStdioTransport:
 
         # Multiple messages to ensure transport continues after error
         messages = (
-            '{"jsonrpc":"2.0","method":"test1","id":1}\n'
-            '{"jsonrpc":"2.0","method":"test2","id":2}\n'
+            '{"jsonrpc":"2.0","method":"test1","id":1}\n{"jsonrpc":"2.0","method":"test2","id":2}\n'
         )
 
         with patch("sys.stdin", StringIO(messages)):

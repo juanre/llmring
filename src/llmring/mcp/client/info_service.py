@@ -1,13 +1,5 @@
 """Information service for MCP server capabilities. Queries and displays MCP server tools, prompts, and resources."""
 
-"""
-Information Service for MCP Client
-
-This module provides comprehensive information about providers, models, costs,
-usage, and data storage. It mirrors and extends llmring functionality
-to give modules full transparency into what's happening behind the scenes.
-"""
-
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -123,7 +115,7 @@ class MCPClientInfoService:
 
         # Backward compatibility attributes for tests
         self.llm_service = llmring
-        self.llm_db = None  # No direct database access in HTTP architecture
+        self.llm_db: Any | None = None  # No direct database access in HTTP architecture
 
         # Initialize HTTP client if server URL provided
         self.http_client = None
@@ -354,7 +346,10 @@ class MCPClientInfoService:
         try:
             # Get overall stats from LLM service
             if self.llmring:
-                service_stats = self.llmring.get_usage_stats(user_id, days=days)
+                get_usage_stats = getattr(self.llmring, "get_usage_stats", None)
+                if not callable(get_usage_stats):
+                    return None
+                service_stats = get_usage_stats(user_id, days=days)
                 if not service_stats:
                     return None
             else:
@@ -376,15 +371,15 @@ class MCPClientInfoService:
                 user_id=user_id,
                 origin=self.origin,
                 period_days=days,
-                total_calls=service_stats.total_calls,
-                total_tokens=service_stats.total_tokens,
-                total_input_tokens=getattr(service_stats, "total_input_tokens", 0),
-                total_output_tokens=getattr(service_stats, "total_output_tokens", 0),
-                total_cost=float(service_stats.total_cost),
-                avg_cost_per_call=float(service_stats.avg_cost_per_call),
-                most_used_model=service_stats.most_used_model,
-                success_rate=float(service_stats.success_rate),
-                avg_response_time_ms=service_stats.avg_response_time_ms,
+                total_calls=int(getattr(service_stats, "total_calls", 0) or 0),
+                total_tokens=int(getattr(service_stats, "total_tokens", 0) or 0),
+                total_input_tokens=int(getattr(service_stats, "total_input_tokens", 0) or 0),
+                total_output_tokens=int(getattr(service_stats, "total_output_tokens", 0) or 0),
+                total_cost=float(getattr(service_stats, "total_cost", 0.0) or 0.0),
+                avg_cost_per_call=float(getattr(service_stats, "avg_cost_per_call", 0.0) or 0.0),
+                most_used_model=getattr(service_stats, "most_used_model", None),
+                success_rate=float(getattr(service_stats, "success_rate", 1.0) or 0.0),
+                avg_response_time_ms=getattr(service_stats, "avg_response_time_ms", None),
                 models_used=models_used,
                 daily_breakdown=daily_breakdown,
                 cost_by_model=cost_by_model,
@@ -543,8 +538,6 @@ class MCPClientInfoService:
 
         try:
             # Get aggregated stats for the provider
-            datetime.now() - timedelta(days=days)
-
             # Use the LLM database to get usage stats for models from this provider
             models = self.llm_db.list_models(provider=provider)
             if not models:
@@ -561,11 +554,16 @@ class MCPClientInfoService:
                     try:
                         # This would require direct database query or enhanced llmbridge API
                         # For now, we'll use basic aggregation
-                        stats = self.llmring.get_usage_stats(self.origin, days=days)
+                        get_usage_stats = getattr(self.llmring, "get_usage_stats", None)
+                        stats = (
+                            get_usage_stats(self.origin, days=days)
+                            if callable(get_usage_stats)
+                            else None
+                        )
                         if stats:
                             # Filter by provider if possible (this is a simplified approach)
-                            total_cost += float(stats.total_cost or 0)
-                            total_calls += stats.total_calls or 0
+                            total_cost += float(getattr(stats, "total_cost", 0) or 0)
+                            total_calls += int(getattr(stats, "total_calls", 0) or 0)
                     except (ServerConnectionError, ProviderError) as e:
                         logger.warning(f"Error getting usage stats for provider model: {e}")
                         continue
@@ -597,22 +595,23 @@ class MCPClientInfoService:
 
         try:
             model_identifier = f"{provider}:{model_name}"
-            datetime.now() - timedelta(days=days)
 
             # Try to get usage stats for this specific model
             if self.llmring:
                 try:
                     # Get overall stats and filter for this model if possible
-                    stats = self.llmring.get_usage_stats(self.origin, days=days)
-                    if (
-                        stats
-                        and hasattr(stats, "most_used_model")
-                        and stats.most_used_model == model_identifier
-                    ):
+                    get_usage_stats = getattr(self.llmring, "get_usage_stats", None)
+                    stats = (
+                        get_usage_stats(self.origin, days=days)
+                        if callable(get_usage_stats)
+                        else None
+                    )
+                    most_used = getattr(stats, "most_used_model", None) if stats else None
+                    if most_used == model_identifier:
                         return {
-                            "total_cost": float(stats.total_cost or 0),
-                            "total_tokens": stats.total_tokens or 0,
-                            "total_calls": stats.total_calls or 0,
+                            "total_cost": float(getattr(stats, "total_cost", 0) or 0),
+                            "total_tokens": int(getattr(stats, "total_tokens", 0) or 0),
+                            "total_calls": int(getattr(stats, "total_calls", 0) or 0),
                             "last_used": getattr(stats, "last_used", None),
                             "model": model_identifier,
                             "period_days": days,
@@ -673,9 +672,11 @@ class MCPClientInfoService:
 
         try:
             # Get usage stats and extract model information
-            stats = self.llmring.get_usage_stats(user_id, days=days)
-            if stats and hasattr(stats, "most_used_model") and stats.most_used_model:
-                return [stats.most_used_model]
+            get_usage_stats = getattr(self.llmring, "get_usage_stats", None)
+            stats = get_usage_stats(user_id, days=days) if callable(get_usage_stats) else None
+            most_used = getattr(stats, "most_used_model", None) if stats else None
+            if most_used:
+                return [str(most_used)]
 
             # In a full implementation, this would query the database for all models
             # used by this user in the time period
@@ -694,9 +695,11 @@ class MCPClientInfoService:
 
         try:
             # Get usage stats and extract cost information
-            stats = self.llmring.get_usage_stats(user_id, days=days)
-            if stats and hasattr(stats, "most_used_model") and stats.most_used_model:
-                return {stats.most_used_model: float(stats.total_cost or 0)}
+            get_usage_stats = getattr(self.llmring, "get_usage_stats", None)
+            stats = get_usage_stats(user_id, days=days) if callable(get_usage_stats) else None
+            most_used = getattr(stats, "most_used_model", None) if stats else None
+            if most_used:
+                return {str(most_used): float(getattr(stats, "total_cost", 0) or 0)}
 
             # In a full implementation, this would aggregate costs by model
             return {}
@@ -714,9 +717,11 @@ class MCPClientInfoService:
 
         try:
             # Get usage stats and extract call information
-            stats = self.llmring.get_usage_stats(user_id, days=days)
-            if stats and hasattr(stats, "most_used_model") and stats.most_used_model:
-                return {stats.most_used_model: stats.total_calls or 0}
+            get_usage_stats = getattr(self.llmring, "get_usage_stats", None)
+            stats = get_usage_stats(user_id, days=days) if callable(get_usage_stats) else None
+            most_used = getattr(stats, "most_used_model", None) if stats else None
+            if most_used:
+                return {str(most_used): int(getattr(stats, "total_calls", 0) or 0)}
 
             # In a full implementation, this would count calls by model
             return {}
@@ -734,7 +739,8 @@ class MCPClientInfoService:
 
         try:
             # Get usage stats and create a simple daily breakdown
-            stats = self.llmring.get_usage_stats(user_id, days=days)
+            get_usage_stats = getattr(self.llmring, "get_usage_stats", None)
+            stats = get_usage_stats(user_id, days=days) if callable(get_usage_stats) else None
             if not stats:
                 return []
 
@@ -746,9 +752,21 @@ class MCPClientInfoService:
                 breakdown.append(
                     {
                         "date": date.strftime("%Y-%m-%d"),
-                        "calls": stats.total_calls // max(days, 1) if i == 0 else 0,
-                        "tokens": stats.total_tokens // max(days, 1) if i == 0 else 0,
-                        "cost": (float(stats.total_cost or 0) / max(days, 1) if i == 0 else 0.0),
+                        "calls": (
+                            int(getattr(stats, "total_calls", 0) or 0) // max(days, 1)
+                            if i == 0
+                            else 0
+                        ),
+                        "tokens": (
+                            int(getattr(stats, "total_tokens", 0) or 0) // max(days, 1)
+                            if i == 0
+                            else 0
+                        ),
+                        "cost": (
+                            float(getattr(stats, "total_cost", 0) or 0) / max(days, 1)
+                            if i == 0
+                            else 0.0
+                        ),
                     }
                 )
 

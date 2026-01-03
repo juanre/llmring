@@ -53,7 +53,7 @@ class LLMRequest(BaseModel):
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     reasoning_tokens: Optional[int] = Field(
-        None,
+        default=None,
         description="Token budget for reasoning models' internal thinking. "
         "If not specified for reasoning models, defaults to min_recommended_reasoning_tokens from registry. "
         "For non-reasoning models, this parameter is ignored.",
@@ -105,6 +105,11 @@ class StreamChunk(BaseModel):
     finish_reason: Optional[str] = None
     usage: Optional[Dict[str, Any]] = None  # Only present in final chunk
     tool_calls: Optional[List[Dict[str, Any]]] = None
+
+    @property
+    def content(self) -> str:
+        """Backward-compatible alias for `delta`."""
+        return self.delta
 
 
 # Internal data structures for file registration (not exported)

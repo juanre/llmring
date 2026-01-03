@@ -1,18 +1,15 @@
 """Google Gemini provider implementation. Handles chat, streaming, and multimodal content for Gemini models."""
 
-"""
-Google Gemini API provider implementation using the official SDK.
-"""
-
 import asyncio
 import base64
+import binascii
 import json
 import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, BinaryIO, Dict, List, Literal, Optional, Union, cast
 
 from google import genai
 from google.genai import types
@@ -22,6 +19,7 @@ from llmring.base import (
     BaseLLMProvider,
     ProviderCapabilities,
     ProviderConfig,
+    TimeoutSetting,
     resolve_timeout_config,
 )
 from llmring.exceptions import (
@@ -62,7 +60,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         base_url: Optional[str] = None,
         project_id: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ):
         """
         Initialize the Google Gemini provider.
@@ -187,7 +185,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                 inline_data=types.Blob(mime_type=mime_type, data=document_data)
                             )
                         )
-                    except (ValueError, base64.binascii.Error):
+                    except (ValueError, binascii.Error):
                         # Skip invalid document data
                         continue
 
@@ -341,7 +339,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ) -> LLMResponse:
         """
         Send a chat request to the Google Gemini API using the official SDK.
@@ -400,9 +398,9 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        files: Optional[List[str]] = None,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ) -> AsyncIterator[StreamChunk]:
         """
         Send a streaming chat request to the Google Gemini API.
@@ -427,7 +425,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         Example:
             >>> async for chunk in provider.chat_stream(messages, model="gemini-2.5-pro"):
-            ...     print(chunk.content, end="", flush=True)
+            ...     print(chunk.delta, end="", flush=True)
         """
         resolved_timeout = self._resolve_timeout_value(timeout)
 
@@ -474,9 +472,11 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Log warning if model not in registry (but don't block)
         try:
-            registry_models = await self._registry_client.fetch_current_models("google")
-            if not any(m.model_name == model and m.is_active for m in registry_models):
-                logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
+            registry_client = self._registry_client
+            if registry_client is not None:
+                registry_models = await registry_client.fetch_current_models("google")
+                if not any(m.model_name == model and m.is_active for m in registry_models):
+                    logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
         except Exception:
             pass  # Registry unavailable, continue anyway
 
@@ -555,18 +555,24 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 elif tool_choice == "none":
                     # Disable function calling
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(mode="NONE")
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfigMode.NONE
+                        )
                     )
                 elif tool_choice == "any" or tool_choice == "required":
                     # Force function calling
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(mode="ANY")
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfigMode.ANY
+                        )
                     )
                 elif isinstance(tool_choice, dict) and "function" in tool_choice:
                     # Specific function choice - not directly supported by Google
                     # Fall back to ANY mode with the available tools
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(mode="ANY")
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfigMode.ANY
+                        )
                     )
 
         config = types.GenerateContentConfig(**config_params)
@@ -675,8 +681,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             # Prepend file objects to google_messages
             google_messages = file_objects + google_messages
 
+        key = f"google:{model}"
         try:
-            key = f"google:{model}"
             if not await self._breaker.allow(key):
                 raise CircuitBreakerError(
                     "Google circuit breaker is open - too many recent failures",
@@ -699,7 +705,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             loop = asyncio.get_event_loop()
             import threading
 
-            queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+            queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=100)
             _SENTINEL = object()
             stop_event = threading.Event()
 
@@ -738,47 +744,54 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     item = await queue.get()
                     if item is _SENTINEL:
                         break
-                    if isinstance(item, tuple) and item and item[0] == "__error__":
-                        e = item[1]
-                        await self._breaker.record_failure(key)
-                        error_msg = self._extract_error_message(e)
-                        if "api_key" in error_msg.lower() or "unauthorized" in error_msg.lower():
-                            raise ProviderAuthenticationError(
-                                f"Google API authentication failed: {error_msg}",
-                                provider="google",
-                            ) from e
-                        elif "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
-                            raise ProviderRateLimitError(
-                                f"Google API rate limit exceeded: {error_msg}",
-                                provider="google",
-                            ) from e
-                        elif "timeout" in error_msg.lower():
-                            raise ProviderTimeoutError(
-                                f"Google API timeout: {error_msg}", provider="google"
-                            ) from e
-                        elif "cancelled" in error_msg.lower():
-                            raise ProviderTimeoutError(
-                                "Google API request timed out or was cancelled",
-                                provider="google",
-                            ) from e
-                        elif (
-                            "not found" in error_msg.lower() and "model" in error_msg.lower()
-                        ) or "not supported" in error_msg.lower():
-                            from llmring.exceptions import ModelNotFoundError
+                    if isinstance(item, tuple):
+                        if item and item[0] == "__error__":
+                            e = item[1]
+                            exc = e if isinstance(e, BaseException) else Exception(str(e))
+                            await self._breaker.record_failure(key)
+                            error_msg = self._extract_error_message(exc)
+                            if (
+                                "api_key" in error_msg.lower()
+                                or "unauthorized" in error_msg.lower()
+                            ):
+                                raise ProviderAuthenticationError(
+                                    f"Google API authentication failed: {error_msg}",
+                                    provider="google",
+                                ) from e
+                            elif "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
+                                raise ProviderRateLimitError(
+                                    f"Google API rate limit exceeded: {error_msg}",
+                                    provider="google",
+                                ) from e
+                            elif "timeout" in error_msg.lower():
+                                raise ProviderTimeoutError(
+                                    f"Google API timeout: {error_msg}", provider="google"
+                                ) from e
+                            elif "cancelled" in error_msg.lower():
+                                raise ProviderTimeoutError(
+                                    "Google API request timed out or was cancelled",
+                                    provider="google",
+                                ) from e
+                            elif (
+                                "not found" in error_msg.lower() and "model" in error_msg.lower()
+                            ) or "not supported" in error_msg.lower():
+                                from llmring.exceptions import ModelNotFoundError
 
-                            raise ModelNotFoundError(
-                                f"Google model not available: {error_msg}",
-                                provider="google",
-                                model_name=model,
-                            ) from e
-                        else:
-                            raise ProviderResponseError(
-                                f"Google API error: {error_msg}", provider="google"
-                            ) from e
+                                raise ModelNotFoundError(
+                                    f"Google model not available: {error_msg}",
+                                    provider="google",
+                                    model_name=model,
+                                ) from e
+                            else:
+                                raise ProviderResponseError(
+                                    f"Google API error: {error_msg}", provider="google"
+                                ) from e
+                        continue
 
-                    chunk = item
-                    if chunk.candidates and len(chunk.candidates) > 0:
-                        candidate = chunk.candidates[0]
+                    chunk: Any = item
+                    candidates = getattr(chunk, "candidates", None)
+                    if candidates:
+                        candidate = candidates[0]
 
                         if hasattr(candidate, "content") and candidate.content:
                             # Extract text and function calls from content parts
@@ -913,9 +926,11 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Log warning if model not in registry (but don't block)
         try:
-            registry_models = await self._registry_client.fetch_current_models("google")
-            if not any(m.model_name == model and m.is_active for m in registry_models):
-                logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
+            registry_client = self._registry_client
+            if registry_client is not None:
+                registry_models = await registry_client.fetch_current_models("google")
+                if not any(m.model_name == model and m.is_active for m in registry_models):
+                    logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
         except Exception:
             pass  # Registry unavailable, continue anyway
 
@@ -1000,18 +1015,24 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 elif tool_choice == "none":
                     # Disable function calling
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(mode="NONE")
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfigMode.NONE
+                        )
                     )
                 elif tool_choice == "any" or tool_choice == "required":
                     # Force function calling
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(mode="ANY")
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfigMode.ANY
+                        )
                     )
                 elif isinstance(tool_choice, dict) and "function" in tool_choice:
                     # Specific function choice - not directly supported by Google
                     # Fall back to ANY mode with the available tools
                     config_params["tool_config"] = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(mode="ANY")
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode=types.FunctionCallingConfigMode.ANY
+                        )
                     )
 
         config = types.GenerateContentConfig(**config_params) if config_params else None
@@ -1051,7 +1072,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                             None,
                             lambda: self.client.models.generate_content(
                                 model=api_model,
-                                contents=final_contents,
+                                contents=cast(Any, final_contents),
                                 config=config,
                             ),
                         ),
@@ -1071,6 +1092,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 # For multi-turn conversations, construct proper history
                 # Split conversation into history and current message
                 history_messages, current_message = self._split_conversation(conversation_messages)
+                if current_message is None:
+                    current_message = Message(role="user", content="")
 
                 # Convert history to google-genai format (include tool calls and responses)
                 tool_name_by_id_hist: Dict[str, str] = {}
@@ -1177,8 +1200,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                         ]
                         # Add file objects if present
                         if file_objects:
-                            return chat.send_message(file_objects + parts)
-                        return chat.send_message(parts)
+                            return chat.send_message(cast(Any, file_objects + parts))
+                        return chat.send_message(cast(Any, parts))
                     else:
                         converted_content = self._convert_content_to_google_format(
                             current_message.content
@@ -1192,8 +1215,8 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                 contents_list.extend(converted_content)
                             else:
                                 contents_list.append(converted_content)
-                            return chat.send_message(contents_list)
-                        return chat.send_message(converted_content)
+                            return chat.send_message(cast(Any, contents_list))
+                        return chat.send_message(cast(Any, converted_content))
 
                 # Run the chat in thread pool with timeout handling
                 async def _do_chat():
@@ -1287,28 +1310,25 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         seen = set()
 
         def _walk(e: BaseException) -> str:
-            if e is None or id(e) in seen:
+            if id(e) in seen:
                 return ""
             seen.add(id(e))
 
             # Prefer deeper causes/contexts first
             cause = getattr(e, "__cause__", None)
             ctx = getattr(e, "__context__", None)
-            deeper = _walk(cause) or _walk(ctx)
+            deeper = ""
+            if isinstance(cause, BaseException):
+                deeper = _walk(cause)
+            if not deeper and isinstance(ctx, BaseException):
+                deeper = _walk(ctx)
             if deeper and deeper.strip() and deeper.strip().lower() != "unknown error":
                 return deeper
 
             # Explicit timeout handling
-            try:
-                import asyncio as _asyncio  # local import to avoid cycles
-            except Exception:
-                _asyncio = None
-
-            if (
-                hasattr(_asyncio, "TimeoutError") and isinstance(e, _asyncio.TimeoutError)
-            ) or isinstance(e, TimeoutError):
+            if isinstance(e, (asyncio.TimeoutError, TimeoutError)):
                 return "Request timed out"
-            if hasattr(_asyncio, "CancelledError") and isinstance(e, _asyncio.CancelledError):
+            if isinstance(e, asyncio.CancelledError):
                 return "Request was cancelled (likely due to timeout)"
 
             # Use this exception's own message if meaningful
@@ -1425,7 +1445,7 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     if start_pos is not None and hasattr(file, "seek"):
                         file.seek(start_pos)
                     # Note: display_name is not supported as an argument.
-                    return self.client.files.upload(file=file)
+                    return self.client.files.upload(file=cast(Any, file))
 
                 uploaded_file = await loop.run_in_executor(None, _upload)
             except Exception as e:
@@ -1433,12 +1453,13 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Parse expiration time
         try:
-            expiration_str = uploaded_file.expiration_time
-            if isinstance(expiration_str, str):
-                expiration_time = datetime.fromisoformat(expiration_str.replace("Z", "+00:00"))
+            expiration_value: object = getattr(uploaded_file, "expiration_time", None)
+            if isinstance(expiration_value, datetime):
+                expiration_time = expiration_value
+            elif isinstance(expiration_value, str):
+                expiration_time = datetime.fromisoformat(expiration_value.replace("Z", "+00:00"))
             else:
-                # Might be a datetime object already
-                expiration_time = expiration_str
+                raise TypeError("expiration_time is missing or not a supported type")
         except Exception:
             # Fallback: 48 hours from now
             from datetime import timedelta, timezone
@@ -1446,32 +1467,40 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             expiration_time = datetime.now(timezone.utc) + timedelta(hours=48)
 
         # Store metadata for expiration tracking
-        self._uploaded_files[uploaded_file.name] = UploadedFileInfo(
-            file_name=uploaded_file.name,
+        uploaded_name = getattr(uploaded_file, "name", None)
+        if not isinstance(uploaded_name, str):
+            raise ProviderResponseError(
+                "Google upload did not return a valid file id", provider="google"
+            )
+        self._uploaded_files[uploaded_name] = UploadedFileInfo(
+            file_name=uploaded_name,
             expiration_time=expiration_time,
             local_path=local_path,
         )
 
         # Parse created_at time
         try:
-            create_time_str = uploaded_file.create_time
-            if isinstance(create_time_str, str):
-                created_at = datetime.fromisoformat(create_time_str.replace("Z", "+00:00"))
+            create_time_value: object = getattr(uploaded_file, "create_time", None)
+            if isinstance(create_time_value, datetime):
+                created_at = create_time_value
+            elif isinstance(create_time_value, str):
+                created_at = datetime.fromisoformat(create_time_value.replace("Z", "+00:00"))
             else:
-                created_at = create_time_str
+                raise TypeError("create_time is missing or not a supported type")
         except Exception:
             created_at = datetime.now()
 
         # Return standardized response
+        size_bytes_raw = getattr(uploaded_file, "size_bytes", None)
+        try:
+            uploaded_size_bytes = int(size_bytes_raw) if size_bytes_raw is not None else 0
+        except (TypeError, ValueError):
+            uploaded_size_bytes = 0
         return FileUploadResponse(
-            file_id=uploaded_file.name,
+            file_id=uploaded_name,
             provider="google",
             filename=actual_filename,
-            size_bytes=(
-                int(uploaded_file.size_bytes)
-                if hasattr(uploaded_file, "size_bytes") and getattr(uploaded_file, "size_bytes")
-                else (file_size if file_size is not None else 0)
-            ),
+            size_bytes=uploaded_size_bytes or (file_size if file_size is not None else 0),
             created_at=created_at,
             purpose=purpose,
             metadata={
@@ -1583,13 +1612,20 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             # Parse response
             result = []
             for file_obj in files_list:
+                file_id = getattr(file_obj, "name", None)
+                if not isinstance(file_id, str):
+                    continue
                 # Parse timestamps
                 try:
-                    create_time_str = file_obj.create_time
-                    if isinstance(create_time_str, str):
-                        created_at = datetime.fromisoformat(create_time_str.replace("Z", "+00:00"))
+                    create_time_value: object = getattr(file_obj, "create_time", None)
+                    if isinstance(create_time_value, datetime):
+                        created_at = create_time_value
+                    elif isinstance(create_time_value, str):
+                        created_at = datetime.fromisoformat(
+                            create_time_value.replace("Z", "+00:00")
+                        )
                     else:
-                        created_at = create_time_str
+                        raise TypeError
                 except Exception:
                     created_at = datetime.now()
 
@@ -1604,20 +1640,26 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     "PROCESSING": "processing",
                     "FAILED": "error",
                 }
-                status = status_map.get(state_name, "ready")
+                status = cast(
+                    Literal["uploaded", "processing", "ready", "error", "expired"],
+                    status_map.get(state_name, "ready"),
+                )
+                size_bytes_raw = getattr(file_obj, "size_bytes", None)
+                try:
+                    size_bytes_value = int(size_bytes_raw) if size_bytes_raw is not None else 0
+                except (TypeError, ValueError):
+                    size_bytes_value = 0
 
                 result.append(
                     FileMetadata(
-                        file_id=file_obj.name,
+                        file_id=file_id,
                         provider="google",
                         filename=(
                             file_obj.display_name
-                            if hasattr(file_obj, "display_name") and file_obj.display_name
-                            else file_obj.name.split("/")[-1]
+                            if isinstance(getattr(file_obj, "display_name", None), str)
+                            else file_id.split("/")[-1]
                         ),
-                        size_bytes=(
-                            int(file_obj.size_bytes) if hasattr(file_obj, "size_bytes") else 0
-                        ),
+                        size_bytes=size_bytes_value,
                         created_at=created_at,
                         purpose="file",  # Google doesn't have purpose field
                         status=status,
@@ -1665,11 +1707,13 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
             # Parse timestamps
             try:
-                create_time_str = file_obj.create_time
-                if isinstance(create_time_str, str):
-                    created_at = datetime.fromisoformat(create_time_str.replace("Z", "+00:00"))
+                create_time_value: object = getattr(file_obj, "create_time", None)
+                if isinstance(create_time_value, datetime):
+                    created_at = create_time_value
+                elif isinstance(create_time_value, str):
+                    created_at = datetime.fromisoformat(create_time_value.replace("Z", "+00:00"))
                 else:
-                    created_at = create_time_str
+                    raise TypeError
             except Exception:
                 created_at = datetime.now()
 
@@ -1682,17 +1726,31 @@ class GoogleProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 "PROCESSING": "processing",
                 "FAILED": "error",
             }
-            status = status_map.get(state_name, "ready")
+            status = cast(
+                Literal["uploaded", "processing", "ready", "error", "expired"],
+                status_map.get(state_name, "ready"),
+            )
+
+            file_name = getattr(file_obj, "name", None)
+            if not isinstance(file_name, str):
+                raise ProviderResponseError(
+                    "Google get_file returned invalid file id", provider="google"
+                )
+            size_bytes_raw = getattr(file_obj, "size_bytes", None)
+            try:
+                size_bytes_value = int(size_bytes_raw) if size_bytes_raw is not None else 0
+            except (TypeError, ValueError):
+                size_bytes_value = 0
 
             return FileMetadata(
-                file_id=file_obj.name,
+                file_id=file_name,
                 provider="google",
                 filename=(
                     file_obj.display_name
-                    if hasattr(file_obj, "display_name") and file_obj.display_name
-                    else file_obj.name.split("/")[-1]
+                    if isinstance(getattr(file_obj, "display_name", None), str)
+                    else file_name.split("/")[-1]
                 ),
-                size_bytes=(int(file_obj.size_bytes) if hasattr(file_obj, "size_bytes") else 0),
+                size_bytes=size_bytes_value,
                 created_at=created_at,
                 purpose="file",
                 status=status,

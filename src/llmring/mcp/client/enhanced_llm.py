@@ -1,21 +1,12 @@
 """Enhanced LLM client with MCP tool calling. Integrates MCP tools into LLM conversations automatically."""
 
-"""
-Enhanced LLM Interface for MCP Client - Fixed Version
-
-This module provides an LLM-compatible interface that modules can use to interact
-with the MCP client as if it were a smart LLM with tool capabilities.
-
-This version is fully database-agnostic and uses HTTP endpoints exclusively.
-"""
-
 import asyncio
 import inspect
 import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Literal, cast, overload
 
 from llmring.exceptions import (
     ConversationError,
@@ -352,6 +343,28 @@ class EnhancedLLM:
         except Exception as e:
             return {"error": f"Unexpected error in tool execution: {e}"}
 
+    @overload
+    async def chat(
+        self,
+        messages: list[Message | dict[str, Any]],
+        user_id: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stream: Literal[False] = False,
+        **kwargs: Any,
+    ) -> LLMResponse: ...
+
+    @overload
+    async def chat(
+        self,
+        messages: list[Message | dict[str, Any]],
+        user_id: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stream: Literal[True] = True,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamChunk]: ...
+
     async def chat(
         self,
         messages: list[Message | dict[str, Any]],
@@ -359,7 +372,7 @@ class EnhancedLLM:
         temperature: float | None = None,
         max_tokens: int | None = None,
         stream: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> LLMResponse | AsyncIterator[StreamChunk]:
         """
         Send a conversation to the enhanced LLM and get a response.
@@ -377,6 +390,19 @@ class EnhancedLLM:
         Returns:
             LLMResponse with content and usage information
         """
+        metadata: dict[str, Any] = {}
+        supplied_metadata = kwargs.pop("metadata", None)
+        if isinstance(supplied_metadata, dict):
+            metadata.update(supplied_metadata)
+        metadata.setdefault("id_at_origin", user_id or self.default_user_id)
+
+        files = kwargs.pop("files", None)
+        timeout = kwargs.pop("timeout", None)
+        cache = kwargs.pop("cache", None)
+        reasoning_tokens = kwargs.pop("reasoning_tokens", None)
+        json_response = kwargs.pop("json_response", None)
+        response_format = kwargs.pop("response_format", None)
+
         # Convert messages to Message objects if needed
         formatted_messages = []
         for msg in messages:
@@ -456,11 +482,16 @@ class EnhancedLLM:
             messages=formatted_messages,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning_tokens=reasoning_tokens,
+            response_format=response_format,
             tools=tools if tools else None,
             tool_choice="auto" if tools else None,
-            user_id=user_id or self.default_user_id,
-            stream=stream,
-            **kwargs,
+            json_response=json_response,
+            cache=cache,
+            metadata=metadata,
+            files=files,
+            timeout=timeout,
+            extra_params=kwargs,
         )
 
         # Handle streaming
@@ -473,7 +504,7 @@ class EnhancedLLM:
                 )
             else:
                 # Streaming without tools - pass through directly
-                return await self.llmring.chat(request)
+                return self.llmring.chat_stream(request)
 
         # Send to LLM (non-streaming)
         response = await self.llmring.chat(request)
@@ -543,8 +574,16 @@ class EnhancedLLM:
                 messages=formatted_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                user_id=user_id or self.default_user_id,
-                **kwargs,
+                reasoning_tokens=reasoning_tokens,
+                response_format=response_format,
+                tools=tools if tools else None,
+                tool_choice="auto" if tools else None,
+                json_response=json_response,
+                cache=cache,
+                metadata=metadata,
+                files=files,
+                timeout=timeout,
+                extra_params=kwargs,
             )
             response = await self.llmring.chat(final_request)
 
@@ -553,7 +592,6 @@ class EnhancedLLM:
             try:
                 await self.conversation_manager.add_message(
                     conversation_id=self.current_conversation_id,
-                    user_id=user_id or self.default_user_id,
                     role="assistant",
                     content=response.content or "",
                     metadata={
@@ -615,7 +653,18 @@ class EnhancedLLM:
 
         if conversation:
             self.current_conversation_id = conversation_id
-            self.conversation_history = conversation.messages
+            self.conversation_history = [
+                Message(
+                    role=cast(
+                        Literal["system", "user", "assistant", "tool"],
+                        msg.role if msg.role in {"system", "user", "assistant", "tool"} else "user",
+                    ),
+                    content=msg.content,
+                    timestamp=msg.timestamp,
+                    metadata=msg.metadata,
+                )
+                for msg in conversation.messages
+            ]
         else:
             raise ValueError(f"Conversation {conversation_id} not found")
 
@@ -634,10 +683,11 @@ class EnhancedLLM:
         Returns:
             List of conversation summaries
         """
-        return await self.conversation_manager.list_conversations(
+        conversations = await self.conversation_manager.list_conversations(
             user_id=user_id or self.default_user_id,
             limit=limit,
         )
+        return [c.__dict__ for c in conversations]
 
     async def get_usage_stats(
         self,
@@ -762,8 +812,8 @@ class EnhancedLLM:
                 {
                     "name": provider.name,
                     "description": provider.description,
-                    "capabilities": provider.capabilities,
-                    "status": provider.status,
+                    "capabilities": [],
+                    "status": "available" if provider.available else "unavailable",
                 }
                 for provider in providers
             ]

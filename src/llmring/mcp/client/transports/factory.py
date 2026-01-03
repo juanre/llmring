@@ -1,12 +1,5 @@
 """Transport factory for creating MCP connections. Creates appropriate transport based on URL scheme."""
 
-"""
-Transport factory for creating and managing transport instances.
-
-Provides a factory pattern for dynamic transport selection and
-a registry for custom transport types.
-"""
-
 from typing import Any
 
 from llmring.mcp.client.transports.base import Transport

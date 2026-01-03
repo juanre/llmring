@@ -1,13 +1,5 @@
 """Main entry point for standalone MCP server. Runs MCP server with configurable transports and registries."""
 
-"""
-CLI entry point for mcp-server command.
-
-This CLI allows users to run MCP servers using JSON configuration files
-rather than requiring Python module imports. This follows standard patterns
-where tools, resources, and prompts are defined declaratively.
-"""
-
 import argparse
 import asyncio
 import json

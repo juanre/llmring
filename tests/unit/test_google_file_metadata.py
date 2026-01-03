@@ -2,8 +2,6 @@
 
 from datetime import datetime, timezone
 
-import pytest
-
 from llmring.providers.google_api import UploadedFileInfo
 
 

@@ -151,14 +151,14 @@ from llmring.exceptions import (
 
 ## Extended Classes
 
-### LLMRingExtended
+### LLMRingSession
 
-Extended LLM service with conversation tracking and server integration support.
+Session-based LLM service with conversation tracking and server integration support.
 
 ```python
-from llmring import LLMRingExtended
+from llmring import LLMRingSession
 
-service = LLMRingExtended(
+service = LLMRingSession(
     origin="myapp",
     registry_url=None,
     lockfile_path=None,
@@ -188,9 +188,9 @@ service = LLMRingExtended(
 **Example:**
 
 ```python
-from llmring import LLMRingExtended, LLMRequest, Message
+from llmring import LLMRingSession, LLMRequest, Message
 
-async with LLMRingExtended(
+async with LLMRingSession(
     server_url="https://api.llmring.ai",
     api_key="your-key",
     enable_conversations=True
@@ -217,6 +217,10 @@ async with LLMRingExtended(
     print(f"Messages in conversation: {len(history['messages'])}")
 ```
 
+### LLMRingExtended (Deprecated)
+
+`LLMRingExtended` is a deprecated alias of `LLMRingSession` and will be removed in v2.0.
+
 ---
 
 ### ConversationManager
@@ -224,9 +228,9 @@ async with LLMRingExtended(
 Helper class for managing conversations with simplified API.
 
 ```python
-from llmring import LLMRingExtended, ConversationManager
+from llmring import LLMRingSession, ConversationManager
 
-service = LLMRingExtended(
+service = LLMRingSession(
     server_url="https://api.llmring.ai",
     api_key="your-key",
     enable_conversations=True
@@ -256,10 +260,10 @@ manager = ConversationManager(service)
 **Example:**
 
 ```python
-from llmring import LLMRingExtended, ConversationManager
+from llmring import LLMRingSession, ConversationManager
 
 async def chat_session():
-    service = LLMRingExtended(
+    service = LLMRingSession(
         server_url="https://api.llmring.ai",
         api_key="your-key",
         enable_conversations=True
@@ -363,6 +367,6 @@ async with LLMRing() as service:
 - Use profiles for environment-specific configurations
 - Leverage provider-specific features via extra_params
 - Access raw clients for advanced features when needed
-- Use `LLMRingExtended` for conversation persistence
+- Use `LLMRingSession` for conversation persistence
 - Use `ConversationManager` for simplified multi-turn chats
 - Leverage file utilities for vision/multimodal tasks

@@ -1,9 +1,5 @@
 """MCP server transport package. Exports transport implementations for different protocols."""
 
-"""
-Transport implementations for MCP Server Engine.
-"""
-
 from llmring.mcp.server.transport.base import Transport
 from llmring.mcp.server.transport.stdio import StdioServerTransport, StdioTransport
 from llmring.mcp.server.transport.websocket import WebSocketServerTransport, WebSocketTransport

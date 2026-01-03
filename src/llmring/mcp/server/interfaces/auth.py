@@ -1,9 +1,5 @@
 """Authentication interface for MCP servers. Defines abstract auth provider for MCP requests."""
 
-"""
-Authentication provider interface for MCP Server Engine.
-"""
-
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 

@@ -334,10 +334,11 @@ For programmatic usage with automatic tool execution:
 from llmring.mcp.client.enhanced_llm import create_enhanced_llm
 
 # Create enhanced LLM
-llm = await create_enhanced_llm(
-    model="balanced",
-    mcp_server_path="stdio://python -m my_mcp_server"
+llm = create_enhanced_llm(
+    llm_model="balanced",
+    mcp_server_url="stdio://python -m my_mcp_server",
 )
+await llm.initialize()
 
 # Chat with automatic tool execution
 messages = [{"role": "user", "content": "What's the weather in NYC?"}]
@@ -353,22 +354,22 @@ print(response.content)  # "The weather in NYC is 72°F and sunny."
 # Streaming works seamlessly with tool calls
 messages = [{"role": "user", "content": "Analyze this file and summarize it"}]
 
-async for chunk in await llm.chat_stream(messages):
-    if chunk.type == "content":
-        print(chunk.content, end="", flush=True)
-    elif chunk.type == "tool_call":
-        print(f"\n[Calling tool: {chunk.tool_call.name}]")
-    elif chunk.type == "tool_result":
-        print(f"\n[Tool result received]")
+stream = await llm.chat(messages, stream=True)
+async for chunk in stream:
+    if chunk.delta:
+        print(chunk.delta, end="", flush=True)
+    if chunk.tool_calls:
+        tool_names = [call["function"]["name"] for call in chunk.tool_calls]
+        print(f"\n[Tool calls requested: {tool_names}]")
 ```
 
 ### Direct MCP Client Usage
 
 ```python
-from llmring.mcp.client.mcp_client import MCPClient
+from llmring.mcp.client.mcp_client import AsyncMCPClient
 
 # Connect to MCP server
-client = MCPClient("http://localhost:8000")
+client = AsyncMCPClient.http("http://localhost:8000")
 await client.initialize()
 
 # List available tools

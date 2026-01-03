@@ -1,14 +1,9 @@
 """Base transport interface for MCP servers. Defines abstract transport for protocol implementation."""
 
-"""
-Base transport interface for MCP communication.
-Defines the common interface that all transport implementations must follow.
-"""
-
 import abc
 import inspect
 import logging
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Union, cast
 
 # Type for JSON-RPC messages
 JSONRPCMessage = Dict[str, Any]
@@ -136,9 +131,11 @@ class Transport(abc.ABC):
                 # Call with appropriate arguments
                 if len(params) >= 2:
                     # New style callback that accepts context
-                    self._message_callback(message, context)
+                    cast(Callable[[JSONRPCMessage, Any], None], self._message_callback)(
+                        message, context
+                    )
                 else:
-                    self._message_callback(message)
+                    cast(Callable[[JSONRPCMessage], None], self._message_callback)(message)
             except Exception as e:
                 self.logger.exception(f"Error in message callback: {str(e)}")
                 self._handle_error(e)

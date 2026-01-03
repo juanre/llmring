@@ -29,7 +29,8 @@ class TestBaseLLMProvider:
         with pytest.raises(TypeError):
             IncompleteProvider()
 
-    def test_complete_implementation_works(self):
+    @pytest.mark.asyncio
+    async def test_complete_implementation_works(self):
         """Test that a complete implementation can be instantiated."""
 
         class CompleteProvider(BaseLLMProvider):
@@ -62,7 +63,7 @@ class TestBaseLLMProvider:
 
             # Validation methods removed - we no longer gatekeep models
 
-            def get_default_model(self):
+            async def get_default_model(self):
                 return "test-model"
 
             async def get_capabilities(self):
@@ -72,13 +73,27 @@ class TestBaseLLMProvider:
                     provider_name="test",
                     supported_models=["test-model"],
                     supports_streaming=False,
+                    default_model="test-model",
                 )
+
+            async def upload_file(self, file, purpose="analysis", filename=None, **kwargs):
+                raise NotImplementedError
+
+            async def delete_file(self, file_id: str) -> bool:
+                raise NotImplementedError
+
+            async def list_files(self, purpose=None, limit=100):
+                raise NotImplementedError
+
+            async def get_file(self, file_id: str):
+                raise NotImplementedError
 
         provider = CompleteProvider(api_key="test-key")
         assert provider.config.api_key == "test-key"
         assert provider.config.base_url is None
 
-    def test_get_default_model_fallback(self):
+    @pytest.mark.asyncio
+    async def test_get_default_model_fallback(self):
         """Test that get_default_model falls back to first supported model."""
 
         class TestProvider(BaseLLMProvider):
@@ -106,7 +121,7 @@ class TestBaseLLMProvider:
 
             # Validation methods removed - we no longer gatekeep models
 
-            def get_default_model(self):
+            async def get_default_model(self):
                 return "model-1"
 
             async def get_capabilities(self):
@@ -116,12 +131,26 @@ class TestBaseLLMProvider:
                     provider_name="test",
                     supported_models=["model-1", "model-2", "model-3"],
                     supports_streaming=False,
+                    default_model="model-1",
                 )
 
-        provider = TestProvider()
-        assert provider.get_default_model() == "model-1"
+            async def upload_file(self, file, purpose="analysis", filename=None, **kwargs):
+                raise NotImplementedError
 
-    def test_get_default_model_empty_list(self):
+            async def delete_file(self, file_id: str) -> bool:
+                raise NotImplementedError
+
+            async def list_files(self, purpose=None, limit=100):
+                raise NotImplementedError
+
+            async def get_file(self, file_id: str):
+                raise NotImplementedError
+
+        provider = TestProvider()
+        assert await provider.get_default_model() == "model-1"
+
+    @pytest.mark.asyncio
+    async def test_get_default_model_empty_list(self):
         """Test get_default_model when no models are supported."""
 
         class EmptyProvider(BaseLLMProvider):
@@ -149,15 +178,30 @@ class TestBaseLLMProvider:
 
             # Validation methods removed - we no longer gatekeep models
 
-            def get_default_model(self):
+            async def get_default_model(self):
                 return "default"
 
             async def get_capabilities(self):
                 from llmring.base import ProviderCapabilities
 
                 return ProviderCapabilities(
-                    provider_name="test", supported_models=[], supports_streaming=False
+                    provider_name="test",
+                    supported_models=[],
+                    supports_streaming=False,
+                    default_model="default",
                 )
 
+            async def upload_file(self, file, purpose="analysis", filename=None, **kwargs):
+                raise NotImplementedError
+
+            async def delete_file(self, file_id: str) -> bool:
+                raise NotImplementedError
+
+            async def list_files(self, purpose=None, limit=100):
+                raise NotImplementedError
+
+            async def get_file(self, file_id: str):
+                raise NotImplementedError
+
         provider = EmptyProvider()
-        assert provider.get_default_model() == "default"
+        assert await provider.get_default_model() == "default"

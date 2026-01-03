@@ -1,12 +1,5 @@
 """Core MCP server implementation. Handles MCP protocol requests and routes to tools/resources."""
 
-"""
-Main MCP Server implementation.
-
-Provides a transport-agnostic MCP server that can work with any transport layer
-(STDIO, WebSocket, HTTP) and properly implements the MCP protocol.
-"""
-
 import asyncio
 import logging
 import signal
@@ -73,6 +66,12 @@ class MCPServer:
 
         # Setup signal handlers for graceful shutdown
         self._setup_signal_handlers()
+
+    def _require_transport(self) -> Transport:
+        transport = self.transport
+        if transport is None:
+            raise RuntimeError("Server transport not configured. Call run() first.")
+        return transport
 
     def _setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown."""
@@ -206,7 +205,7 @@ class MCPServer:
 
             # Send response if it's a request (not a notification)
             if msg_id is not None and response is not None:
-                await self.transport.send_message(response)
+                await self._require_transport().send_message(response)
 
         except Exception as e:
             logger.error(f"Error processing message: {e}", exc_info=True)
@@ -255,9 +254,20 @@ class MCPServer:
 
         # Add authentication context if available
         if self.auth_provider:
-            auth_context = await self.auth_provider.authenticate_context(message)
-            context.user_id = auth_context.get("user_id", "anonymous")
-            context.permissions = auth_context.get("permissions", [])
+            user_id = await self.auth_provider.authenticate_context(message)
+            if user_id:
+                context.user_id = user_id
+                permissions = await self.auth_provider.get_permissions(user_id)
+                perms = permissions.get("permissions", [])
+                if isinstance(perms, list):
+                    context.permissions = perms
+                elif isinstance(perms, str):
+                    context.permissions = [perms]
+                else:
+                    context.permissions = []
+            else:
+                context.user_id = "anonymous"
+                context.permissions = []
         else:
             # No auth - anonymous user
             context.user_id = "anonymous"
@@ -279,7 +289,7 @@ class MCPServer:
         data: Optional[Any] = None,
     ) -> None:
         """Send an error response."""
-        error_response = {
+        error_response: Dict[str, Any] = {
             "jsonrpc": "2.0",
             "id": msg_id,
             "error": {"code": code, "message": message},
@@ -288,18 +298,18 @@ class MCPServer:
         if data is not None:
             error_response["error"]["data"] = data
 
-        await self.transport.send_message(error_response)
+        await self._require_transport().send_message(error_response)
 
     async def _send_notification(
         self, method: str, params: Optional[Dict[str, Any]] = None
     ) -> None:
         """Send a notification (no response expected)."""
-        notification = {"jsonrpc": "2.0", "method": method}
+        notification: Dict[str, Any] = {"jsonrpc": "2.0", "method": method}
 
         if params is not None:
             notification["params"] = params
 
-        await self.transport.send_message(notification)
+        await self._require_transport().send_message(notification)
 
     # Protocol method handlers
 
@@ -307,10 +317,7 @@ class MCPServer:
         self, params: Dict[str, Any], context: SimpleNamespace
     ) -> Dict[str, Any]:
         """Handle initialize method."""
-        try:
-            return await self.handlers.handle_initialize(params, context)
-        except ProtocolError as e:
-            raise JSONRPCError(e.code, e.message, e.data)
+        return await self.handlers.handle_initialize(params, context)
 
     async def _handle_initialized(self, params: Dict[str, Any], context: SimpleNamespace) -> None:
         """Handle initialized notification."""

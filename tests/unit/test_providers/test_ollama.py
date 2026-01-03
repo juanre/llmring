@@ -318,7 +318,8 @@ class TestOllamaProviderUnit:
             assert "llama" in default_model
         except Exception as e:
             # If registry is unavailable and no models found, this is expected
-            assert "No default model available" in str(e) or "registry" in str(e).lower()
+            err_msg = str(e).lower()
+            assert "no" in err_msg and "model" in err_msg
             pytest.skip("Ollama registry unavailable - cannot test default model")
 
     @skip_if_ollama_not_running

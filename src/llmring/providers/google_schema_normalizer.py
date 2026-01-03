@@ -1,16 +1,5 @@
 """Schema normalization for Google Gemini API requests and responses. Converts between llmring format and Google's specific schema requirements."""
 
-"""
-Google Gemini JSON Schema normalization utilities.
-
-Google Gemini has specific requirements and limitations for function declaration schemas:
-- No union types (except nullable)
-- No complex composition (anyOf, oneOf, allOf, not)
-- Limited keyword support
-
-This module provides normalization to convert standard JSON Schemas to Google-compatible format.
-"""
-
 import logging
 from typing import Any, Dict, List, Tuple
 

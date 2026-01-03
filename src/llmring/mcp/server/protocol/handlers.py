@@ -1,17 +1,5 @@
 """Protocol message handlers for MCP server. Processes initialize, tools/list, and execute requests."""
 
-"""
-MCP Protocol handlers for standard methods.
-
-Implements handlers for all required MCP protocol methods including:
-- Initialization (initialize/initialized)
-- Tools (list/call)
-- Resources (list/read)
-- Prompts (list/get)
-- Logging (setLevel)
-- Lifecycle (ping/shutdown)
-"""
-
 import base64
 import logging
 from datetime import datetime, timezone
@@ -47,7 +35,7 @@ class ProtocolHandlers:
         self.server_name = server_name
         self.server_version = server_version
         self.initialized = False
-        self.client_info: Optional[Dict[str, Any]] = None
+        self.client_info: Dict[str, Any] = {}
         self.protocol_version: Optional[str] = None
         self.shutdown_requested = False
 

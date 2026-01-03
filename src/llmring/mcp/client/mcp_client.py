@@ -1,21 +1,5 @@
 """Core MCP client for protocol communication. Implements MCP protocol client with transport abstraction."""
 
-"""
-MCP (Model Context Protocol) client implementation.
-
-This module provides a clean, efficient client for the Model Context Protocol,
-supporting multiple transport protocols including HTTP/SSE, WebSocket, and stdio.
-
-Key features:
-- Factory-based API for transport selection
-- Sync and async API support
-- Multiple transport protocols (HTTP, WebSocket, stdio)
-- Resource subscription management
-- Tool execution with capability caching
-- Connection state management
-- Robust error handling
-"""
-
 import asyncio
 import inspect
 import json
@@ -295,12 +279,6 @@ class MCPClient:
                 )
                 self._run_async(self.transport.start())
                 self.logger.debug(f"Transport state after start: {self.transport.state}")
-            elif not hasattr(self.transport, "state"):
-                # Fallback for transports without state tracking
-                self.logger.debug("Transport has no state tracking, checking if already started")
-                if not getattr(self.transport, "_started", False):
-                    self._run_async(self.transport.start())
-                    self.transport._started = True
 
             # Wire onmessage handler if the transport supports it
             try:
@@ -343,7 +321,8 @@ class MCPClient:
                 result.get("protocolVersion") or self.protocol_version
             )
             try:
-                self.transport.set_protocol_version(self.negotiated_protocol_version)
+                if self.negotiated_protocol_version is not None:
+                    self.transport.set_protocol_version(self.negotiated_protocol_version)
             except (MCPProtocolError, AttributeError) as e:
                 logger.debug(f"Transport doesn't support protocol version setting: {e}")
             except Exception as e:
@@ -397,7 +376,13 @@ class MCPClient:
             except AttributeError as e:
                 self.logger.info(f"send_notification not available: {e}, trying direct send")
                 # Transport might not support notifications, try direct send
-                if hasattr(self.transport, "process") and hasattr(self.transport.process, "stdin"):
+                from .transports.stdio import STDIOTransport
+
+                if (
+                    isinstance(self.transport, STDIOTransport)
+                    and self.transport.process is not None
+                    and self.transport.process.stdin is not None
+                ):
                     # Direct send for stdio transport
                     message_json = json.dumps(notification) + "\n"
                     self.logger.info(f"Sending directly: {message_json.strip()}")
@@ -445,7 +430,7 @@ class MCPClient:
         if not name or not isinstance(name, str):
             raise ValueError("Prompt name must be a non-empty string")
 
-        params = {"name": name}
+        params: dict[str, Any] = {"name": name}
         if arguments:
             params["arguments"] = arguments
         return self._make_request("prompts/get", params)
@@ -823,7 +808,8 @@ class AsyncMCPClient:
                 result.get("protocolVersion") or self.protocol_version
             )
             try:
-                self.transport.set_protocol_version(self.negotiated_protocol_version)
+                if self.negotiated_protocol_version is not None:
+                    self.transport.set_protocol_version(self.negotiated_protocol_version)
             except (MCPProtocolError, AttributeError) as e:
                 logger.debug(f"Transport doesn't support protocol version setting: {e}")
             except Exception as e:
@@ -884,7 +870,10 @@ class AsyncMCPClient:
             # Notification
             method = message.get("method")
             params = message.get("params", {})
-            for handler in self._notification_handlers.get(method, []):
+            handlers = (
+                self._notification_handlers.get(method, []) if isinstance(method, str) else []
+            )
+            for handler in handlers:
                 try:
                     handler(params)
                 except (MCPError, RuntimeError) as e:
@@ -894,7 +883,7 @@ class AsyncMCPClient:
             return
 
         method = message.get("method")
-        if method:
+        if isinstance(method, str) and method:
             handler = self._method_handlers.get(method)
             if not handler:
                 response = {
@@ -941,7 +930,13 @@ class AsyncMCPClient:
             await self.transport.send_notification(notification)
         except AttributeError:
             # Transport might not support notifications, try direct send
-            if hasattr(self.transport, "process") and hasattr(self.transport.process, "stdin"):
+            from .transports.stdio import STDIOTransport
+
+            if (
+                isinstance(self.transport, STDIOTransport)
+                and self.transport.process is not None
+                and self.transport.process.stdin is not None
+            ):
                 # Direct send for stdio transport
                 message_json = json.dumps(notification) + "\n"
                 self.transport.process.stdin.write(message_json.encode("utf-8"))
@@ -994,7 +989,7 @@ class AsyncMCPClient:
         if not name or not isinstance(name, str):
             raise ValueError("Prompt name must be a non-empty string")
 
-        params = {"name": name}
+        params: dict[str, Any] = {"name": name}
         if arguments:
             params["arguments"] = arguments
 

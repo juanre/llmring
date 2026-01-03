@@ -1080,7 +1080,7 @@ async def cmd_server_logs(args):
     print("-----------------")
     for row in logs:
         print(
-            f"{row.get('logged_at')} :: {row.get('origin','n/a')} :: "
+            f"{row.get('logged_at')} :: {row.get('origin', 'n/a')} :: "
             f"{row.get('alias') or row.get('model')} "
             f"{row.get('input_tokens')}→{row.get('output_tokens')} "
             f"${row.get('cost', 0.0):.4f}"

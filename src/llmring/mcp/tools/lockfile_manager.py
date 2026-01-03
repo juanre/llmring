@@ -1,12 +1,5 @@
 """Lockfile management tools for MCP. Provides MCP tools for reading and updating lockfiles."""
 
-"""
-MCP tools for conversational lockfile management.
-
-Provides tools for managing lockfiles through natural conversation,
-including adding/removing aliases, assessing models, and generating configurations.
-"""
-
 import logging
 import os
 from pathlib import Path
@@ -35,25 +28,25 @@ class LockfileManagerTools:
             lockfile_path: Path to lockfile, defaults to finding project root
         """
         if lockfile_path:
-            self.lockfile_path = lockfile_path
-            self.package_dir = lockfile_path.parent
-            self.project_root = Lockfile.find_project_root() or lockfile_path.parent
+            self.lockfile_path: Path = lockfile_path
+            self.package_dir: Path = lockfile_path.parent
+            self.project_root: Path = Lockfile.find_project_root() or lockfile_path.parent
         else:
             # Try to find package directory where lockfile should be
-            self.package_dir = Lockfile.find_package_directory()
-            self.project_root = Lockfile.find_project_root()
+            package_dir = Lockfile.find_package_directory()
+            project_root = Lockfile.find_project_root()
 
-            if self.package_dir:
-                self.lockfile_path = self.package_dir / LOCKFILE_NAME
+            if package_dir:
+                self.package_dir = package_dir
+                self.lockfile_path = package_dir / LOCKFILE_NAME
             else:
                 # Fall back to current directory
                 self.lockfile_path = Path(LOCKFILE_NAME)
                 self.package_dir = Path.cwd()
 
-            if not self.project_root:
-                self.project_root = self.package_dir
+            self.project_root = project_root or self.package_dir
 
-        self.lockfile = None
+        self.lockfile: Lockfile
         self.registry = RegistryClient()
         self.working_profile = "default"
 
@@ -115,11 +108,13 @@ class LockfileManagerTools:
         if providers is None:
             # Get all configured providers
             available = await self.get_available_providers()
-            providers = available["configured"]
+            providers_list: List[str] = list(available["configured"])
+        else:
+            providers_list = providers
 
         all_models = []
 
-        for provider in providers:
+        for provider in providers_list:
             try:
                 models = await self.registry.fetch_current_models(provider)
 
@@ -169,7 +164,7 @@ class LockfileManagerTools:
         return {
             "models": all_models,
             "total_count": len(all_models),
-            "providers_included": providers,
+            "providers_included": providers_list,
         }
 
     async def filter_models_by_requirements(
@@ -649,13 +644,14 @@ class LockfileManagerTools:
                 models = await self.registry.fetch_current_models(provider)
                 model = next((m for m in models if m.model_name == model_name), None)
 
-                if model and model.dollars_per_million_tokens_input:
-                    input_cost = (
-                        monthly_volume["input_tokens"] / 1_000_000
-                    ) * model.dollars_per_million_tokens_input
-                    output_cost = (
-                        monthly_volume["output_tokens"] / 1_000_000
-                    ) * model.dollars_per_million_tokens_output
+                if model:
+                    input_price = model.dollars_per_million_tokens_input or 0.0
+                    output_price = model.dollars_per_million_tokens_output or 0.0
+                    if not input_price and not output_price:
+                        continue
+
+                    input_cost = (monthly_volume["input_tokens"] / 1_000_000) * input_price
+                    output_cost = (monthly_volume["output_tokens"] / 1_000_000) * output_price
                     alias_cost = input_cost + output_cost
 
                     cost_breakdown[alias] = {

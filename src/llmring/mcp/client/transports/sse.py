@@ -1,23 +1,16 @@
 """Server-Sent Events transport for MCP streaming. Implements MCP over SSE for server-initiated messages."""
 
-"""
-Server-Sent Events (SSE) transport implementation for MCP client.
-
-Provides SSE transport for server-to-client streaming with HTTP POST
-for client-to-server requests, enabling real-time bidirectional
-communication with MCP servers.
-"""
-
 import asyncio
 import contextlib
 import json
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 
+from llmring.mcp.client.client import ConnectionPool
 from llmring.mcp.client.transports.base import ConnectionState, Transport
 
 logger = logging.getLogger(__name__)
@@ -41,7 +34,7 @@ class SSETransport(Transport):
         allowed_origins: list[str] | None = None,
         enable_cors_validation: bool = True,
         rate_limit_requests_per_minute: int | None = None,
-        pool: Optional["ConnectionPool"] = None,
+        pool: ConnectionPool | None = None,
         **client_kwargs,
     ):
         """
@@ -80,7 +73,7 @@ class SSETransport(Transport):
         self.client_kwargs = client_kwargs
 
         # SSE connection management
-        self._sse_task: asyncio.Agent | None = None
+        self._sse_task: asyncio.Task[None] | None = None
         self._reconnect_count = 0
         self._last_event_id: str | None = None
         self._should_reconnect = True
@@ -517,11 +510,3 @@ class SSETransport(Transport):
             "pending_requests": len(self._pending_requests),
             "should_reconnect": self._should_reconnect,
         }
-
-
-# Import ConnectionPool from client module to avoid circular imports
-try:
-    from ..client import ConnectionPool
-except ImportError:
-    # Fallback for when ConnectionPool is moved
-    ConnectionPool = None

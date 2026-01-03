@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import time
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
@@ -16,13 +17,7 @@ import pytest
 
 from llmring.mcp.client import AsyncMCPClient, MCPClient
 
-# Check if mcp-server is available
-try:
-    import llmring.mcp.server
-
-    MCP_SERVER_AVAILABLE = True
-except ImportError:
-    MCP_SERVER_AVAILABLE = False
+MCP_SERVER_AVAILABLE = find_spec("llmring.mcp.server") is not None
 
 
 @pytest.fixture

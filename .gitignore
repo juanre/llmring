@@ -168,3 +168,4 @@ uv.lock
 # Model cache (for local embeddings)
 /models/
 /.cache/
+.beadhub

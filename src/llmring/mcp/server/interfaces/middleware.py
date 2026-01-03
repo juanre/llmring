@@ -1,9 +1,5 @@
 """Middleware interface for MCP request processing. Defines abstract middleware for request/response transformation."""
 
-"""
-Middleware interface for MCP Server Engine.
-"""
-
 from abc import ABC, abstractmethod
 from typing import Any, Callable
 

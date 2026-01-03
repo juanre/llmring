@@ -1,15 +1,8 @@
 """Error handling and retry logic for provider API calls. Converts provider-specific errors to llmring exceptions with retry support."""
 
-"""
-Unified error handling for all LLM providers.
-
-Provides consistent exception mapping from provider-specific errors
-to llmring's unified exception hierarchy.
-"""
-
 import asyncio
 import logging
-from typing import Optional, Protocol
+from typing import NoReturn, Optional, Protocol
 
 from llmring.exceptions import (
     LLMRingError,
@@ -67,7 +60,7 @@ class ProviderErrorHandler:
         model: str,
         *,
         context: Optional[str] = None,
-    ) -> None:
+    ) -> NoReturn:
         """
         Handle an exception from a provider API call.
 
@@ -106,9 +99,9 @@ class ProviderErrorHandler:
         exception: Exception,
         model: str,
         context: Optional[str],
-    ) -> None:
+    ) -> NoReturn:
         """Handle errors wrapped in RetryError."""
-        root = exception.__cause__ if hasattr(exception, "__cause__") else exception
+        root: BaseException = exception.__cause__ or exception
         attempts = getattr(exception, "attempts", 0)
         context_str = f" ({context})" if context else ""
 
@@ -156,7 +149,7 @@ class ProviderErrorHandler:
         exception: Exception,
         model: str,
         context: Optional[str],
-    ) -> None:
+    ) -> NoReturn:
         """Handle direct (non-retry) exceptions."""
         context_str = f" ({context})" if context else ""
 
@@ -213,7 +206,7 @@ class ProviderErrorHandler:
             original=exception,
         ) from exception
 
-    def _detect_error_type(self, exception: Exception) -> Optional[str]:
+    def _detect_error_type(self, exception: BaseException) -> Optional[str]:
         """
         Detect the type of error from an exception.
 
@@ -237,7 +230,7 @@ class ProviderErrorHandler:
         return None
 
     def _detect_openai_anthropic_error(
-        self, exception: Exception, exception_type: str
+        self, exception: BaseException, exception_type: str
     ) -> Optional[str]:
         """Detect errors for OpenAI and Anthropic SDKs."""
         # These providers have explicit exception classes
@@ -259,7 +252,7 @@ class ProviderErrorHandler:
 
         return None
 
-    def _detect_google_error(self, exception: Exception, exception_type: str) -> Optional[str]:
+    def _detect_google_error(self, exception: BaseException, exception_type: str) -> Optional[str]:
         """Detect errors for Google SDK."""
         # Google uses string matching
         error_msg = self._extract_error_message(exception)
@@ -275,7 +268,7 @@ class ProviderErrorHandler:
 
         return None
 
-    def _detect_ollama_error(self, exception: Exception, exception_type: str) -> Optional[str]:
+    def _detect_ollama_error(self, exception: BaseException, exception_type: str) -> Optional[str]:
         """Detect errors for Ollama."""
         # Ollama uses ResponseError with error messages
         if "ResponseError" in exception_type:
@@ -285,7 +278,7 @@ class ProviderErrorHandler:
 
         return None
 
-    def _extract_error_message(self, exception: Exception) -> str:
+    def _extract_error_message(self, exception: BaseException) -> str:
         """
         Extract a readable error message from an exception.
 

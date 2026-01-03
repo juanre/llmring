@@ -1,12 +1,5 @@
 """Registry client for fetching model metadata from GitHub Pages. Provides caching, version management, and drift detection for provider models."""
 
-"""
-Registry client for fetching model information from GitHub Pages.
-
-The registry is hosted at https://llmring.github.io/registry/
-with per-provider model lists and versioned archives.
-"""
-
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -154,6 +147,7 @@ class RegistryClient:
         # In-memory cache with TTL (24 hours)
         cache_ttl = self.CACHE_DURATION_HOURS * 3600  # Convert to seconds
         self._cache: TTLCache = TTLCache(maxsize=100, ttl=cache_ttl)
+        self._pinned_version: Optional[int] = None
 
     async def fetch_models(
         self, provider: str, version: Optional[int] = None

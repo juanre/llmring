@@ -1,10 +1,5 @@
 """Anthropic provider implementation for Claude models. Handles chat, streaming, prompt caching, and thinking tokens."""
 
-"""
-Anthropic Claude API provider implementation using the official SDK.
-"""
-
-import asyncio
 import json
 import logging
 import os
@@ -21,6 +16,7 @@ from llmring.base import (
     BaseLLMProvider,
     ProviderCapabilities,
     ProviderConfig,
+    TimeoutSetting,
     resolve_timeout_config,
 )
 from llmring.exceptions import (
@@ -51,7 +47,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ):
         """
         Initialize the Anthropic provider.
@@ -185,7 +181,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ) -> LLMResponse:
         """
         Send a chat request to the Anthropic Claude API using the official SDK.
@@ -237,9 +233,9 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        files: Optional[List[str]] = None,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ) -> AsyncIterator[StreamChunk]:
         """
         Send a streaming chat request to the Anthropic Claude API.
@@ -263,7 +259,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         Example:
             >>> async for chunk in provider.chat_stream(messages, model="claude-3-opus"):
-            ...     print(chunk.content, end="", flush=True)
+            ...     print(chunk.delta, end="", flush=True)
         """
         # reasoning_tokens is ignored for Anthropic models
         resolved_timeout = self._resolve_timeout_value(timeout)
@@ -306,9 +302,11 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         # Log warning if model not in registry (but don't block)
         try:
-            registry_models = await self._registry_client.fetch_current_models("anthropic")
-            if not any(m.model_name == model and m.is_active for m in registry_models):
-                logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
+            registry_client = self._registry_client
+            if registry_client is not None:
+                registry_models = await registry_client.fetch_current_models("anthropic")
+                if not any(m.model_name == model and m.is_active for m in registry_models):
+                    logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
         except Exception:
             pass  # Registry unavailable, continue anyway
 
@@ -318,7 +316,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         )
 
         # Build request parameters
-        request_params = {
+        request_params: Dict[str, Any] = {
             "model": model,
             "messages": anthropic_messages,
             "temperature": temperature or 0.7,
@@ -354,15 +352,20 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             response_format and response_format.get("type") in ["json_object", "json"]
         ):
             json_instruction = "\n\nIMPORTANT: You must respond with valid JSON only."
-            # Preserve cache control structure if present
-            if isinstance(request_params.get("system"), list):
-                # System is a list with cache control, append to text
-                request_params["system"][0]["text"] += json_instruction
-            elif request_params.get("system"):
-                # System is a string, just append
-                request_params["system"] += json_instruction
+            system_value = request_params.get("system")
+            if (
+                isinstance(system_value, list)
+                and system_value
+                and isinstance(system_value[0], dict)
+            ):
+                first = system_value[0]
+                first_text = first.get("text")
+                if isinstance(first_text, str):
+                    first["text"] = first_text + json_instruction
+                request_params["system"] = system_value
+            elif isinstance(system_value, str) and system_value:
+                request_params["system"] = system_value + json_instruction
             else:
-                # No system message yet
                 request_params["system"] = json_instruction.strip()
 
         # Make streaming API call
@@ -655,9 +658,11 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
 
         # Log warning if model not in registry (but don't block)
         try:
-            registry_models = await self._registry_client.fetch_current_models("anthropic")
-            if not any(m.model_name == model and m.is_active for m in registry_models):
-                logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
+            registry_client = self._registry_client
+            if registry_client is not None:
+                registry_models = await registry_client.fetch_current_models("anthropic")
+                if not any(m.model_name == model and m.is_active for m in registry_models):
+                    logger.warning(f"Model '{model}' not found in registry, proceeding anyway")
         except Exception:
             pass  # Registry unavailable, continue anyway
 
@@ -667,7 +672,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         )
 
         # Build the request parameters
-        request_params = {
+        request_params: Dict[str, Any] = {
             "model": model,
             "messages": anthropic_messages,
             "temperature": temperature or 0.7,
@@ -702,15 +707,20 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
             response_format and response_format.get("type") in ["json_object", "json"]
         ):
             json_instruction = "\n\nIMPORTANT: You must respond with valid JSON only."
-            # Preserve cache control structure if present
-            if isinstance(request_params.get("system"), list):
-                # System is a list with cache control, append to text
-                request_params["system"][0]["text"] += json_instruction
-            elif request_params.get("system"):
-                # System is a string, just append
-                request_params["system"] += json_instruction
+            system_value = request_params.get("system")
+            if (
+                isinstance(system_value, list)
+                and system_value
+                and isinstance(system_value[0], dict)
+            ):
+                first = system_value[0]
+                first_text = first.get("text")
+                if isinstance(first_text, str):
+                    first["text"] = first_text + json_instruction
+                request_params["system"] = system_value
+            elif isinstance(system_value, str) and system_value:
+                request_params["system"] = system_value + json_instruction
             else:
-                # No system message yet
                 request_params["system"] = json_instruction.strip()
 
         # Make the API call using the SDK
@@ -755,7 +765,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                 )
 
         # Prepare the response with cache-aware usage
-        usage_dict = {
+        usage_dict: Dict[str, Any] = {
             "prompt_tokens": int(response.usage.input_tokens),
             "completion_tokens": int(response.usage.output_tokens),
             "total_tokens": int(response.usage.input_tokens + response.usage.output_tokens),
@@ -921,7 +931,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         try:
             async with self._create_files_client() as client:
                 # Build query params
-                params = {"limit": limit}
+                params: Dict[str, Any] = {"limit": limit}
                 if purpose:
                     params["purpose"] = purpose
 

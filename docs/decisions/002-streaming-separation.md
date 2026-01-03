@@ -52,9 +52,20 @@ class LLMRing:
 ### Provider Protocol
 
 ```python
-class BaseLLMProvider(Protocol):
-    async def chat(self, request: LLMRequest) -> LLMResponse: ...
-    async def chat_stream(self, request: LLMRequest) -> AsyncIterator[StreamChunk]: ...
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+
+from llmring.schemas import LLMResponse, Message, StreamChunk
+
+
+class BaseLLMProvider(ABC):
+    @abstractmethod
+    async def chat(self, messages: list[Message], model: str) -> LLMResponse: ...
+
+    @abstractmethod
+    async def chat_stream(
+        self, messages: list[Message], model: str
+    ) -> AsyncIterator[StreamChunk]: ...
 ```
 
 ## Consequences
@@ -90,7 +101,7 @@ print(response.content)  # Type: str
 
 ```python
 async for chunk in llmring.chat_stream(request):
-    print(chunk.content, end="", flush=True)  # Type: str
+    print(chunk.delta, end="", flush=True)  # Type: str
 ```
 
 ## Validation

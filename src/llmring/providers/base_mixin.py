@@ -1,9 +1,5 @@
 """Base provider mixin with common functionality. Provides shared methods for provider implementations."""
 
-"""
-Mixin classes for provider implementations to reduce code duplication.
-"""
-
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
@@ -113,7 +109,7 @@ class RegistryModelSelectorMixin:
                 score += 5
             if model.supports_vision:
                 score += 3
-            if hasattr(model, "supports_audio") and model.supports_audio:
+            if getattr(model, "supports_audio", False):
                 score += 2
 
             # Prefer more recent models (if added_date is available)

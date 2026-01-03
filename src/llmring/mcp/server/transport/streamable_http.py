@@ -1,19 +1,5 @@
 """Streamable HTTP transport for MCP server. Implements MCP over HTTP with streaming responses."""
 
-"""
-Streamable HTTP transport implementation for MCP.
-
-This transport implements the Streamable HTTP specification which uses a single
-endpoint for all communication with server-decided response modes.
-
-Key features:
-- Single endpoint architecture
-- Server decides between JSON or SSE response modes
-- Supports session management (optional)
-- Batch request support
-- Event resumption via Last-Event-ID
-"""
-
 import asyncio
 import json
 import logging
@@ -123,7 +109,7 @@ class StreamableHTTPTransport(Transport):
 
         # Session management
         self.sessions: Dict[str, Session] = {}
-        self._cleanup_task: Optional[asyncio.Agent] = None
+        self._cleanup_task: Optional[asyncio.Task[None]] = None
 
         # Default streaming operations
         self.streaming_operations = streaming_operations or {
@@ -226,7 +212,9 @@ class StreamableHTTPTransport(Transport):
         # Default to JSON for simple operations
         return ResponseMode.JSON
 
-    async def handle_request(self, request: Any) -> Union[Dict[str, Any], AsyncIterator[str], None]:
+    async def handle_request(
+        self, request: Any
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]], AsyncIterator[str], None]:
         """
         Handle an incoming HTTP request.
 
@@ -251,7 +239,7 @@ class StreamableHTTPTransport(Transport):
 
     async def _handle_post_request(
         self, request: Any
-    ) -> Union[Dict[str, Any], AsyncIterator[str], None]:
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]], AsyncIterator[str], None]:
         """Handle POST request containing JSON-RPC message(s)."""
         try:
             # Extract and parse body
@@ -307,7 +295,7 @@ class StreamableHTTPTransport(Transport):
         elif response_mode == ResponseMode.JSON:
             # Handle with immediate JSON response
             # Store the response for retrieval
-            response_container = {"response": None}
+            response_container: dict[str, JSONRPCMessage | None] = {"response": None}
 
             def capture_response(response_msg: JSONRPCMessage, ctx: Any = None):
                 response_container["response"] = response_msg
@@ -344,7 +332,7 @@ class StreamableHTTPTransport(Transport):
 
     async def _handle_batch_request(
         self, request: Any, messages: List[Dict[str, Any]]
-    ) -> Union[Dict[str, Any], AsyncIterator[str]]:
+    ) -> Union[List[Dict[str, Any]], AsyncIterator[str]]:
         """Handle a batch of JSON-RPC requests."""
         # Check if any message needs streaming
         needs_streaming = any(
@@ -411,8 +399,8 @@ class StreamableHTTPTransport(Transport):
             # Process the message and collect responses
             response_queue = asyncio.Queue()
 
-            async def queue_response(response_msg: JSONRPCMessage, ctx: Any = None):
-                await response_queue.put(response_msg)
+            def queue_response(response_msg: JSONRPCMessage, ctx: Any = None):
+                response_queue.put_nowait(response_msg)
 
             # Temporarily override callback
             original_callback = self._message_callback

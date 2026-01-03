@@ -1,23 +1,11 @@
 """Integration layer between MCP client and the LLMRing service."""
 
-"""
-Integration layer between MCP and LLMRing/llmring-server.
-
-This module provides the glue between:
-- MCP's tool/resource management
-- LLMRing's LLM routing
-- llmring-server's conversation persistence
-
-All persistence is handled via HTTP endpoints to llmring-server,
-maintaining llmring's database-agnostic architecture.
-"""
-
 import logging
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from llmring.mcp.http_client import MCPHttpClient
-from llmring.schemas import LLMRequest, LLMResponse
+from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
 
 logger = logging.getLogger(__name__)
@@ -81,10 +69,12 @@ class MCPLLMRingIntegration:
         Returns:
             LLM response
         """
+        formatted_messages = [Message.model_validate(message) for message in messages]
+
         # Create LLMRequest
         request = LLMRequest(
             model=model or "mcp_agent",  # Use alias instead of hardcoded model
-            messages=messages,
+            messages=formatted_messages,
             temperature=temperature,
             max_tokens=max_tokens,
             **kwargs,

@@ -1,23 +1,11 @@
 """Extended LLM service with conversation session management and server-side persistence. Provides LLMRingSession for multi-turn conversations with history tracking on llmring-server."""
 
-"""
-LLM service with conversation session management.
-
-This module provides LLMRingSession, a stateful extension of LLMRing that manages
-conversation sessions on llmring-server. Use this when you need:
-- Multi-turn conversations with persistent history
-- Conversation metadata (title, system prompt, settings)
-- Server-side conversation storage and retrieval
-
-For stateless, single-shot LLM calls, use the base LLMRing class instead.
-"""
-
 import logging
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from llmring.base import TIMEOUT_UNSET
-from llmring.schemas import LLMRequest, LLMResponse
+from llmring.base import TIMEOUT_UNSET, TimeoutSetting
+from llmring.schemas import LLMRequest, LLMResponse, Message
 from llmring.service import LLMRing
 
 logger = logging.getLogger(__name__)
@@ -42,7 +30,7 @@ class LLMRingSession(LLMRing):
         api_key: Optional[str] = None,
         enable_conversations: bool = True,
         message_logging_level: str = "full",
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ):
         """
         Initialize the session-based LLM service.
@@ -358,9 +346,10 @@ class ConversationManager:
         )
 
         # Create request
+        request_messages = [Message(**msg) for msg in self.message_history]
         request = LLMRequest(
-            messages=self.message_history,
-            model=model,
+            messages=request_messages,
+            model=model or "default",
             temperature=temperature,
             max_tokens=max_tokens,
         )

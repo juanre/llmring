@@ -1,9 +1,5 @@
 """Terminal styling for MCP chat interface. Defines colors and formatting for chat messages."""
 
-"""
-Styling for MCP chat interface using rich.
-"""
-
 from prompt_toolkit.styles import Style as PTStyle
 from rich.theme import Theme
 

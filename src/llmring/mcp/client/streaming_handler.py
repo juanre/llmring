@@ -1,11 +1,5 @@
 """Streaming response handler for MCP operations. Processes streaming MCP responses with backpressure handling."""
 
-"""
-Streaming handler for MCP Enhanced LLM.
-
-Handles streaming responses with tool execution support.
-"""
-
 import json
 import logging
 from typing import AsyncIterator
@@ -50,7 +44,7 @@ class StreamingToolHandler:
             StreamChunk objects from the LLM
         """
         # First, get the streaming response
-        stream = await self.enhanced_llm.llmring.chat(initial_request)
+        stream = self.enhanced_llm.llmring.chat_stream(initial_request)
 
         # Accumulate the response to check for tool calls
         accumulated_content = ""
@@ -100,11 +94,10 @@ class StreamingToolHandler:
                     messages=formatted_messages,
                     temperature=initial_request.temperature,
                     max_tokens=initial_request.max_tokens,
-                    stream=True,  # Continue streaming
                 )
 
                 # Stream the follow-up response
-                follow_up_stream = await self.enhanced_llm.llmring.chat(follow_up_request)
+                follow_up_stream = self.enhanced_llm.llmring.chat_stream(follow_up_request)
                 async for follow_up_chunk in follow_up_stream:
                     yield follow_up_chunk
 

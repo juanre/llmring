@@ -1,9 +1,5 @@
 """Storage interface for MCP server state persistence. Defines abstract storage provider for tools and resources."""
 
-"""
-Storage provider interface for MCP Server Engine.
-"""
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional

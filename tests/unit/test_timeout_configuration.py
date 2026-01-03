@@ -1,9 +1,16 @@
-from typing import Any, AsyncIterator, Dict, List, Optional
+from pathlib import Path
+from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional
 
 import pytest
 
-from llmring.base import TIMEOUT_UNSET, BaseLLMProvider, ProviderCapabilities, ProviderConfig
-from llmring.schemas import LLMRequest, LLMResponse, Message, StreamChunk
+from llmring.base import (
+    TIMEOUT_UNSET,
+    BaseLLMProvider,
+    ProviderCapabilities,
+    ProviderConfig,
+    TimeoutSetting,
+)
+from llmring.schemas import FileUploadResponse, LLMRequest, LLMResponse, Message, StreamChunk
 from llmring.service import LLMRing
 
 
@@ -42,7 +49,7 @@ class DummyProvider(BaseLLMProvider):
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ) -> LLMResponse:
         self.last_timeout = self._resolve_timeout_value(timeout)
         return LLMResponse(content="ok", model=model)
@@ -61,10 +68,13 @@ class DummyProvider(BaseLLMProvider):
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ) -> AsyncIterator[StreamChunk]:
         self.last_timeout = self._resolve_timeout_value(timeout)
         yield StreamChunk(delta="", model=model, finish_reason="stop")
+
+    async def get_default_model(self) -> str:
+        return "dummy-model"
 
     async def get_capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(
@@ -80,6 +90,24 @@ class DummyProvider(BaseLLMProvider):
             max_context_window=0,
             default_model="dummy-model",
         )
+
+    async def upload_file(
+        self,
+        file: str | Path | BinaryIO,
+        purpose: str = "analysis",
+        filename: str | None = None,
+        **kwargs: Any,
+    ) -> FileUploadResponse:
+        raise NotImplementedError
+
+    async def delete_file(self, file_id: str) -> bool:
+        raise NotImplementedError
+
+    async def list_files(self, purpose: str | None = None, limit: int = 100) -> list[Any]:
+        raise NotImplementedError
+
+    async def get_file(self, file_id: str) -> Any:
+        raise NotImplementedError
 
 
 def _prepare_ring(timeout: Optional[float]) -> tuple[DummyRing, DummyProvider]:

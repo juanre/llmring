@@ -1,13 +1,11 @@
 """Stateless MCP execution engine for single-shot operations. Executes MCP operations without maintaining session state."""
 
-"""Stateless chat engine for processing conversations."""
-
 import logging
 import uuid
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal, cast
 
 from llmring.mcp.client.conversation_manager_async import AsyncConversationManager
 from llmring.mcp.client.mcp_client import MCPClient
@@ -291,7 +289,7 @@ class StatelessChatEngine:
             raise ValueError("No MCP client available for tool execution")
 
         # Execute tool
-        result = await mcp_client.call_tool(tool_call.tool_name, tool_call.arguments)
+        result = mcp_client.call_tool(tool_call.tool_name, tool_call.arguments)
 
         # Create tool result
         tool_result = ToolResult(
@@ -323,10 +321,28 @@ class StatelessChatEngine:
             if not conversation:
                 raise ValueError(f"Conversation {request.conversation_id} not found")
 
+            conversation_messages = [
+                Message(
+                    role=cast(
+                        Literal["system", "user", "assistant", "tool"],
+                        msg.role if msg.role in {"system", "user", "assistant", "tool"} else "user",
+                    ),
+                    content=msg.content,
+                    timestamp=msg.timestamp,
+                    metadata=msg.metadata,
+                )
+                for msg in conversation.messages
+            ]
+            tool_config_tools = None
+            if isinstance(conversation.tool_config, dict):
+                maybe_tools = conversation.tool_config.get("tools")
+                if isinstance(maybe_tools, list):
+                    tool_config_tools = maybe_tools
+
             return ProcessingContext(
                 conversation_id=request.conversation_id,
                 messages=(
-                    request.messages if request.messages is not None else conversation.messages
+                    request.messages if request.messages is not None else conversation_messages
                 ),
                 system_prompt=request.system_prompt or conversation.system_prompt,
                 model=request.model or conversation.model,
@@ -336,7 +352,7 @@ class StatelessChatEngine:
                     else conversation.temperature
                 ),
                 max_tokens=request.max_tokens or conversation.max_tokens,
-                tools=request.tools or conversation.tool_config,
+                tools=request.tools or tool_config_tools,
                 auth_context=request.auth_context or {},
             )
         else:
@@ -427,7 +443,7 @@ class StatelessChatEngine:
                 # Execute tools if MCP client available
                 if context.mcp_client:
                     try:
-                        result = await context.mcp_client.call_tool(
+                        result = context.mcp_client.call_tool(
                             tool_call.tool_name, tool_call.arguments
                         )
                         tool_results.append(

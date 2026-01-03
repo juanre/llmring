@@ -11,11 +11,10 @@ from pathlib import Path
 import pytest
 from dotenv import load_dotenv
 
-# Load environment variables for API keys
-load_dotenv()
-
 from llmring.mcp.server.lockfile_server.server import LockfileServer
 from llmring.mcp.tools.lockfile_manager import LockfileManagerTools
+
+load_dotenv()
 
 
 class TestNewMCPTools:
@@ -283,7 +282,8 @@ class TestNewMCPTools:
 
         # Test with invalid filter values
         result = await lockfile_tools.filter_models_by_requirements(
-            min_context=-1, max_price_input=-10  # Invalid negative value  # Invalid negative cost
+            min_context=-1,
+            max_price_input=-10,  # Invalid negative value  # Invalid negative cost
         )
         # Should handle gracefully
         assert "models" in result

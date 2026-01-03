@@ -1,11 +1,5 @@
 """FastAPI integration for MCP server with streaming support. Mounts MCP server as FastAPI endpoint with SSE."""
 
-"""
-FastAPI integration for MCP Streamable HTTP transport.
-
-This module provides a FastAPI-specific implementation of the Streamable HTTP transport.
-"""
-
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
@@ -67,7 +61,7 @@ class FastAPIStreamableTransport(StreamableHTTPTransport):
             # 202 Accepted for notifications
             return Response(status_code=202, headers=self._response_headers)
 
-        elif isinstance(result, dict):
+        elif isinstance(result, dict) or isinstance(result, list):
             # JSON response
             return JSONResponse(content=result, headers=self._response_headers)
 

@@ -1,9 +1,5 @@
 """JSON-RPC utilities for MCP protocol. Handles JSON-RPC request/response formatting."""
 
-"""
-JSON-RPC 2.0 protocol implementation for MCP.
-"""
-
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
@@ -55,6 +51,7 @@ class JSONRPCError:
     INTERNAL_ERROR = -32603
     APPLICATION_ERROR = -32000
     UNAUTHORIZED = -32001
+    FORBIDDEN = -32004
     NOT_INITIALIZED = -32002  # MCP-specific: Server not initialized
     NOT_FOUND = -32003
 
@@ -104,7 +101,7 @@ class JSONRPCError:
         }
 
     @staticmethod
-    def not_initialized(method: str = None) -> Dict[str, Any]:
+    def not_initialized(method: str | None = None) -> Dict[str, Any]:
         message = "Server not initialized"
         if method:
             message += f". Please call 'initialize' first. (method: {method})"

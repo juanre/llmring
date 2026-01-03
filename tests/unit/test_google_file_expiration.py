@@ -1,8 +1,7 @@
 """Unit tests for Google file expiration handling. Tests file expiration detection and automatic re-upload logic."""
 
-import os
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -68,11 +67,11 @@ async def test_ensure_file_available_expired_with_path():
         patch.object(provider, "upload_file", side_effect=mock_upload_file),
         patch.object(provider.client.files, "get", return_value=mock_file_obj),
     ):
-
         result = await provider._ensure_file_available(file_id)
 
         # Verify upload was called with local path
         provider.upload_file.assert_called_once_with(file="tests/fixtures/sample.txt")
+        assert result.name == file_id
 
         # Verify old file_id now points to new metadata
         assert file_id in provider._uploaded_files

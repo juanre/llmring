@@ -106,9 +106,12 @@ class TestStatelessEngineReal:
 
         # This should call the real LLM and handle the response correctly
         try:
-            response_message, tool_calls, tool_results, llm_response = (
-                await chat_engine._process_with_llm(context)
-            )
+            (
+                response_message,
+                tool_calls,
+                tool_results,
+                llm_response,
+            ) = await chat_engine._process_with_llm(context)
 
             # Verify response types
             assert isinstance(response_message, Message)

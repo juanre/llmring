@@ -1,10 +1,5 @@
 """Prompt registry for MCP prompts. Manages prompt templates and retrieval."""
 
-"""
-Prompt registry for MCP Server Engine.
-Provides management of prompt templates that can be exposed via MCP.
-"""
-
 import inspect
 from typing import Any, Callable, Dict, List, Optional
 
@@ -104,7 +99,9 @@ class PromptRegistry:
         """
         return self.handlers.get(name)
 
-    async def get_prompt(self, name: str, arguments: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def get_prompt(
+        self, name: str, arguments: Dict[str, Any] | None = None
+    ) -> Dict[str, Any]:
         """
         Get a prompt with the given arguments.
 

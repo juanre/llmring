@@ -1,9 +1,5 @@
 """Interactive chat application for MCP servers."""
 
-"""
-Main chat application for MCP client.
-"""
-
 import asyncio
 import json
 import logging
@@ -103,7 +99,7 @@ class MCPChatApp:
         mcp_server_url: str | None = None,
         llm_model: str = "balanced",
         session_id: str | None = None,
-        enable_telemetry: bool = None,
+        enable_telemetry: bool | None = None,
         system_prompt: str | None = None,
     ):
         """
@@ -120,7 +116,7 @@ class MCPChatApp:
         self.console = Console(theme=RICH_THEME)
 
         # LLMRing will be initialized in async context
-        self.llmring = None
+        self.llmring: LLMRing | None = None
         self.model = llm_model
         self.system_prompt = system_prompt
 
@@ -285,7 +281,8 @@ class MCPChatApp:
             List of model information dictionaries
         """
         # Get models from llmring - returns dict of provider -> list of models
-        models_by_provider = await self.llmring.get_available_models()
+        llmring = self._require_llmring()
+        models_by_provider = await llmring.get_available_models()
 
         # Flatten into list of model info dicts
         models = []
@@ -346,6 +343,12 @@ class MCPChatApp:
         except Exception as e:
             logger.warning(f"Could not load available models: {e}")
 
+    def _require_llmring(self) -> LLMRing:
+        llmring = self.llmring
+        if llmring is None:
+            raise RuntimeError("LLMRing is not initialized. Call initialize_async() first.")
+        return llmring
+
     async def cleanup(self) -> None:
         """Clean up resources."""
         # No database resources to clean up
@@ -398,7 +401,7 @@ class MCPChatApp:
 
                     # Get response from LLM
                     with self.console.status("[info]Thinking...[/info]"):
-                        response = await self.llmring.chat(request)
+                        response = await self._require_llmring().chat(request)
 
                     # Show the resolved model on first response
                     if not self.resolved_model_shown and response.model:
@@ -610,7 +613,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
 
         # Process each tool call
         tool_results = []
-        for call in response.tool_calls:
+        for call in response.tool_calls or []:
             # Extract tool name and arguments from the tool call
             # Tool calls from LLMs typically have structure like:
             # {"id": "...", "type": "function", "function": {"name": "...", "arguments": "..."}}
@@ -722,7 +725,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
         )
 
         with self.console.status("[info]Getting follow-up response...[/info]"):
-            follow_up_response = await self.llmring.chat(request)
+            follow_up_response = await self._require_llmring().chat(request)
 
         # Process the follow-up response (which might contain more tool calls)
         await self.process_response(follow_up_response, depth + 1)
@@ -962,7 +965,7 @@ When the user asks about aliases, models, or configurations, use the appropriate
         new_model = args.strip()
         try:
             # Validate model exists
-            self.llmring.get_model_info(new_model)
+            await self._require_llmring().get_model_info(new_model)
             self.model = new_model
             self.resolved_model_shown = False  # Reset flag so new model is shown
             self.console.print(f"[success]Model changed to {new_model}[/success]")

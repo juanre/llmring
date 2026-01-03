@@ -238,15 +238,26 @@ Each service has one clear responsibility:
 
 ### 2. Dependency Inversion
 
-Services depend on abstractions (protocols), not concrete implementations:
+Services depend on abstractions (interfaces), not concrete implementations:
 
 ```python
-class BaseLLMProvider(Protocol):
-    async def chat(self, request: LLMRequest) -> LLMResponse: ...
-    async def chat_stream(self, request: LLMRequest) -> AsyncIterator[StreamChunk]: ...
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+
+from llmring.schemas import LLMResponse, Message, StreamChunk
+
+
+class BaseLLMProvider(ABC):
+    @abstractmethod
+    async def chat(self, messages: list[Message], model: str) -> LLMResponse: ...
+
+    @abstractmethod
+    async def chat_stream(
+        self, messages: list[Message], model: str
+    ) -> AsyncIterator[StreamChunk]: ...
 ```
 
-Providers implement the protocol without inheriting from a base class.
+Providers inherit from `BaseLLMProvider` for runtime enforcement and shared helpers.
 
 ### 3. Separation of Concerns
 

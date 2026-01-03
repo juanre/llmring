@@ -1,13 +1,9 @@
 """Ollama provider implementation for local models. Handles chat and streaming with local Ollama server."""
 
-"""
-Ollama API provider implementation using the official SDK.
-"""
-
-import asyncio
 import json
 import os
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from pathlib import Path
+from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
 
 from ollama import AsyncClient, ResponseError
 
@@ -16,6 +12,7 @@ from llmring.base import (
     BaseLLMProvider,
     ProviderCapabilities,
     ProviderConfig,
+    TimeoutSetting,
     resolve_timeout_config,
 )
 from llmring.exceptions import CircuitBreakerError, ProviderResponseError, ProviderTimeoutError
@@ -24,7 +21,7 @@ from llmring.net.retry import retry_async
 from llmring.providers.base_mixin import ProviderLoggingMixin, RegistryModelSelectorMixin
 from llmring.providers.error_handler import ProviderErrorHandler
 from llmring.registry import RegistryClient
-from llmring.schemas import LLMResponse, Message, StreamChunk
+from llmring.schemas import FileMetadata, FileUploadResponse, LLMResponse, Message, StreamChunk
 from llmring.utils import strip_provider_prefix
 
 
@@ -36,7 +33,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         api_key: Optional[str] = None,  # Not used for Ollama, included for API compatibility
         base_url: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ):
         """
         Initialize the Ollama provider.
@@ -84,9 +81,9 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         if self.default_model:
             return self.default_model
 
+        models: list[str] = []
         try:
             # For Ollama, try registry first, then fall back to actual available models
-            models = []
             if self._registry_client:
                 try:
                     registry_models = await self._registry_client.fetch_current_models("ollama")
@@ -124,6 +121,32 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         # No models available at all
         raise ValueError(
             "No Ollama models available. Please install a model first using 'ollama pull'."
+        )
+
+    def _create_tools_prompt(self, tools: List[Dict[str, Any]]) -> str:
+        """Render available tools as an instruction prompt for prompt-engineered tool use."""
+        rendered = []
+        for tool in tools:
+            func = tool.get("function") if isinstance(tool, dict) else None
+            name = (func or tool).get("name") if isinstance(func or tool, dict) else None
+            if not name:
+                continue
+            description = (func or tool).get("description", "")
+            parameters = (func or tool).get("parameters", {})
+            rendered.append(
+                {
+                    "name": name,
+                    "description": description,
+                    "parameters": parameters,
+                }
+            )
+
+        tools_json = json.dumps(rendered, indent=2)
+        return (
+            "You have access to the following tools.\n"
+            "When you need to call a tool, respond with a single JSON object in the form:\n"
+            '{"name": "tool_name", "arguments": {"arg": "value"}}\n\n'
+            f"Available tools:\n{tools_json}"
         )
 
     async def aclose(self) -> None:
@@ -205,6 +228,59 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             # If we can't get the list, return empty list for graceful degradation
             return []
 
+    async def upload_file(
+        self,
+        file: Union[str, Path, BinaryIO],
+        purpose: str = "analysis",
+        filename: Optional[str] = None,
+        **kwargs: Any,
+    ) -> FileUploadResponse:
+        """Upload a file to the provider.
+
+        Ollama runs locally and does not support a provider-managed Files API. Callers should inline
+        file contents into prompts (or use a provider that supports file uploads).
+        """
+        raise ProviderResponseError(
+            "Ollama provider does not support file uploads",
+            provider="ollama",
+            status_code=400,
+        )
+
+    async def delete_file(self, file_id: str) -> bool:
+        """Delete a previously-uploaded file.
+
+        Ollama does not support provider-managed file uploads.
+        """
+        raise ProviderResponseError(
+            "Ollama provider does not support file deletion",
+            provider="ollama",
+            status_code=400,
+        )
+
+    async def list_files(
+        self, purpose: Optional[str] = None, limit: int = 100
+    ) -> List[FileMetadata]:
+        """List uploaded files.
+
+        Ollama does not support provider-managed file uploads.
+        """
+        raise ProviderResponseError(
+            "Ollama provider does not support file listing",
+            provider="ollama",
+            status_code=400,
+        )
+
+    async def get_file(self, file_id: str) -> FileMetadata:
+        """Get file metadata.
+
+        Ollama does not support provider-managed file uploads.
+        """
+        raise ProviderResponseError(
+            "Ollama provider does not support file retrieval",
+            provider="ollama",
+            status_code=400,
+        )
+
     async def chat(
         self,
         messages: List[Message],
@@ -219,7 +295,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ) -> LLMResponse:
         """
         Send a chat request to the Ollama API using the official SDK.
@@ -270,7 +346,8 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        files: Optional[List[str]] = None,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ) -> AsyncIterator[StreamChunk]:
         """
         Send a streaming chat request to the Ollama API.
@@ -293,7 +370,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         Example:
             >>> async for chunk in provider.chat_stream(messages, model="llama3.3"):
-            ...     print(chunk.content, end="", flush=True)
+            ...     print(chunk.delta, end="", flush=True)
         """
         resolved_timeout = self._resolve_timeout_value(timeout)
 
@@ -399,8 +476,8 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 # Apply directly to request
                 request_params.update(extra_params)
 
+        key = f"ollama:{model}"
         try:
-            key = f"ollama:{model}"
             if not await self._breaker.allow(key):
                 raise CircuitBreakerError(
                     "Ollama circuit breaker is open - too many recent failures",
@@ -484,6 +561,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         # Note: We're more lenient with model validation for Ollama
         # since models are user-installed locally
         # For Ollama, just check if model is available locally
+        key = f"ollama:{model}"
         try:
             available = await self.get_available_models()
             if model not in available:
@@ -592,7 +670,6 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     timeout,
                 )
 
-            key = f"ollama:{model}"
             if not await self._breaker.allow(key):
                 raise CircuitBreakerError(
                     "Ollama circuit breaker is open - too many recent failures",
@@ -660,7 +737,7 @@ class OllamaProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         except ResponseError as e:
             # Ollama SDK ResponseError - wrap minimally with context preservation
-            await self._breaker.record_failure(f"ollama:{model}")
+            await self._breaker.record_failure(key)
 
             # Let the error message guide categorization, but don't over-analyze
             error_msg = str(getattr(e, "error", e))

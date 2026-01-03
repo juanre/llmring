@@ -1,9 +1,5 @@
 """Utilities for CLI formatting and lockfile loading."""
 
-"""
-Common utilities for CLI commands to reduce duplication.
-"""
-
 import sys
 from pathlib import Path
 from typing import Optional, Tuple

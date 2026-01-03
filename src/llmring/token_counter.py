@@ -1,12 +1,5 @@
 """Token counting utilities for accurate token estimation across providers. Uses tiktoken for OpenAI, Anthropic, and Google; falls back to character-based estimation."""
 
-"""
-Token counting utilities for LLMRing.
-
-Provides accurate token counting for different providers using their respective tokenizers.
-Falls back to tiktoken for OpenAI-compatible models and character-based estimation as last resort.
-"""
-
 import logging
 from typing import Any, Dict, List
 

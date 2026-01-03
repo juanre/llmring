@@ -209,8 +209,8 @@ request = LLMRequest(
 )
 
 async for chunk in service.chat_stream(request):
-    if chunk.content:
-        print(chunk.content, end="", flush=True)
+    if chunk.delta:
+        print(chunk.delta, end="", flush=True)
     if chunk.tool_calls:
         print(f"\nStructured data: {chunk.tool_calls}")
 ```
@@ -237,7 +237,7 @@ except ValidationError as e:
 
 ### Schema Validation
 
-Optional JSON schema validation (requires `pip install jsonschema`):
+Optional JSON schema validation (requires `uv add jsonschema`):
 
 ```python
 # With jsonschema installed, strict=True enables validation

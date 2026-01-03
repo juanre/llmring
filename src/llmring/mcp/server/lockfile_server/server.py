@@ -1,14 +1,5 @@
 """Lockfile MCP server implementation. Provides MCP tools for lockfile CRUD operations."""
 
-#!/usr/bin/env python3
-"""
-MCP Server for conversational lockfile management.
-
-This server provides MCP tools for managing LLMRing lockfiles through
-natural conversation, allowing users to interactively configure their
-LLM aliases and bindings.
-"""
-
 import argparse
 import asyncio
 import logging
@@ -349,9 +340,8 @@ async def main():
     args = parser.parse_args()
 
     # Get paths from environment or args
-    lockfile_path = args.lockfile or os.getenv("LLMRING_LOCKFILE_PATH")
-    if lockfile_path:
-        lockfile_path = Path(lockfile_path)
+    lockfile_path_raw = args.lockfile or os.getenv("LLMRING_LOCKFILE_PATH")
+    lockfile_path = Path(lockfile_path_raw) if lockfile_path_raw else None
 
     # Create server
     server = LockfileServer(lockfile_path=lockfile_path)

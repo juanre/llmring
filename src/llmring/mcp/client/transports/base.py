@@ -1,12 +1,5 @@
 """Base transport interface for MCP clients. Defines abstract transport interface for protocol implementation."""
 
-"""
-Abstract base transport interface for MCP client.
-
-Defines the contract that all transport implementations must follow,
-enabling pluggable transport layers for different communication protocols.
-"""
-
 import abc
 from collections.abc import Callable
 from enum import Enum

@@ -1,14 +1,5 @@
 """Schema adaptation service for converting between provider formats. Normalizes requests and responses across OpenAI, Anthropic, Google, and Ollama."""
 
-"""
-Schema adaptation service for LLMRing.
-
-Handles provider-specific schema adaptations, including:
-- Google Gemini JSON Schema normalization
-- Structured output adaptation for providers without native support
-- Schema validation
-"""
-
 import json
 import logging
 from copy import deepcopy

@@ -2,7 +2,7 @@
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 import httpx
 
@@ -129,7 +129,7 @@ class BaseHTTPClient:
             return response
         except httpx.HTTPStatusError as e:
             logger.error(
-                f"HTTP {e.response.status_code} error for {method} {path}: " f"{e.response.text}"
+                f"HTTP {e.response.status_code} error for {method} {path}: {e.response.text}"
             )
             raise
         except Exception as e:
@@ -141,7 +141,7 @@ class BaseHTTPClient:
         path: str,
         params: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> Any:
         """
         Make a GET request and return JSON response.
 
@@ -162,7 +162,7 @@ class BaseHTTPClient:
         json: Optional[Any] = None,
         params: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> Any:
         """
         Make a POST request and return JSON response.
 
@@ -184,7 +184,7 @@ class BaseHTTPClient:
         json: Optional[Any] = None,
         params: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> Any:
         """
         Make a PUT request and return JSON response.
 
@@ -205,7 +205,7 @@ class BaseHTTPClient:
         path: str,
         params: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ) -> Union[Dict[str, Any], bool]:
+    ) -> Any:
         """
         Make a DELETE request.
 
@@ -234,7 +234,7 @@ class BaseHTTPClient:
         json: Optional[Any] = None,
         params: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> Any:
         """
         Make a PATCH request and return JSON response.
 

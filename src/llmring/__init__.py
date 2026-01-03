@@ -1,8 +1,6 @@
 """Package exports for llmring core classes and utilities."""
 
-"""The llmring package."""
-
-__version__ = "1.2.0"
+from importlib.metadata import PackageNotFoundError, version
 
 from .base import BaseLLMProvider
 
@@ -41,6 +39,11 @@ from .schemas import FileMetadata, FileUploadResponse, LLMRequest, LLMResponse, 
 # Import main components
 from .service import LLMRing
 from .service_extended import ConversationManager, LLMRingExtended, LLMRingSession
+
+try:
+    __version__ = version("llmring")
+except PackageNotFoundError:  # pragma: no cover
+    __version__ = "0.0.0"
 
 __all__ = [
     # Core classes

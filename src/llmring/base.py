@@ -3,11 +3,23 @@
 import asyncio
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Awaitable, Dict, List, Optional, TypeVar, Union, cast
+from pathlib import Path
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    BinaryIO,
+    Dict,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from pydantic import BaseModel, Field
 
-from llmring.schemas import LLMResponse, Message, StreamChunk
+from llmring.schemas import FileMetadata, FileUploadResponse, LLMResponse, Message, StreamChunk
 
 DEFAULT_TIMEOUT_SECONDS = 60.0
 TIMEOUT_UNSET = object()
@@ -54,9 +66,9 @@ def resolve_timeout_config(
 class ProviderConfig(BaseModel):
     """Configuration for an LLM provider."""
 
-    api_key: Optional[str] = Field(None, description="API key for the provider")
-    base_url: Optional[str] = Field(None, description="Base URL for the API")
-    default_model: Optional[str] = Field(None, description="Default model to use")
+    api_key: Optional[str] = Field(default=None, description="API key for the provider")
+    base_url: Optional[str] = Field(default=None, description="Base URL for the API")
+    default_model: Optional[str] = Field(default=None, description="Default model to use")
     timeout_seconds: Optional[float] = Field(
         DEFAULT_TIMEOUT_SECONDS, description="Request timeout in seconds (None disables)"
     )
@@ -154,7 +166,7 @@ class BaseLLMProvider(ABC):
 
         Example:
             >>> async for chunk in provider.chat_stream(messages, model="gpt-4"):
-            ...     print(chunk.content, end="", flush=True)
+            ...     print(chunk.delta, end="", flush=True)
         """
         pass
 
@@ -165,6 +177,54 @@ class BaseLLMProvider(ABC):
 
         Returns:
             Provider capabilities including supported models and features
+        """
+        pass
+
+    @abstractmethod
+    async def get_default_model(self) -> str:
+        """Return the provider's default model identifier."""
+        pass
+
+    @abstractmethod
+    async def upload_file(
+        self,
+        file: Union[str, Path, BinaryIO],
+        purpose: str = "analysis",
+        filename: Optional[str] = None,
+        **kwargs: Any,
+    ) -> FileUploadResponse:
+        """Upload a file to the provider and return metadata."""
+        pass
+
+    @abstractmethod
+    async def delete_file(self, file_id: str) -> bool:
+        """Delete a previously-uploaded file by provider file ID."""
+        pass
+
+    @abstractmethod
+    async def list_files(
+        self, purpose: Optional[str] = None, limit: int = 100
+    ) -> List[FileMetadata]:
+        """List uploaded files.
+
+        Args:
+            purpose: Optional filter by purpose
+            limit: Maximum number of files to return
+
+        Returns:
+            List of FileMetadata objects
+        """
+        pass
+
+    @abstractmethod
+    async def get_file(self, file_id: str) -> FileMetadata:
+        """Get metadata for a specific file.
+
+        Args:
+            file_id: Provider file ID to retrieve
+
+        Returns:
+            FileMetadata object
         """
         pass
 

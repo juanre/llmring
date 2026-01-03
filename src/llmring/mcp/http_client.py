@@ -1,11 +1,5 @@
 """HTTP client for MCP server communication. Provides methods for servers, tools, prompts, and resources management."""
 
-"""HTTP client for llmring-server MCP endpoints - Refactored Version.
-
-This module provides a clean HTTP interface for MCP operations,
-using the unified BaseHTTPClient for consistency.
-"""
-
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -71,7 +65,7 @@ class MCPHttpClient(BaseHTTPClient):
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP servers."""
-        params = {"is_active": is_active}
+        params: Dict[str, Any] = {"is_active": is_active}
         if project_id:
             params["project_id"] = str(project_id)
 
@@ -136,7 +130,7 @@ class MCPHttpClient(BaseHTTPClient):
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP tools."""
-        params = {"is_active": is_active}
+        params: Dict[str, Any] = {"is_active": is_active}
         if server_id:
             params["server_id"] = str(server_id)
         if project_id:
@@ -217,7 +211,7 @@ class MCPHttpClient(BaseHTTPClient):
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP resources."""
-        params = {"is_active": is_active}
+        params: Dict[str, Any] = {"is_active": is_active}
         if server_id:
             params["server_id"] = str(server_id)
         if project_id:
@@ -242,7 +236,7 @@ class MCPHttpClient(BaseHTTPClient):
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP prompts."""
-        params = {"is_active": is_active}
+        params: Dict[str, Any] = {"is_active": is_active}
         if server_id:
             params["server_id"] = str(server_id)
         if project_id:

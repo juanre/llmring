@@ -1,9 +1,5 @@
 """Pydantic schemas for MCP protocol messages. Defines data models for tools, prompts, resources, and results."""
 
-"""
-Pydantic schemas for MCP chat interface.
-"""
-
 import uuid
 from datetime import UTC, datetime
 from enum import Enum
@@ -29,9 +25,28 @@ class ToolCall(BaseModel):
     tool_name: str
     arguments: dict[str, Any]
 
-    def dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
-        return {"id": self.id, "tool_name": self.tool_name, "arguments": self.arguments}
+    def dict(
+        self,
+        *,
+        include: Any = None,
+        exclude: Any = None,
+        by_alias: bool = False,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Pydantic-compatible dict export (JSON-ready)."""
+        return self.model_dump(
+            mode="json",
+            include=include,
+            exclude=exclude,
+            by_alias=by_alias,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
+            **kwargs,
+        )
 
 
 class ToolResult(BaseModel):
@@ -41,13 +56,28 @@ class ToolResult(BaseModel):
     result: Any
     timestamp: datetime | None = None
 
-    def dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
-        return {
-            "tool_call_id": self.tool_call_id,
-            "result": self.result,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
-        }
+    def dict(
+        self,
+        *,
+        include: Any = None,
+        exclude: Any = None,
+        by_alias: bool = False,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Pydantic-compatible dict export (JSON-ready)."""
+        return self.model_dump(
+            mode="json",
+            include=include,
+            exclude=exclude,
+            by_alias=by_alias,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
+            **kwargs,
+        )
 
 
 class Message(BaseModel):

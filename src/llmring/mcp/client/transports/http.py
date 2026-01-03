@@ -1,18 +1,12 @@
 """HTTP transport for MCP communication. Implements MCP over HTTP with request/response pattern."""
 
-"""
-HTTP transport implementation for MCP client.
-
-Provides HTTP/HTTPS transport for JSON-RPC communication with MCP servers,
-including connection pooling, retry logic, and authentication support.
-"""
-
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from llmring.mcp.client.client import ConnectionPool
 from llmring.mcp.client.transports.base import ConnectionState, Transport
 
 logger = logging.getLogger(__name__)
@@ -32,7 +26,7 @@ class HTTPTransport(Transport):
         enable_retry: bool = True,
         max_retries: int = 3,
         timeout: float = 30.0,
-        pool: Optional["ConnectionPool"] = None,
+        pool: ConnectionPool | None = None,
         **client_kwargs,
     ):
         """
@@ -161,6 +155,8 @@ class HTTPTransport(Transport):
             headers = dict(self.headers)
             if self._protocol_version:
                 headers["MCP-Protocol-Version"] = self._protocol_version
+            if self.client is None:
+                raise RuntimeError("HTTP client not initialized")
             response = await self.client.post("/", headers=headers, json=message)
 
             # Raise HTTP errors
@@ -200,9 +196,3 @@ class HTTPTransport(Transport):
             await self.client.aclose()
 
         self.client = None
-
-
-try:
-    from ..client import ConnectionPool
-except ImportError:
-    ConnectionPool = None

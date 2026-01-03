@@ -9,12 +9,11 @@ import os
 import pytest
 from dotenv import load_dotenv
 
-# Load environment variables for API keys
-load_dotenv()
-
 from llmring.mcp.client.stateless_engine import ChatRequest, StatelessChatEngine
 from llmring.schemas import LLMResponse
 from llmring.service import LLMRing
+
+load_dotenv()
 
 
 class TestMCPClientReal:

@@ -1,12 +1,5 @@
 """Registry advisor tools for MCP. Provides MCP tools for model recommendations and registry queries."""
 
-"""
-MCP tools for registry analysis and lockfile recommendations.
-
-These tools power the intelligent lockfile creation system by providing
-real-time registry data and analysis capabilities to the advisor LLM.
-"""
-
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional

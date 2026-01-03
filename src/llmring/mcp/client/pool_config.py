@@ -1,12 +1,5 @@
 """Connection pool configuration for MCP clients. Manages multiple MCP server connections efficiently."""
 
-"""
-Placeholder pool configurations for compatibility.
-
-Note: These are not used in the database-agnostic implementation
-but are kept for backward compatibility with existing code.
-"""
-
 from dataclasses import dataclass
 
 

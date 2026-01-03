@@ -1,6 +1,5 @@
 """Unit tests for Google file listing. Tests that list_files uses File API not Cache API."""
 
-from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest

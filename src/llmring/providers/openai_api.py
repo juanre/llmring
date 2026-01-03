@@ -1,9 +1,5 @@
 """OpenAI provider implementation for GPT models. Handles chat, streaming, vision, reasoning tokens, and function calling."""
 
-"""
-OpenAI API provider implementation using the official SDK.
-"""
-
 import asyncio
 import base64
 import copy
@@ -15,6 +11,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
 
 from openai import AsyncOpenAI
+from openai.types import FilePurpose
 from openai.types.chat import ChatCompletion
 
 from llmring.base import (
@@ -22,6 +19,7 @@ from llmring.base import (
     BaseLLMProvider,
     ProviderCapabilities,
     ProviderConfig,
+    TimeoutSetting,
     resolve_timeout_config,
 )
 from llmring.exceptions import (
@@ -52,7 +50,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ):
         """
         Initialize the OpenAI provider.
@@ -71,7 +69,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         config = ProviderConfig(
             api_key=api_key,
             base_url=base_url,
-            default_model=model,
+            default_model=model or "",
             timeout_seconds=resolve_timeout_config(
                 timeout, os.getenv("LLMRING_PROVIDER_TIMEOUT_S")
             ),
@@ -152,7 +150,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             supports_json_mode=True,
             supports_caching=False,
             max_context_window=128000,
-            default_model=self.default_model,
+            default_model=self.config.default_model or self.default_model or "gpt-4o-mini",
         )
 
     def _contains_pdf_content(self, messages: List[Message]) -> bool:
@@ -454,8 +452,12 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         # Log warning if model not found in registry (but don't block)
         # Note: Alias resolution happens at service layer, not here
         try:
-            models = await self._registry_client.fetch_current_models("openai")
-            model_found = any(m.model_name == model and m.is_active for m in models)
+            registry_client = self._registry_client
+            if registry_client is not None:
+                models = await registry_client.fetch_current_models("openai")
+                model_found = any(m.model_name == model and m.is_active for m in models)
+            else:
+                model_found = True
 
             if not model_found:
                 logging.getLogger(__name__).warning(
@@ -492,7 +494,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         openai_messages = await self._prepare_openai_messages(messages)
 
         # Build request parameters
-        request_params = {
+        request_params: Dict[str, Any] = {
             "model": model,
             "messages": openai_messages,
             "stream": True,  # Enable streaming
@@ -532,7 +534,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 request_params["response_format"] = {"type": "json_object"}
             elif response_format.get("type") == "json_schema":
                 # Support OpenAI's JSON schema format
-                json_schema_format = {"type": "json_schema"}
+                json_schema_format: Dict[str, Any] = {"type": "json_schema"}
                 if "json_schema" in response_format:
                     json_schema_format["json_schema"] = response_format["json_schema"]
                 if response_format.get("strict") is not None:
@@ -567,7 +569,6 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             # Process the stream
             accumulated_content = ""
             accumulated_tool_calls = {}
-            last_usage = None
 
             async for chunk in stream:
                 if chunk.choices and len(chunk.choices) > 0:
@@ -811,7 +812,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         cache: Optional[Dict[str, Any]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
         files: Optional[List[str]] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ) -> LLMResponse:
         """
         Send a chat request to the OpenAI API using the official SDK.
@@ -881,9 +882,9 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         json_response: Optional[bool] = None,
         cache: Optional[Dict[str, Any]] = None,
-        files: Optional[List[str]] = None,
         extra_params: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = TIMEOUT_UNSET,
+        files: Optional[List[str]] = None,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
     ) -> AsyncIterator[StreamChunk]:
         """
         Send a streaming chat request to the OpenAI API.
@@ -907,10 +908,38 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         Example:
             >>> async for chunk in provider.chat_stream(messages, model="gpt-4o"):
-            ...     print(chunk.content, end="", flush=True)
+            ...     print(chunk.delta, end="", flush=True)
         """
         resolved_timeout = self._resolve_timeout_value(timeout)
+        return self._chat_stream_iterator(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            reasoning_tokens=reasoning_tokens,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
+            extra_params=extra_params,
+            files=files,
+            timeout=resolved_timeout,
+        )
 
+    async def _chat_stream_iterator(
+        self,
+        *,
+        messages: List[Message],
+        model: str,
+        temperature: Optional[float],
+        max_tokens: Optional[int],
+        reasoning_tokens: Optional[int],
+        response_format: Optional[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]],
+        tool_choice: Optional[Union[str, Dict[str, Any]]],
+        extra_params: Optional[Dict[str, Any]],
+        files: Optional[List[str]],
+        timeout: Optional[float],
+    ) -> AsyncIterator[StreamChunk]:
         # If files are present, stream via Responses API with attachments
         if files:
             async for chunk in self._stream_with_files_responses_api(
@@ -923,7 +952,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 tools=tools,
                 tool_choice=tool_choice,
                 extra_params=extra_params,
-                timeout=resolved_timeout,
+                timeout=timeout,
             ):
                 yield chunk
             return
@@ -938,7 +967,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             tools=tools,
             tool_choice=tool_choice,
             extra_params=extra_params,
-            timeout=resolved_timeout,
+            timeout=timeout,
         ):
             yield chunk
 
@@ -1090,8 +1119,11 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         for fid in files:
             try:
                 content_resp = await self.client.files.content(fid)
+                content_resp_any: Any = content_resp
                 file_bytes = (
-                    content_resp.read() if hasattr(content_resp, "read") else bytes(content_resp)
+                    content_resp_any.read()
+                    if hasattr(content_resp_any, "read")
+                    else bytes(content_resp_any)
                 )
             except Exception:
                 file_bytes = b""
@@ -1126,7 +1158,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             if response_format.get("type") in {"json_object", "json"}:
                 request_params["response_format"] = {"type": "json_object"}
             elif response_format.get("type") == "json_schema":
-                json_schema_format = {"type": "json_schema"}
+                json_schema_format: Dict[str, Any] = {"type": "json_schema"}
                 if "json_schema" in response_format:
                     json_schema_format["json_schema"] = response_format["json_schema"]
                 if response_format.get("strict") is not None:
@@ -1176,10 +1208,11 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     try:
                         content_resp = await self.client.files.content(fid)
                         # content_resp is an httpx response-like; get bytes
+                        content_resp_any: Any = content_resp
                         file_bytes = (
-                            content_resp.read()
-                            if hasattr(content_resp, "read")
-                            else bytes(content_resp)
+                            content_resp_any.read()
+                            if hasattr(content_resp_any, "read")
+                            else bytes(content_resp_any)
                         )
                         try:
                             text = file_bytes.decode("utf-8", errors="replace")
@@ -1263,8 +1296,11 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         for fid in files:
             try:
                 content_resp = await self.client.files.content(fid)
+                content_resp_any: Any = content_resp
                 file_bytes = (
-                    content_resp.read() if hasattr(content_resp, "read") else bytes(content_resp)
+                    content_resp_any.read()
+                    if hasattr(content_resp_any, "read")
+                    else bytes(content_resp_any)
                 )
             except Exception:
                 file_bytes = b""
@@ -1293,7 +1329,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             if response_format.get("type") in {"json_object", "json"}:
                 request_params["response_format"] = {"type": "json_object"}
             elif response_format.get("type") == "json_schema":
-                json_schema_format = {"type": "json_schema"}
+                json_schema_format: Dict[str, Any] = {"type": "json_schema"}
                 if "json_schema" in response_format:
                     json_schema_format["json_schema"] = response_format["json_schema"]
                 if response_format.get("strict") is not None:
@@ -1375,8 +1411,12 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         # Log warning if model not found in registry (but don't block)
         # Note: Alias resolution happens at service layer, not here
         try:
-            models = await self._registry_client.fetch_current_models("openai")
-            model_found = any(m.model_name == model and m.is_active for m in models)
+            registry_client = self._registry_client
+            if registry_client is not None:
+                models = await registry_client.fetch_current_models("openai")
+                model_found = any(m.model_name == model and m.is_active for m in models)
+            else:
+                model_found = True
 
             if not model_found:
                 logging.getLogger(__name__).warning(
@@ -1463,7 +1503,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 request_params["response_format"] = {"type": "json_object"}
             elif response_format.get("type") == "json_schema":
                 # Support OpenAI's JSON schema format
-                json_schema_format = {"type": "json_schema"}
+                json_schema_format: Dict[str, Any] = {"type": "json_schema"}
                 if "json_schema" in response_format:
                     json_schema_format["json_schema"] = response_format["json_schema"]
                 if response_format.get("strict") is not None:
@@ -1512,13 +1552,17 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             if choice.message.tool_calls:
                 tool_calls = []
                 for tc in choice.message.tool_calls:
+                    tc_any: Any = tc
+                    tc_function = getattr(tc_any, "function", None)
+                    if tc_function is None:
+                        continue
                     tool_calls.append(
                         {
-                            "id": tc.id,
+                            "id": getattr(tc_any, "id", ""),
                             "type": "function",
                             "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments,
+                                "name": getattr(tc_function, "name", ""),
+                                "arguments": getattr(tc_function, "arguments", ""),
                             },
                         }
                     )
@@ -1569,7 +1613,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         # Map llmring purpose to OpenAI purpose
         # OpenAI uses "assistants" for most file purposes
-        openai_purpose_map = {
+        openai_purpose_map: dict[str, FilePurpose] = {
             "code_execution": "assistants",
             "assistant": "assistants",
             "analysis": "assistants",

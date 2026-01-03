@@ -1,13 +1,5 @@
 """MCP transport layer package. Exports transport implementations for MCP communication."""
 
-"""
-Transport layer for MCP client.
-
-This module provides a pluggable transport system that allows the MCP client
-to work with different communication protocols (HTTP, STDIO, SSE) through
-a unified interface.
-"""
-
 from .base import ConnectionState, Transport
 from .factory import create_transport, get_supported_transports, register_transport
 

@@ -1,6 +1,12 @@
 """Exception hierarchy for llmring with structured error classes."""
 
-from typing import Any, Optional
+from typing import Any, Optional, Protocol, runtime_checkable
+
+
+@runtime_checkable
+class _SupportsRootCause(Protocol):
+    @property
+    def root_cause(self) -> Exception: ...
 
 
 class LLMRingError(Exception):
@@ -24,9 +30,9 @@ class LLMRingError(Exception):
         return " ".join(parts)
 
     @property
-    def root_cause(self) -> Optional[Exception]:
+    def root_cause(self) -> Exception:
         """Get the root cause exception."""
-        if self.original and hasattr(self.original, "root_cause"):
+        if self.original is not None and isinstance(self.original, _SupportsRootCause):
             return self.original.root_cause
         return self.original or self
 
@@ -213,7 +219,7 @@ class ServerError(LLMRingError):
         endpoint: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
     ):
-        super().__init__(message, details)
+        super().__init__(message, details=details)
         self.status_code = status_code
         self.endpoint = endpoint
 
@@ -246,7 +252,7 @@ class ConversationError(LLMRingError):
         conversation_id: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
     ):
-        super().__init__(message, details)
+        super().__init__(message, details=details)
         self.conversation_id = conversation_id
 
 
@@ -279,7 +285,7 @@ class MessageValidationError(MessageError):
         value: Optional[Any] = None,
         details: Optional[dict[str, Any]] = None,
     ):
-        super().__init__(message, details)
+        super().__init__(message, details=details)
         self.field = field
         self.value = value
 
@@ -307,7 +313,7 @@ class MCPProtocolError(MCPError):
         method: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
     ):
-        super().__init__(message, details)
+        super().__init__(message, details=details)
         self.error_code = error_code
         self.method = method
 
@@ -328,7 +334,7 @@ class MCPToolError(MCPError):
         arguments: Optional[dict[str, Any]] = None,
         details: Optional[dict[str, Any]] = None,
     ):
-        super().__init__(message, details)
+        super().__init__(message, details=details)
         self.tool_name = tool_name
         self.arguments = arguments
 
@@ -342,7 +348,7 @@ class MCPResourceError(MCPError):
         resource_uri: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
     ):
-        super().__init__(message, details)
+        super().__init__(message, details=details)
         self.resource_uri = resource_uri
 
 
@@ -368,7 +374,7 @@ class FileProcessingError(LLMRingError):
         filename: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
     ):
-        super().__init__(message, details)
+        super().__init__(message, details=details)
         self.filename = filename
 
 
@@ -412,7 +418,7 @@ class ToolError(LLMRingError):
         tool_name: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
     ):
-        super().__init__(message, details)
+        super().__init__(message, details=details)
         self.tool_name = tool_name
 
 
@@ -462,7 +468,7 @@ class CircuitBreakerError(LLMRingError):
         failure_count: Optional[int] = None,
         details: Optional[dict[str, Any]] = None,
     ):
-        super().__init__(message, details)
+        super().__init__(message, details=details)
         self.provider = provider
         self.retry_after = retry_after
         self.failure_count = failure_count
@@ -485,7 +491,7 @@ class TimeoutError(NetworkError):
         operation: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
     ):
-        super().__init__(message, details)
+        super().__init__(message, details=details)
         self.timeout = timeout
         self.operation = operation
 
@@ -508,7 +514,7 @@ class ValidationError(LLMRingError):
         expected_type: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
     ):
-        super().__init__(message, details)
+        super().__init__(message, details=details)
         self.field = field
         self.value = value
         self.expected_type = expected_type

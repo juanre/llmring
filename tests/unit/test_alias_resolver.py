@@ -43,7 +43,8 @@ class TestAliasResolver:
         ]
 
         resolver = AliasResolver(
-            lockfile=lockfile, available_providers={"openai"}  # Only OpenAI available
+            lockfile=lockfile,
+            available_providers={"openai"},  # Only OpenAI available
         )
 
         result = resolver.resolve("fast")
@@ -58,7 +59,8 @@ class TestAliasResolver:
         ]
 
         resolver = AliasResolver(
-            lockfile=lockfile, available_providers=set()  # No providers available
+            lockfile=lockfile,
+            available_providers=set(),  # No providers available
         )
 
         with pytest.raises(ValueError, match="No available providers"):
@@ -163,7 +165,9 @@ class TestAliasResolver:
         lockfile.resolve_alias.return_value = ["openai:gpt-4"]
 
         resolver = AliasResolver(
-            lockfile=lockfile, available_providers={"openai"}, cache_ttl=1  # 1 second TTL
+            lockfile=lockfile,
+            available_providers={"openai"},
+            cache_ttl=1,  # 1 second TTL
         )
 
         # First call

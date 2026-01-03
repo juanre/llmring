@@ -1,12 +1,5 @@
 """Alias resolution service with fallback support for model pools. Resolves aliases to available models based on configured API keys."""
 
-"""
-Alias resolution service for LLMRing.
-
-Handles resolving model aliases to concrete provider:model references,
-with caching and fallback support.
-"""
-
 import logging
 import os
 from typing import Optional, Set
@@ -88,6 +81,64 @@ class AliasResolver:
             f"Models must be specified as 'provider:model' (e.g., 'openai:gpt-4'). "
             f"If you meant to use an alias, ensure it's defined in your lockfile."
         )
+
+    def resolve_candidates(self, alias_or_model: str, profile: Optional[str] = None) -> list[str]:
+        """
+        Resolve an alias to an ordered list of candidate model strings.
+
+        Args:
+            alias_or_model: Either an alias or a model string (provider:model)
+            profile: Optional profile name (defaults to lockfile default or env var)
+
+        Returns:
+            Ordered list of resolved model strings (provider:model), filtered to configured providers
+
+        Raises:
+            ValueError: If alias cannot be resolved, has invalid entries, or no providers are available
+        """
+        if ":" in alias_or_model:
+            return [alias_or_model]
+
+        if not self.lockfile:
+            raise ValueError(
+                f"Invalid model format: '{alias_or_model}'. "
+                f"Models must be specified as 'provider:model' (e.g., 'openai:gpt-4'). "
+                f"If you meant to use an alias, ensure it's defined in your lockfile."
+            )
+
+        profile_name = profile or os.getenv("LLMRING_PROFILE")
+        model_refs = self.lockfile.resolve_alias(alias_or_model, profile_name)
+        if not model_refs:
+            raise ValueError(
+                f"Invalid model format: '{alias_or_model}'. "
+                f"Models must be specified as 'provider:model' (e.g., 'openai:gpt-4'). "
+                f"If you meant to use an alias, ensure it's defined in your lockfile."
+            )
+
+        candidates: list[str] = []
+        unavailable_models: list[str] = []
+        for model_ref in model_refs:
+            try:
+                provider_type, _ = self._parse_model_string(model_ref)
+            except ValueError:
+                logger.warning(
+                    "Invalid model reference in alias '%s': %s", alias_or_model, model_ref
+                )
+                continue
+
+            if provider_type in self.available_providers:
+                candidates.append(model_ref)
+            else:
+                unavailable_models.append(f"{model_ref} (no {provider_type} API key)")
+
+        if not candidates:
+            raise ValueError(
+                f"No available providers for alias '{alias_or_model}'. "
+                f"Tried models: {', '.join(unavailable_models)}. "
+                f"Please configure the required API keys."
+            )
+
+        return candidates
 
     def _resolve_from_lockfile(self, alias: str, profile: Optional[str] = None) -> Optional[str]:
         """

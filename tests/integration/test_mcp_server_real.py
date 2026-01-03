@@ -17,11 +17,10 @@ from typing import Any, Dict
 import pytest
 from dotenv import load_dotenv
 
-# Load environment variables for API keys
-load_dotenv()
-
 from llmring.lockfile_core import Lockfile
 from llmring.mcp.server.lockfile_server.server import LockfileServer
+
+load_dotenv()
 
 
 class RealServerTestHarness:

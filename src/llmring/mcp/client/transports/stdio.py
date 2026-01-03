@@ -1,12 +1,5 @@
 """Standard I/O transport for MCP subprocess communication. Implements MCP over stdin/stdout for local processes."""
 
-"""
-STDIO transport implementation for MCP client.
-
-Enables communication with MCP servers running as local processes via
-stdin/stdout, as required by the MCP specification for local integrations.
-"""
-
 import asyncio
 import contextlib
 import json
@@ -161,7 +154,7 @@ class STDIOTransport(Transport):
 
         # Message handling
         self._pending_requests: dict[str, asyncio.Future] = {}
-        self._reader_task: asyncio.Agent | None = None
+        self._reader_task: asyncio.Task[None] | None = None
         self._protocol_version: str | None = None
 
     async def start(self) -> None:
@@ -363,6 +356,7 @@ class STDIOTransport(Transport):
 
                 if line:
                     # We got data, process it
+                    line_str = ""
                     try:
                         # Parse JSON-RPC message
                         line_str = line.decode("utf-8").strip()

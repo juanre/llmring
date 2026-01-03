@@ -1,9 +1,7 @@
-"""MCP manifest application for declarative server configuration. Loads and applies MCP configuration from JSON manifests."""
+"""MCP manifest application for declarative server configuration.
 
-"""Utilities to declaratively apply MCP configuration (servers, tools, resources, prompts).
-
-Intended for both CLI (llmring mcp apply -f manifest.json) and code-first ensure
-at app startup. Uses MCPHttpClient to persist state via llmring-server.
+Loads and applies MCP configuration (servers, tools, resources, prompts) from JSON manifests.
+Intended for CLI (`llmring mcp apply -f manifest.json`) and code-first usage at app startup.
 """
 
 from __future__ import annotations
@@ -11,6 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 from llmring.mcp.http_client import MCPHttpClient
 
@@ -69,7 +68,13 @@ async def ensure_server_and_capabilities(
     if existing is None:
         existing = await client.register_server(name=name, url=url, transport_type=transport)
 
-    server_id = existing.get("id")
+    server_id_raw = existing.get("id")
+    if isinstance(server_id_raw, UUID):
+        server_id = server_id_raw
+    elif isinstance(server_id_raw, str):
+        server_id = UUID(server_id_raw)
+    else:
+        raise ValueError("Server registration did not return a valid UUID id")
 
     tools_caps = [_to_tool_capability(t) for t in (tools or [])]
     resource_caps = [_to_resource_capability(r) for r in (resources or [])]

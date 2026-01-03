@@ -1,16 +1,10 @@
 """LLM client wrapper for MCP integration. Provides LLM interface for MCP-enhanced conversations."""
 
-"""
-Enhanced MCP client with LLM sampling capabilities.
-
-This module provides MCP clients that can handle server-initiated LLM sampling requests
-by integrating with the existing LLM service and providers.
-"""
-
 import logging
 from typing import Any
 
 from llmring.mcp.client.mcp_client import AsyncMCPClient, MCPClient
+from llmring.mcp.client.transports.http import HTTPTransport
 from llmring.schemas import LLMRequest, Message
 from llmring.service import LLMRing
 
@@ -43,7 +37,8 @@ class MCPClientWithLLM(MCPClient):
             sampling_config: Configuration for sampling behavior
             **kwargs: Additional arguments passed to base MCPClient
         """
-        super().__init__(base_url, **kwargs)
+        transport = HTTPTransport(base_url=base_url, **kwargs)
+        super().__init__(transport=transport)
 
         # Initialize LLM service
         self.llmring = llmring or LLMRing(origin="mcp-llm-client")
@@ -237,7 +232,8 @@ class AsyncMCPClientWithLLM(AsyncMCPClient):
             sampling_config: Configuration for sampling behavior
             **kwargs: Additional arguments passed to base AsyncMCPClient
         """
-        super().__init__(base_url, **kwargs)
+        transport = HTTPTransport(base_url=base_url, **kwargs)
+        super().__init__(transport=transport)
 
         # Initialize LLM service
         self.llmring = llmring or LLMRing(origin="mcp-llm-client")

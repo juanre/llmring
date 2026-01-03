@@ -1,26 +1,17 @@
 """Streamable HTTP transport for MCP with chunked responses. Implements MCP over HTTP with streaming support."""
 
-"""
-Streamable HTTP transport implementation for MCP client.
-
-Implements the MCP streamable HTTP transport specification which uses a single
-endpoint that handles both HTTP POST (for client-to-server JSON-RPC) and
-HTTP GET (for server-to-client SSE streaming).
-
-This is the new base transport recommended by the MCP specification.
-"""
-
 import asyncio
 import contextlib
 import json
 import logging
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from llmring.mcp.client.client import ConnectionPool
 from llmring.mcp.client.transports.base import ConnectionState, Transport
 
 logger = logging.getLogger(__name__)
@@ -49,7 +40,7 @@ class StreamableHTTPTransport(Transport):
         enable_cors_validation: bool = True,
         rate_limit_requests_per_minute: int | None = None,
         session_id: str | None = None,
-        pool: Optional["ConnectionPool"] = None,
+        pool: ConnectionPool | None = None,
         **client_kwargs,
     ):
         """
@@ -90,7 +81,7 @@ class StreamableHTTPTransport(Transport):
         # Connection management
         self.http_client: httpx.AsyncClient | None = None
         self.sse_client: httpx.AsyncClient | None = None
-        self._sse_task: asyncio.Agent | None = None
+        self._sse_task: asyncio.Task[None] | None = None
         self._should_reconnect = False
         self._reconnect_count = 0
         self._last_event_id: str | None = None
@@ -338,9 +329,9 @@ class StreamableHTTPTransport(Transport):
 
             elif message.get("method"):
                 # Server notification - call notification handler if set
-                if self.onmessage:
+                if self._onmessage:
                     try:
-                        await self.onmessage(message)
+                        self._onmessage(message)
                     except Exception as e:
                         logger.error(f"Error in message handler: {e}")
 
@@ -517,11 +508,3 @@ class StreamableHTTPTransport(Transport):
             "last_event_id": self._last_event_id,
             "pending_requests": len(self._pending_requests),
         }
-
-
-# Import ConnectionPool from client module to avoid circular imports
-try:
-    from ..client import ConnectionPool
-except ImportError:
-    # Fallback for when ConnectionPool is moved
-    ConnectionPool = None

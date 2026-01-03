@@ -42,7 +42,7 @@ def parse_model_string(model: str) -> tuple[str, str]:
 
     if not provider_type or not model_name:
         raise ValueError(
-            f"Invalid model format: '{model}'. " f"Both provider and model name must be non-empty."
+            f"Invalid model format: '{model}'. Both provider and model name must be non-empty."
         )
 
     return provider_type, model_name

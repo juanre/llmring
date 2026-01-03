@@ -1,14 +1,6 @@
-"""Setup script for MCP client configuration. Guides users through MCP server connection setup."""
+"""Setup script for MCP client configuration.
 
-#!/usr/bin/env python3
-"""
-MCP Client Setup Script
-
-This script sets up the MCP client environment by:
-1. Creating the necessary database tables
-2. Adding default LLM model configurations
-3. Configuring basic MCP server connections
-4. Checking for required environment variables
+Deprecated: this script still references the removed DB-based architecture and needs rewriting.
 """
 
 import argparse
@@ -78,8 +70,8 @@ async def check_llmring_setup() -> None:
     try:
         from llmring.service import LLMRing
 
-        service = LLMRing(origin="mcp-setup-check")
-        models = service.get_available_models()
+        async with LLMRing(origin="mcp-setup-check") as service:
+            models = await service.get_available_models()
 
         print("✅ LLM service is available")
         print(f"   Available providers: {', '.join(models.keys())}")
@@ -146,7 +138,7 @@ def test_mcp_connection():
 
     print(f"\nTesting connection to MCP server at {server_url}...")
     try:
-        client = MCPClient(base_url=server_url)
+        client = MCPClient.http(server_url)
 
         # Test connection by listing tools
         tools = client.list_tools()

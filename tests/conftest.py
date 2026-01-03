@@ -1,6 +1,7 @@
 """Test configuration and fixtures for llmring"""
 
 import os
+from importlib.util import find_spec
 from typing import AsyncGenerator
 
 import pytest
@@ -25,16 +26,7 @@ pytest_plugins = ["pgdbm.fixtures.conftest"]
 # llmring-server test fixtures
 # -----------------------------------------------------------------------------
 
-# Check if llmring-server is available for integration tests
-try:
-    import llmring_server
-    from llmring_server.main import app as _server_app
-    from pgdbm.fixtures.conftest import test_db_factory  # noqa: F401
-    from pgdbm.migrations import AsyncMigrationManager
-
-    LLMRING_SERVER_AVAILABLE = True
-except ImportError:
-    LLMRING_SERVER_AVAILABLE = False
+LLMRING_SERVER_AVAILABLE = find_spec("llmring_server") is not None
 
 
 @pytest_asyncio.fixture
@@ -51,6 +43,7 @@ async def llmring_server_client(test_db_factory) -> AsyncGenerator[AsyncClient, 
     from pathlib import Path
 
     from llmring_server.main import app as server_app
+    from pgdbm.migrations import AsyncMigrationManager
 
     # Create isolated test database with schema
     db = await test_db_factory.create_db(suffix="llmring", schema="llmring_test")

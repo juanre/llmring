@@ -1,16 +1,5 @@
 """HTTP transport for MCP server. Implements MCP over HTTP with request/response."""
 
-"""
-HTTP+SSE transport implementation for MCP.
-
-This transport implements the older HTTP+SSE specification which uses separate
-endpoints for messages and SSE streams. It combines HTTP POST for client-to-server
-communication with Server-Sent Events (SSE) for server-to-client communication.
-
-Note: This is the legacy HTTP transport. For new implementations, use
-StreamableHTTPTransport which implements the newer single-endpoint specification.
-"""
-
 import asyncio
 import json
 import logging
@@ -112,7 +101,7 @@ class SessionManager:
 
     def __init__(self):
         self.sessions: Dict[str, Session] = {}
-        self._cleanup_task: Optional[asyncio.Agent] = None
+        self._cleanup_task: Optional[asyncio.Task[None]] = None
 
     def create_session(self) -> str:
         """Create a new MCP session."""

@@ -1,12 +1,5 @@
 """Standard I/O transport for MCP server. Implements MCP over stdin/stdout for CLI usage."""
 
-"""
-STDIO transport implementation for MCP Server Engine.
-
-Provides communication over standard input/output streams, ideal for local
-subprocess-based integrations. Follows the MCP STDIO transport specification.
-"""
-
 import asyncio
 import io
 import json
@@ -49,21 +42,24 @@ class StdioTransport(Transport):
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer_lock = asyncio.Lock()
         self._running = False
-        self._read_task: Optional[asyncio.Agent] = None
+        self._read_task: Optional[asyncio.Task[None]] = None
         self._test_mode = False
         self._pipe_transport = None  # Store transport for cleanup
 
     async def _test_feed_stdin(self) -> None:
         """Feed data from stdin in test mode (StringIO)."""
+        reader = self._reader
+        if reader is None:
+            return
         try:
             while self._running:
                 line = sys.stdin.readline()
                 if not line:  # EOF
                     break
                 # Feed to reader
-                self._reader.feed_data(line.encode("utf-8"))
+                reader.feed_data(line.encode("utf-8"))
                 await asyncio.sleep(0.01)  # Small delay to simulate I/O
-            self._reader.feed_eof()
+            reader.feed_eof()
         except Exception as e:
             self.logger.error(f"Test feed error: {e}")
 
@@ -76,7 +72,7 @@ class StdioTransport(Transport):
         # Remove any existing handlers that might write to stdout
         root_logger = logging.getLogger()
         for handler in root_logger.handlers[:]:
-            if hasattr(handler, "stream") and handler.stream in (
+            if isinstance(handler, logging.StreamHandler) and handler.stream in (
                 sys.stdout,
                 sys.__stdout__,
             ):
@@ -84,7 +80,7 @@ class StdioTransport(Transport):
 
         # Ensure we have a stderr handler
         if not any(
-            hasattr(h, "stream") and h.stream in (sys.stderr, sys.__stderr__)
+            isinstance(h, logging.StreamHandler) and h.stream in (sys.stderr, sys.__stderr__)
             for h in root_logger.handlers
         ):
             stderr_handler = logging.StreamHandler(sys.stderr)

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from collections.abc import AsyncGenerator
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
@@ -91,10 +92,7 @@ class Server:
 if MCP_SERVER_PATH.exists():
     # Add mcp-server to Python path for imports
     sys.path.insert(0, str(MCP_SERVER_PATH / "src"))
-    try:
-        # Try importing to verify it works
-        import llmring.mcp.server
-
+    if find_spec("mcp.server") is not None:
         MCP_SERVER_AVAILABLE = True
         # Try to import actual types if available
         try:
@@ -109,8 +107,6 @@ if MCP_SERVER_PATH.exists():
             Server = MCPServer
         except ImportError:
             pass
-    except ImportError:
-        pass
 
 
 @pytest.fixture
@@ -259,39 +255,7 @@ async def http_mcp_server(basic_mcp_server) -> AsyncGenerator[dict[str, Any], No
     Yields:
         Dict with server info including URL and server instance
     """
-    server = basic_mcp_server
-
-    # Create HTTP transport
-    # TODO: Implement create_http_transport or use a different approach
     pytest.skip("HTTP transport fixture not implemented yet")
-
-    # Start server on a random port
-    from aiohttp import web
-
-    app = web.Application()
-    app.router.add_post("/mcp", transport.handle_request)
-
-    runner = web.AppRunner(app)
-    await runner.setup()
-
-    # Bind to localhost with random port
-    site = web.TCPSite(runner, "localhost", 0)
-    await site.start()
-
-    # Get the actual port
-    port = site._server.sockets[0].getsockname()[1]
-    base_url = f"http://localhost:{port}"
-
-    yield {
-        "url": f"{base_url}/mcp",
-        "base_url": base_url,
-        "server": server,
-        "transport": transport,
-        "runner": runner,
-    }
-
-    # Cleanup
-    await runner.cleanup()
 
 
 @pytest.fixture

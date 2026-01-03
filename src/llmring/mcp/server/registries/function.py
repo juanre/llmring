@@ -1,10 +1,5 @@
 """Function registry for MCP tools. Manages tool registration and discovery."""
 
-"""
-Function registry for MCP Server Engine.
-Provides in-memory storage and management of registered functions.
-"""
-
 from typing import Any, Callable, Dict, List, Optional
 
 

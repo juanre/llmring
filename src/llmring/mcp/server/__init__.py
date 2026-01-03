@@ -1,12 +1,5 @@
 """MCP server package initialization. Exports MCP server implementation and integrations."""
 
-"""
-MCP Server - Core Model Context Protocol implementation.
-
-A modular, extensible implementation of the Model Context Protocol (MCP) that
-provides a clean separation between the protocol implementation and authentication/storage layers.
-"""
-
 from llmring.mcp.server.interfaces import (
     AuthProvider,
     MCPMiddleware,

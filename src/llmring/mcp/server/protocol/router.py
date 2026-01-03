@@ -1,9 +1,5 @@
 """Request router for MCP protocol messages. Routes incoming requests to appropriate handlers."""
 
-"""
-JSON-RPC router for handling MCP requests.
-"""
-
 import logging
 from typing import Any, Callable, Dict, Optional
 

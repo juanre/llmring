@@ -267,7 +267,7 @@ async def _log_response(
         messages = _extract_messages_from_args(args, kwargs)
 
         # Create server client
-        client = ServerClient(server_url=server_url, api_key=api_key)
+        client = ServerClient(base_url=server_url, api_key=api_key)
 
         # Calculate cost if possible (basic estimation)
         if usage and usage.get("prompt_tokens"):
@@ -403,7 +403,7 @@ async def _log_stream_response(
         messages = _extract_messages_from_args(args, kwargs)
 
         # Create server client
-        client = ServerClient(server_url=server_url, api_key=api_key)
+        client = ServerClient(base_url=server_url, api_key=api_key)
 
         # Prepare log data
         if log_conversations and messages:

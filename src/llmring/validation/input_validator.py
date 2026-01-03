@@ -1,18 +1,13 @@
 """Input validation for LLM requests with size limits and format checks. Validates messages, base64 data, file sizes, and registry URLs."""
 
-"""
-Input validation and security hardening utilities.
-
-This module provides validation for user inputs to prevent:
-- Resource exhaustion (OOM) from oversized base64 data
-- Malicious inputs in message content
-- Unsafe registry URLs
-"""
-
 import base64
+import ipaddress
 import logging
-from typing import Any, Dict, List
+from collections.abc import Sequence
+from typing import Any, Dict
 from urllib.parse import urlparse
+
+from llmring.schemas import Message
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +97,7 @@ class InputValidator:
         return decoded
 
     @staticmethod
-    def validate_message_content(messages: List[Dict[str, Any]]) -> None:
+    def validate_message_content(messages: Sequence[Dict[str, Any] | Message]) -> None:
         """
         Validate message content to prevent abuse and resource exhaustion.
 
@@ -112,23 +107,27 @@ class InputValidator:
         Raises:
             ValueError: If message content is invalid or too large
         """
-        if not isinstance(messages, list):
-            raise ValueError("Messages must be a list")
+        if isinstance(messages, (str, bytes)) or not isinstance(messages, Sequence):
+            raise ValueError("Messages must be a sequence of messages")
 
         if len(messages) == 0:
             raise ValueError("Messages list cannot be empty")
 
         if len(messages) > InputValidator.MAX_MESSAGES:
             raise ValueError(
-                f"Too many messages: {len(messages)} " f"(max: {InputValidator.MAX_MESSAGES})"
+                f"Too many messages: {len(messages)} (max: {InputValidator.MAX_MESSAGES})"
             )
 
         for i, message in enumerate(messages):
-            if not isinstance(message, dict):
-                raise ValueError(f"Message {i} must be a dictionary")
+            if isinstance(message, Message):
+                message_dict: Dict[str, Any] = message.model_dump()
+            elif isinstance(message, dict):
+                message_dict = message
+            else:
+                raise ValueError(f"Message {i} must be a dictionary or Message object")
 
             # Validate role
-            role = message.get("role")
+            role = message_dict.get("role")
             if not role:
                 raise ValueError(f"Message {i} missing required 'role' field")
 
@@ -140,7 +139,7 @@ class InputValidator:
                 )
 
             # Validate content
-            content = message.get("content")
+            content = message_dict.get("content")
             if content is None:
                 raise ValueError(f"Message {i} missing 'content' field")
 
@@ -213,55 +212,53 @@ class InputValidator:
             logger.debug("Registry URL uses file:// scheme (local development)")
             return
 
-        # For remote URLs, require HTTPS (unless it's a test/example domain)
-        if parsed.scheme == "http":
-            # Allow HTTP for test/example domains
-            hostname = parsed.hostname or ""
-            test_domains = ["example.com", "example.org", "test.com", "localhost"]
-            is_test_domain = (
-                any(hostname.endswith(td) for td in test_domains) or hostname in test_domains
-            )
-
-            if not is_test_domain:
-                raise ValueError(
-                    f"Registry URL must use HTTPS (got: {parsed.scheme}://). "
-                    f"Use file:// for local registries."
-                )
-            logger.debug(f"Allowing HTTP for test domain: {hostname}")
-        elif parsed.scheme not in ["https"]:
+        if parsed.scheme not in {"http", "https"}:
             raise ValueError(
                 f"Registry URL must use HTTPS (got: {parsed.scheme}://). "
                 f"Use file:// for local registries."
             )
 
-        # Validate hostname (basic check - not localhost/private IPs)
         hostname = parsed.hostname
         if not hostname:
             raise ValueError("Registry URL must have a hostname")
 
-        # Block obvious internal addresses
-        dangerous_hostnames = [
-            "localhost",
-            "127.0.0.1",
-            "0.0.0.0",
-            "[::]",
-            "::1",
-        ]
+        normalized_hostname = hostname.lower()
+        is_localhost_name = normalized_hostname == "localhost"
 
-        if hostname.lower() in dangerous_hostnames:
-            raise ValueError(
-                f"Registry URL cannot point to localhost/internal addresses: {hostname}"
-            )
+        parsed_ip: ipaddress.IPv4Address | ipaddress.IPv6Address | None = None
+        try:
+            parsed_ip = ipaddress.ip_address(hostname)
+        except ValueError:
+            parsed_ip = None
 
-        # Block private IP ranges (basic check)
-        if (
-            hostname.startswith("10.")
-            or hostname.startswith("192.168.")
-            or hostname.startswith("172.")
-        ):
-            logger.warning(
-                f"Registry URL points to private IP range: {hostname}. "
-                f"This may be intentional for internal registries."
+        is_loopback_ip = bool(parsed_ip and parsed_ip.is_loopback)
+        is_unspecified_ip = bool(parsed_ip and parsed_ip.is_unspecified)
+
+        # For remote URLs, require HTTPS unless it's a localhost/loopback URL or a test/example domain.
+        if parsed.scheme == "http":
+            test_domains = ["example.com", "example.org", "test.com", "localhost"]
+            is_test_domain = (
+                any(normalized_hostname.endswith(td) for td in test_domains)
+                or normalized_hostname in test_domains
             )
+            if not (is_localhost_name or is_loopback_ip or is_test_domain):
+                raise ValueError(
+                    f"Registry URL must use HTTPS (got: {parsed.scheme}://). "
+                    f"Use file:// for local registries."
+                )
+            logger.debug(f"Allowing HTTP registry URL for host: {hostname}")
+
+        if is_unspecified_ip:
+            raise ValueError(f"Registry URL cannot point to an unspecified address: {hostname}")
+
+        # Warn about internal networks (allowed; can be intentional for enterprise registries).
+        if parsed_ip:
+            if parsed_ip.is_private or parsed_ip.is_link_local:
+                logger.warning(
+                    f"Registry URL points to a non-public IP address: {hostname}. "
+                    f"This may be intentional for internal registries."
+                )
+            elif parsed_ip.is_loopback:
+                logger.debug(f"Registry URL points to loopback address: {hostname}")
 
         logger.debug(f"Registry URL validated: {url}")

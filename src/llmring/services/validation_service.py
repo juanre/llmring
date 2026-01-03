@@ -1,13 +1,7 @@
 """Validation service for LLM requests and responses. Validates request parameters, model capabilities, and response formats."""
 
-"""
-Validation service for LLMRing.
-
-Validates LLM requests against model capabilities and constraints.
-"""
-
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from llmring.registry import RegistryClient, RegistryModel
 from llmring.schemas import LLMRequest
@@ -133,7 +127,8 @@ class ValidationService:
 
         # If we have way more characters than could possibly fit
         # (assuming worst case 1 char = 1 token), skip expensive tokenization
-        if total_chars > registry_model.max_input_tokens * 2:
+        max_input_tokens = registry_model.max_input_tokens
+        if max_input_tokens is not None and total_chars > max_input_tokens * 2:
             logger.debug(
                 f"Character count ({total_chars}) far exceeds limit, skipping tokenization"
             )
@@ -144,9 +139,9 @@ class ValidationService:
             from llmring.token_counter import count_tokens
 
             # Convert messages to dict format for token counting
-            message_dicts = []
+            message_dicts: list[dict[str, Any]] = []
             for message in request.messages:
-                msg_dict = {"role": message.role}
+                msg_dict: dict[str, Any] = {"role": message.role}
                 if isinstance(message.content, str):
                     msg_dict["content"] = message.content
                 elif isinstance(message.content, list):

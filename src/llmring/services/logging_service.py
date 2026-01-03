@@ -1,11 +1,5 @@
 """Logging service for sending usage data to llmring-server. Handles asynchronous logging of LLM calls with error resilience."""
 
-"""
-Logging service for LLMRing.
-
-Handles all server-side logging of usage metadata and conversations.
-"""
-
 import logging
 from typing import Any, Dict, Optional
 

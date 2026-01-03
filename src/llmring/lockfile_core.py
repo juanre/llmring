@@ -1,18 +1,9 @@
 """Lockfile management for llmring with alias bindings and profile support. Handles reading, writing, and validating llmring.lock configuration files."""
 
-"""
-Lockfile management for LLMRing.
-
-The lockfile (llmring.lock) is the authoritative configuration source for:
-- Alias to model bindings
-- Pinned registry versions per provider
-- Profiles (prod/staging/dev)
-- Optional constraints
-"""
-
 import json
 import os
 from datetime import datetime, timezone
+from importlib.resources import files
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -20,13 +11,6 @@ import toml
 from pydantic import BaseModel, Field
 
 from llmring.constants import LOCKFILE_NAME, PROJECT_ROOT_INDICATORS
-
-try:
-    # Python 3.9+
-    from importlib.resources import files
-except ImportError:
-    # Fallback for older Python
-    from importlib_resources import files
 
 
 class AliasBinding(BaseModel):

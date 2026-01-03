@@ -1,10 +1,5 @@
 """Resource registry for MCP resources. Manages resource registration and access."""
 
-"""
-Resource registry for MCP Server Engine.
-Provides management of resources that can be exposed via MCP.
-"""
-
 import inspect
 from typing import Any, Callable, Dict, List, Optional
 

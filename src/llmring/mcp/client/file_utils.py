@@ -1,19 +1,10 @@
 """File utilities for MCP client configuration. Handles MCP configuration file discovery and loading."""
 
-"""
-File processing utilities for MCP client.
-
-This module consolidates all file handling logic including:
-- Content type detection
-- URL fetching
-- Base64 decoding
-- File processing from various sources
-"""
-
 import base64
+import importlib
 import mimetypes
 import os
-from typing import Dict, Tuple, Union
+from typing import Dict, Literal, Tuple, TypedDict, Union, overload
 from urllib.parse import urlparse
 
 import httpx
@@ -25,13 +16,18 @@ from llmring.exceptions import (
     ValidationError,
 )
 
-# Try to import magic for better content type detection
 try:
-    import magic
-
-    HAS_MAGIC = True
+    _magic = importlib.import_module("magic")
 except ImportError:
-    HAS_MAGIC = False
+    _magic = None
+
+
+class ProcessedFile(TypedDict):
+    """Normalized file content and metadata produced by `process_file_from_source`."""
+
+    content: bytes
+    content_type: str
+    filename: str | None
 
 
 def guess_content_type_from_bytes(data: bytes) -> str:
@@ -45,9 +41,9 @@ def guess_content_type_from_bytes(data: bytes) -> str:
         MIME type string
     """
     # Try magic library if available
-    if HAS_MAGIC:
+    if _magic is not None:
         try:
-            mime = magic.Magic(mime=True)
+            mime = _magic.Magic(mime=True)
             content_type = mime.from_buffer(data)
             return content_type
         except (ImportError, OSError, RuntimeError):
@@ -57,19 +53,18 @@ def guess_content_type_from_bytes(data: bytes) -> str:
             # Unexpected error with magic library - log and fall back
             pass
 
-        # Basic detection based on file signatures
-        if data.startswith(b"\x89PNG"):
-            return "image/png"
-        elif data.startswith(b"\xff\xd8\xff"):
-            return "image/jpeg"
-        elif data.startswith(b"GIF89") or data.startswith(b"GIF87"):
-            return "image/gif"
-        elif data.startswith(b"%PDF"):
-            return "application/pdf"
-        elif data.startswith(b"PK"):
-            return "application/zip"
-        else:
-            return "application/octet-stream"
+    # Basic detection based on file signatures
+    if data.startswith(b"\x89PNG"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"GIF89") or data.startswith(b"GIF87"):
+        return "image/gif"
+    if data.startswith(b"%PDF"):
+        return "application/pdf"
+    if data.startswith(b"PK"):
+        return "application/zip"
+    return "application/octet-stream"
 
 
 def fetch_file_from_url(url: str, timeout: float = 30.0) -> bytes:
@@ -149,9 +144,7 @@ def decode_base64_file(base64_string: str) -> Tuple[bytes, str]:
         raise FileProcessingError(f"Unexpected error decoding base64: {e}")
 
 
-def process_file_from_source(
-    source: Union[str, bytes], source_type: str = "auto"
-) -> Dict[str, Union[str, bytes]]:
+def process_file_from_source(source: Union[str, bytes], source_type: str = "auto") -> ProcessedFile:
     """
     Process a file from various sources.
 
@@ -169,7 +162,7 @@ def process_file_from_source(
         ValueError: If source type cannot be determined or is invalid
         FileNotFoundError: If file path doesn't exist
     """
-    result = {
+    result: ProcessedFile = {
         "content": b"",
         "content_type": "application/octet-stream",
         "filename": None,
@@ -198,20 +191,49 @@ def process_file_from_source(
 
     # Process based on source type
     if source_type == "bytes":
-        result["content"] = source
-        result["content_type"] = guess_content_type_from_bytes(source)
+        if not isinstance(source, (bytes, bytearray)):
+            raise ValidationError(
+                "Expected raw bytes for source_type='bytes'",
+                field="source",
+                value=str(type(source)),
+                expected_type="bytes",
+            )
+        source_bytes = bytes(source)
+        result["content"] = source_bytes
+        result["content_type"] = guess_content_type_from_bytes(source_bytes)
 
     elif source_type == "url":
+        if not isinstance(source, str):
+            raise ValidationError(
+                "Expected URL string for source_type='url'",
+                field="source",
+                value=str(type(source)),
+                expected_type="str",
+            )
         result["content"] = fetch_file_from_url(source)
         result["content_type"] = guess_content_type_from_bytes(result["content"])
         result["filename"] = os.path.basename(urlparse(source).path) or None
 
     elif source_type == "base64":
+        if not isinstance(source, str):
+            raise ValidationError(
+                "Expected base64 string for source_type='base64'",
+                field="source",
+                value=str(type(source)),
+                expected_type="str",
+            )
         content, content_type = decode_base64_file(source)
         result["content"] = content
         result["content_type"] = content_type
 
     elif source_type == "path":
+        if not isinstance(source, str):
+            raise ValidationError(
+                "Expected filesystem path string for source_type='path'",
+                field="source",
+                value=str(type(source)),
+                expected_type="str",
+            )
         if not os.path.exists(source):
             raise FileAccessError(f"File not found: {source}", filename=os.path.basename(source))
 
@@ -234,6 +256,18 @@ def process_file_from_source(
         )
 
     return result
+
+
+@overload
+def create_file_content(
+    file_data: bytes, content_type: str, as_base64: Literal[True] = True
+) -> str: ...
+
+
+@overload
+def create_file_content(
+    file_data: bytes, content_type: str, as_base64: Literal[False]
+) -> Dict[str, str]: ...
 
 
 def create_file_content(

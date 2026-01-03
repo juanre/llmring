@@ -243,9 +243,12 @@ class TestFixedMethods:
         )
 
         # This should not raise an assertion error
-        response_message, tool_calls, tool_results, llm_response = (
-            await chat_engine._process_with_llm(context)
-        )
+        (
+            response_message,
+            tool_calls,
+            tool_results,
+            llm_response,
+        ) = await chat_engine._process_with_llm(context)
 
         # Verify the response was processed correctly
         assert isinstance(response_message, Message)

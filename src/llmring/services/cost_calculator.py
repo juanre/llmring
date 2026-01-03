@@ -1,11 +1,5 @@
 """Cost calculation service for token usage across providers. Calculates costs using registry pricing data and token counts."""
 
-"""
-Cost calculation service for LLMRing.
-
-Calculates costs for LLM API calls based on token usage and registry pricing data.
-"""
-
 import logging
 from typing import Dict, Optional
 
@@ -115,9 +109,9 @@ class CostCalculator:
 
         base_input_rate = registry_model.dollars_per_million_tokens_input or 0.0
         base_output_rate = registry_model.dollars_per_million_tokens_output or 0.0
-        cached_input_rate = registry_model.dollars_per_million_tokens_cached_input
-        cache_write_5m_rate = registry_model.dollars_per_million_tokens_cache_write_5m
-        cache_write_1h_rate = registry_model.dollars_per_million_tokens_cache_write_1h
+        cached_input_rate = registry_model.dollars_per_million_tokens_cached_input or 0.0
+        cache_write_5m_rate = registry_model.dollars_per_million_tokens_cache_write_5m or 0.0
+        cache_write_1h_rate = registry_model.dollars_per_million_tokens_cache_write_1h or 0.0
         cache_read_rate = (
             registry_model.dollars_per_million_tokens_cache_read
             or cached_input_rate
@@ -219,7 +213,7 @@ class CostCalculator:
             "cost_per_million_cache_read": cache_read_rate,
             "cost_per_million_cache_write_5m": cache_write_5m_rate,
             "cost_per_million_cache_write_1h": cache_write_1h_rate,
-            "cost_per_million_output_thinking": reasoning_rate or None,
+            "cost_per_million_output_thinking": reasoning_rate,
         }
 
     @staticmethod

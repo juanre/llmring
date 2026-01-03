@@ -1,13 +1,5 @@
 """Main entry point for lockfile MCP server. Runs lockfile management server as MCP tool provider."""
 
-#!/usr/bin/env python3
-"""
-Entry point for running the lockfile MCP server.
-
-This allows running the server with:
-    python -m llmring.mcp.server.lockfile_server
-"""
-
 import asyncio
 import sys
 

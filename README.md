@@ -142,7 +142,7 @@ async with LLMRing() as service:
 
     accumulated_usage = None
     async for chunk in service.chat_stream(request):
-        print(chunk.content, end="", flush=True)
+        print(chunk.delta, end="", flush=True)
         # Capture final usage stats
         if chunk.usage:
             accumulated_usage = chunk.usage

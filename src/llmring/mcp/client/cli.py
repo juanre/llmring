@@ -1,11 +1,7 @@
-"""Command-line interface for MCP client. Provides interactive MCP server exploration and testing."""
+"""Command-line interface for MCP client.
 
-#!/usr/bin/env python3
-"""
-MCP Client CLI - Database-agnostic command-line interface.
-
-This CLI provides easy access to the Enhanced LLM functionality without
-requiring any database setup. All persistence is handled via HTTP endpoints.
+Provides interactive MCP server exploration and testing without requiring any database setup.
+All persistence is handled via HTTP endpoints.
 """
 
 import argparse
@@ -37,6 +33,7 @@ async def cmd_query(args: argparse.Namespace) -> None:
     Args:
         args: Command-line arguments containing the query and options
     """
+    llm = None
     try:
         # Create Enhanced LLM instance
         llm = create_enhanced_llm(
@@ -102,7 +99,8 @@ async def cmd_query(args: argparse.Namespace) -> None:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
     finally:
-        await llm.close()
+        if llm is not None:
+            await llm.close()
 
 
 async def cmd_chat(args: argparse.Namespace) -> None:
@@ -112,6 +110,7 @@ async def cmd_chat(args: argparse.Namespace) -> None:
     Args:
         args: Command-line arguments for chat configuration
     """
+    llm = None
     try:
         # Create Enhanced LLM instance
         llm = create_enhanced_llm(
@@ -199,7 +198,8 @@ async def cmd_chat(args: argparse.Namespace) -> None:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
     finally:
-        await llm.close()
+        if llm is not None:
+            await llm.close()
 
 
 async def cmd_conversations_list(args: argparse.Namespace) -> None:
@@ -209,6 +209,7 @@ async def cmd_conversations_list(args: argparse.Namespace) -> None:
     Args:
         args: Command-line arguments with limit and filters
     """
+    llm = None
     try:
         # Create Enhanced LLM instance
         llm = create_enhanced_llm(
@@ -245,7 +246,8 @@ async def cmd_conversations_list(args: argparse.Namespace) -> None:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
     finally:
-        await llm.close()
+        if llm is not None:
+            await llm.close()
 
 
 async def cmd_conversations_show(args: argparse.Namespace) -> None:
@@ -255,6 +257,7 @@ async def cmd_conversations_show(args: argparse.Namespace) -> None:
     Args:
         args: Command-line arguments with conversation ID
     """
+    llm = None
     try:
         # Create Enhanced LLM instance
         llm = create_enhanced_llm(
@@ -292,7 +295,8 @@ async def cmd_conversations_show(args: argparse.Namespace) -> None:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
     finally:
-        await llm.close()
+        if llm is not None:
+            await llm.close()
 
 
 async def cmd_conversations_delete(args: argparse.Namespace) -> None:
@@ -319,10 +323,7 @@ async def cmd_conversations_delete(args: argparse.Namespace) -> None:
         )
 
         # Delete conversation
-        await manager.delete_conversation(
-            conversation_id=args.conversation_id,
-            user_id=os.getenv("USER", "cli-user"),
-        )
+        await manager.delete_conversation(conversation_id=args.conversation_id)
 
         console.print(f"[green]Conversation {args.conversation_id} deleted.[/green]")
 
@@ -338,6 +339,7 @@ async def cmd_conversations_export(args: argparse.Namespace) -> None:
     Args:
         args: Command-line arguments with conversation ID and format
     """
+    llm = None
     try:
         # Create Enhanced LLM instance
         llm = create_enhanced_llm(
@@ -388,7 +390,8 @@ async def cmd_conversations_export(args: argparse.Namespace) -> None:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
     finally:
-        await llm.close()
+        if llm is not None:
+            await llm.close()
 
 
 def main() -> None:

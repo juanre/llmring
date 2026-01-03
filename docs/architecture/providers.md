@@ -5,7 +5,7 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Provider Protocol](#provider-protocol)
+2. [Provider Interface](#provider-interface)
 3. [AnthropicProvider](#anthropicprovider)
 4. [OpenAIProvider](#openaiprovider)
 5. [GoogleProvider](#googleprovider)
@@ -17,15 +17,15 @@
 
 ## Overview
 
-The provider layer implements the interface between LLMRing and external LLM APIs. Each provider translates the unified `LLMRequest` format to provider-specific API calls and converts responses back to the unified `LLMResponse` format.
+The provider layer implements the interface between LLMRing and external LLM APIs. User-facing calls use `LLMRequest`, but providers are invoked with the already-parsed fields (`messages`, `model`, and options).
 
 ### Design Principles
 
-1. **Protocol-Based**: Providers implement `BaseLLMProvider` protocol, no inheritance required
+1. **ABC-Based**: Providers inherit from `BaseLLMProvider` for a stable interface
 2. **Provider-Specific**: Each provider handles quirks of its API
 3. **Error Translation**: Provider errors mapped to common exception types
 4. **Streaming Support**: All providers support both streaming and non-streaming
-5. **Type Safety**: Full type annotations, no `Any` in public interfaces
+5. **Type Safety**: Full type annotations; `Any` limited to provider-specific payloads
 
 ### Provider Location
 
@@ -44,56 +44,66 @@ src/llmring/providers/
 
 ---
 
-## Provider Protocol
+## Provider Interface
 
 **File**: `src/llmring/base.py`
 
-All providers implement the `BaseLLMProvider` protocol:
+All providers implement the `BaseLLMProvider` abstract base class:
 
 ```python
-from typing import Protocol, AsyncIterator
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+from typing import Any
 
-class BaseLLMProvider(Protocol):
-    """Protocol that all LLM providers must implement."""
+from llmring.base import TIMEOUT_UNSET, TimeoutSetting
+from llmring.schemas import LLMResponse, Message, StreamChunk
 
-    async def chat(self, request: LLMRequest) -> LLMResponse:
-        """
-        Execute a non-streaming chat request.
+class BaseLLMProvider(ABC):
+    """Interface that all LLM providers must implement."""
 
-        Args:
-            request: The LLM request
+    @abstractmethod
+    async def chat(
+        self,
+        messages: list[Message],
+        model: str,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        reasoning_tokens: int | None = None,
+        response_format: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        json_response: bool | None = None,
+        cache: dict[str, Any] | None = None,
+        extra_params: dict[str, Any] | None = None,
+        files: list[str] | None = None,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
+    ) -> LLMResponse: ...
 
-        Returns:
-            The LLM response
-
-        Raises:
-            ProviderError: If the API call fails
-        """
-        ...
-
-    async def chat_stream(self, request: LLMRequest) -> AsyncIterator[StreamChunk]:
-        """
-        Execute a streaming chat request.
-
-        Args:
-            request: The LLM request
-
-        Yields:
-            Stream chunks
-
-        Raises:
-            ProviderError: If the API call fails
-        """
-        ...
+    @abstractmethod
+    async def chat_stream(
+        self,
+        messages: list[Message],
+        model: str,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        reasoning_tokens: int | None = None,
+        response_format: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        json_response: bool | None = None,
+        cache: dict[str, Any] | None = None,
+        extra_params: dict[str, Any] | None = None,
+        files: list[str] | None = None,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
+    ) -> AsyncIterator[StreamChunk]: ...
 ```
 
-### Why Protocol?
+### Why an abstract base class?
 
-Using a protocol instead of an abstract base class provides:
-- **Duck typing**: No need to inherit from a base class
-- **Flexibility**: Providers can have additional methods
-- **Type checking**: MyPy/PyRight can verify implementation
-- **Testing**: Easy to create test doubles
+Using an abstract base class provides:
+- **Runtime enforcement**: Missing methods fail early
+- **Shared helpers**: Common timeout/resource handling lives in `BaseLLMProvider`
+- **Type checking**: Pyright can verify implementation
 
 ---
 
@@ -670,39 +680,67 @@ async def handle_error(self, error, model):
 
 ## Adding a New Provider
 
-### Step 1: Implement the Protocol
+### Step 1: Implement the Interface
 
 Create a new file in `src/llmring/providers/`:
 
 ```python
 # src/llmring/providers/my_provider_api.py
 
-from typing import AsyncIterator
-from llmring.schemas import LLMRequest, LLMResponse, StreamChunk
-from llmring.providers.error_handler import ProviderErrorHandler
+from collections.abc import AsyncIterator
+from typing import Any
 
-class MyProvider:
+from llmring.base import (
+    TIMEOUT_UNSET,
+    BaseLLMProvider,
+    ProviderConfig,
+    TimeoutSetting,
+    resolve_timeout_config,
+)
+from llmring.providers.error_handler import ProviderErrorHandler
+from llmring.schemas import LLMResponse, Message, StreamChunk
+
+class MyProvider(BaseLLMProvider):
     """Provider for MyLLM API."""
 
-    def __init__(self, api_key: str):
-        self.api_key = api_key
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str | None = None,
+        timeout: TimeoutSetting = TIMEOUT_UNSET,
+    ):
+        config = ProviderConfig(
+            api_key=api_key,
+            base_url=base_url,
+            timeout_seconds=resolve_timeout_config(timeout, None),
+        )
+        super().__init__(config)
         self._error_handler = ProviderErrorHandler(
             provider_name="myprovider",
             circuit_breaker=None  # Optional
         )
 
-    async def chat(self, request: LLMRequest) -> LLMResponse:
+    async def chat(
+        self,
+        messages: list[Message],
+        model: str,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        extra_params: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> LLMResponse:
         """Execute non-streaming chat request."""
         try:
             # 1. Prepare messages
-            messages = self._prepare_messages(request.messages)
+            provider_messages = self._prepare_messages(messages)
 
             # 2. Call API
             response = await self._api_client.chat(
-                model=request.model,
-                messages=messages,
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
+                model=model,
+                messages=provider_messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                extra_params=extra_params,
             )
 
             # 3. Parse response
@@ -714,28 +752,29 @@ class MyProvider:
             )
 
         except Exception as e:
-            await self._error_handler.handle_error(e, request.model)
+            await self._error_handler.handle_error(e, model)
 
-    async def chat_stream(self, request: LLMRequest) -> AsyncIterator[StreamChunk]:
+    async def chat_stream(
+        self, messages: list[Message], model: str, **kwargs: Any
+    ) -> AsyncIterator[StreamChunk]:
         """Execute streaming chat request."""
         try:
             # 1. Prepare messages
-            messages = self._prepare_messages(request.messages)
+            provider_messages = self._prepare_messages(messages)
 
             # 2. Stream API call
             async for chunk in self._api_client.chat_stream(
-                model=request.model,
-                messages=messages,
+                model=model,
+                messages=provider_messages,
             ):
                 # 3. Yield chunks
                 yield StreamChunk(
-                    content=chunk.content,
-                    role="assistant",
+                    delta=chunk.delta,
                     finish_reason=chunk.finish_reason,
                 )
 
         except Exception as e:
-            await self._error_handler.handle_error(e, request.model)
+            await self._error_handler.handle_error(e, model)
 
     def _prepare_messages(self, messages):
         """Convert LLMRing messages to provider format."""
@@ -745,16 +784,12 @@ class MyProvider:
 
 ### Step 2: Register the Provider
 
-Add to `LLMRing` in `src/llmring/service.py`:
+Add to `LLMRing.register_provider()` in `src/llmring/service.py`:
 
 ```python
-PROVIDER_CLASSES = {
-    "anthropic": "llmring.providers.anthropic_api:AnthropicProvider",
-    "openai": "llmring.providers.openai_api:OpenAIProvider",
-    "google": "llmring.providers.google_api:GoogleProvider",
-    "ollama": "llmring.providers.ollama_api:OllamaProvider",
-    "myprovider": "llmring.providers.my_provider_api:MyProvider",  # Add here
-}
+# In LLMRing.register_provider()
+elif provider_type == "myprovider":
+    provider = MyProvider(**kwargs)
 ```
 
 ### Step 3: Add Error Detection

@@ -1,11 +1,5 @@
 """Async conversation manager for MCP-enhanced chat sessions. Manages multi-turn conversations with MCP tool integration."""
 
-"""
-Async Conversation Manager for MCP Client
-
-Manages conversation persistence and retrieval using HTTP API calls to llmring-server.
-"""
-
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -121,9 +115,12 @@ class AsyncConversationManager:
     async def get_conversation(
         self,
         conversation_id: str,
+        *,
+        user_id: str | None = None,
         include_messages: bool = True,
     ) -> Optional[Conversation]:
         """Get a conversation with messages via HTTP API"""
+        _ = user_id
         # Construct a conversation view from messages
         messages = await self.http_client.get_conversation_messages(
             conversation_id=UUID(conversation_id)
@@ -204,8 +201,11 @@ class AsyncConversationManager:
         # Placeholder until server endpoint exists
         return []
 
-    async def delete_conversation(self, conversation_id: str) -> bool:
+    async def delete_conversation(
+        self, conversation_id: str, *, user_id: str | None = None
+    ) -> bool:
         """Delete a conversation via HTTP API"""
+        _ = user_id
         # Placeholder until server endpoint exists
         return False
 

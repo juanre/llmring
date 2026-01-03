@@ -1,11 +1,7 @@
-"""Script to list available models from MCP servers. Queries MCP servers and displays model capabilities."""
+"""Deprecated script for listing models.
 
-#!/usr/bin/env python3
-"""
-MCP Client LLM Models List Script
-
-This script lists all supported LLM models in the database and allows updating the models
-with the latest supported versions.
+This script originally depended on a DB-backed MCP client implementation that no longer exists.
+It is kept as a placeholder for future updates and currently exits with an explanatory message.
 """
 
 import argparse
@@ -13,18 +9,13 @@ import asyncio
 
 from dotenv import load_dotenv
 
-from llmring.providers.anthropic_api import AnthropicProvider
-from llmring.providers.google_api import GoogleProvider
-from llmring.providers.ollama_api import OllamaProvider
-from llmring.providers.openai_api import OpenAIProvider
-
 # Database model removed - now using HTTP-based architecture
 # MCPClientDB functionality has been removed
 # This script is deprecated and needs to be rewritten for the new architecture
 
 
 async def list_models(
-    db_path: str = None, provider_filter: str = None, verbose: bool = False
+    db_path: str | None = None, provider_filter: str | None = None, verbose: bool = False
 ) -> None:
     """List all LLM models in the database."""
     print("Listing LLM models in database...\n")
@@ -41,47 +32,15 @@ async def list_models(
 
 
 def get_all_provider_models() -> dict:
-    """Get all available models from all providers."""
-    models = {}
+    """Legacy helper retained for backward compatibility.
 
-    # Get Anthropic models
-    try:
-        anthropic = AnthropicProvider(api_key="dummy-key")
-        models["anthropic"] = [
-            (name, f"anthropic:{name}") for name in anthropic.get_supported_models()
-        ]
-    except Exception as e:
-        print(f"Error getting Anthropic models: {e}")
-        models["anthropic"] = []
-
-    # Get OpenAI models
-    try:
-        openai = OpenAIProvider(api_key="dummy-key")
-        models["openai"] = [(name, f"openai:{name}") for name in openai.get_supported_models()]
-    except Exception as e:
-        print(f"Error getting OpenAI models: {e}")
-        models["openai"] = []
-
-    # Get Google models
-    try:
-        google = GoogleProvider(api_key="dummy-key")
-        models["google"] = [(name, f"google:{name}") for name in google.get_supported_models()]
-    except Exception as e:
-        print(f"Error getting Google models: {e}")
-        models["google"] = []
-
-    # Get Ollama models
-    try:
-        ollama = OllamaProvider()
-        models["ollama"] = [(name, f"ollama:{name}") for name in ollama.get_supported_models()]
-    except Exception as e:
-        print(f"Error getting Ollama models: {e}")
-        models["ollama"] = []
-
-    return models
+    Returns an empty mapping because provider enumeration used to rely on SDK-specific
+    discovery calls that are no longer part of the provider interface.
+    """
+    return {}
 
 
-async def check_missing_models(db_path: str = None, update: bool = False) -> None:
+async def check_missing_models(db_path: str | None = None, update: bool = False) -> None:
     """Check for missing models in the database."""
     print("Checking for missing models...\n")
 
