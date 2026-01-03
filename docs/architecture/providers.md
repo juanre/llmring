@@ -1,6 +1,6 @@
 # Provider Layer Documentation
 
-**Last Updated**: 2025-09-30
+**Last Updated**: 2026-01-03
 
 ## Table of Contents
 
@@ -53,10 +53,17 @@ All providers implement the `BaseLLMProvider` abstract base class:
 ```python
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import Any
+from pathlib import Path
+from typing import Any, BinaryIO
 
-from llmring.base import TIMEOUT_UNSET, TimeoutSetting
-from llmring.schemas import LLMResponse, Message, StreamChunk
+from llmring.base import TIMEOUT_UNSET, TimeoutSetting, ProviderCapabilities
+from llmring.schemas import (
+    FileMetadata,
+    FileUploadResponse,
+    LLMResponse,
+    Message,
+    StreamChunk,
+)
 
 class BaseLLMProvider(ABC):
     """Interface that all LLM providers must implement."""
@@ -96,7 +103,60 @@ class BaseLLMProvider(ABC):
         files: list[str] | None = None,
         timeout: TimeoutSetting = TIMEOUT_UNSET,
     ) -> AsyncIterator[StreamChunk]: ...
+
+    @abstractmethod
+    async def get_capabilities(self) -> ProviderCapabilities:
+        """Get the capabilities of this provider."""
+        ...
+
+    @abstractmethod
+    async def get_default_model(self) -> str:
+        """Return the provider's default model identifier."""
+        ...
+
+    @abstractmethod
+    async def upload_file(
+        self,
+        file: str | Path | BinaryIO,
+        purpose: str = "analysis",
+        filename: str | None = None,
+        **kwargs: Any,
+    ) -> FileUploadResponse:
+        """Upload a file to the provider and return metadata."""
+        ...
+
+    @abstractmethod
+    async def delete_file(self, file_id: str) -> bool:
+        """Delete a previously-uploaded file by provider file ID."""
+        ...
+
+    @abstractmethod
+    async def list_files(
+        self, purpose: str | None = None, limit: int = 100
+    ) -> list[FileMetadata]:
+        """List uploaded files."""
+        ...
+
+    @abstractmethod
+    async def get_file(self, file_id: str) -> FileMetadata:
+        """Get metadata for a specific file."""
+        ...
 ```
+
+### Required Methods Summary
+
+| Method | Purpose |
+|--------|---------|
+| `chat()` | Non-streaming chat completion |
+| `chat_stream()` | Streaming chat completion |
+| `get_capabilities()` | Report provider features and supported models |
+| `get_default_model()` | Return default model (may consult registry) |
+| `upload_file()` | Upload file to provider's file storage |
+| `delete_file()` | Delete a previously uploaded file |
+| `list_files()` | List uploaded files |
+| `get_file()` | Get metadata for a specific file |
+
+**Note**: Providers that don't support file operations (e.g., Ollama) should raise `ProviderResponseError` with an appropriate message.
 
 ### Why an abstract base class?
 
@@ -688,17 +748,20 @@ Create a new file in `src/llmring/providers/`:
 # src/llmring/providers/my_provider_api.py
 
 from collections.abc import AsyncIterator
-from typing import Any
+from pathlib import Path
+from typing import Any, BinaryIO
 
 from llmring.base import (
     TIMEOUT_UNSET,
     BaseLLMProvider,
+    ProviderCapabilities,
     ProviderConfig,
     TimeoutSetting,
     resolve_timeout_config,
 )
+from llmring.exceptions import ProviderResponseError
 from llmring.providers.error_handler import ProviderErrorHandler
-from llmring.schemas import LLMResponse, Message, StreamChunk
+from llmring.schemas import FileMetadata, FileUploadResponse, LLMResponse, Message, StreamChunk
 
 class MyProvider(BaseLLMProvider):
     """Provider for MyLLM API."""
@@ -775,6 +838,65 @@ class MyProvider(BaseLLMProvider):
 
         except Exception as e:
             await self._error_handler.handle_error(e, model)
+
+    async def get_capabilities(self) -> ProviderCapabilities:
+        """Report provider capabilities."""
+        return ProviderCapabilities(
+            provider_name="myprovider",
+            supported_models=["model-a", "model-b"],
+            supports_streaming=True,
+            supports_tools=True,
+            supports_vision=False,
+            default_model="model-a",
+        )
+
+    async def get_default_model(self) -> str:
+        """Return default model identifier."""
+        return self.config.default_model or "model-a"
+
+    # File operations - implement if your provider supports them,
+    # otherwise raise ProviderResponseError
+
+    async def upload_file(
+        self,
+        file: str | Path | BinaryIO,
+        purpose: str = "analysis",
+        filename: str | None = None,
+        **kwargs: Any,
+    ) -> FileUploadResponse:
+        """Upload a file to the provider."""
+        # If provider doesn't support files:
+        raise ProviderResponseError(
+            "MyProvider does not support file uploads",
+            provider="myprovider",
+            status_code=400,
+        )
+
+    async def delete_file(self, file_id: str) -> bool:
+        """Delete a previously uploaded file."""
+        raise ProviderResponseError(
+            "MyProvider does not support file deletion",
+            provider="myprovider",
+            status_code=400,
+        )
+
+    async def list_files(
+        self, purpose: str | None = None, limit: int = 100
+    ) -> list[FileMetadata]:
+        """List uploaded files."""
+        raise ProviderResponseError(
+            "MyProvider does not support file listing",
+            provider="myprovider",
+            status_code=400,
+        )
+
+    async def get_file(self, file_id: str) -> FileMetadata:
+        """Get file metadata."""
+        raise ProviderResponseError(
+            "MyProvider does not support file retrieval",
+            provider="myprovider",
+            status_code=400,
+        )
 
     def _prepare_messages(self, messages):
         """Convert LLMRing messages to provider format."""
