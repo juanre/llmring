@@ -58,17 +58,27 @@ class RegistryModel(BaseModel):
     )
 
     # API routing hints
-    api_endpoint: Optional[Literal["chat", "responses", "assistants", "generateContent"]] = Field(
-        None, description="Preferred API endpoint (chat/responses/assistants/generateContent)"
+    api_endpoint: Optional[
+        Literal["chat", "responses", "assistants", "generateContent", "embeddings"]
+    ] = Field(
+        None,
+        description="Preferred API endpoint (chat/responses/assistants/generateContent/embeddings)",
     )
 
     @field_validator("api_endpoint")
     @classmethod
     def validate_api_endpoint(cls, v):
         """Validate api_endpoint is one of the allowed values."""
-        if v is not None and v not in ["chat", "responses", "assistants", "generateContent"]:
+        if v is not None and v not in [
+            "chat",
+            "responses",
+            "assistants",
+            "generateContent",
+            "embeddings",
+        ]:
             raise ValueError(
-                f"Invalid api_endpoint: {v}. Must be 'chat', 'responses', 'assistants', or 'generateContent'"
+                "Invalid api_endpoint: "
+                f"{v}. Must be 'chat', 'responses', 'assistants', 'generateContent', or 'embeddings'"
             )
         return v
 

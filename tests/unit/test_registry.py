@@ -172,6 +172,27 @@ class TestRegistryClient:
         assert model.supports_thinking is True
         assert model.dollars_per_million_tokens_output_thinking == 3.0
 
+    async def test_registry_model_accepts_embeddings_endpoint(self):
+        """Ensure RegistryModel accepts embeddings endpoint values."""
+        model = RegistryModel(
+            provider="google",
+            model_name="gemini-embedding-001",
+            display_name="Gemini Embedding",
+            description="Embedding model",
+            max_input_tokens=8192,
+            max_output_tokens=0,
+            supports_vision=False,
+            supports_function_calling=False,
+            supports_json_mode=False,
+            supports_parallel_tool_calls=False,
+            supports_streaming=False,
+            supports_caching=False,
+            api_endpoint="embeddings",
+            is_active=True,
+        )
+
+        assert model.api_endpoint == "embeddings"
+
 
 @pytest.mark.asyncio
 class TestServiceWithRegistry:
