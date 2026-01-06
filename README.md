@@ -1032,13 +1032,13 @@ OLLAMA_BASE_URL=http://localhost:11434  # Default
 ### Self-Hosted Quickstart
 
 ```bash
-# 1. Start the local llmring-server stack (Postgres + server + Redis)
+# 1. Start the local llmring-server stack (production-like, Docker)
 cd ../llmring-server
-docker compose -f docker-compose.dev.yml up --build
+make docker
 
 # 2. Bootstrap local credentials from your application repo
 cd ../llmring
-llmring server init --env-file .env.llmring
+llmring server init --server http://localhost:9100 --env-file .env.llmring
 
 # 3. Load the environment variables in your shell
 source .env.llmring

@@ -448,8 +448,9 @@ Next model lookups will fetch fresh data from the registry
 Bootstrap local environment variables for a running llmring-server instance.
 
 ```bash
-# With docker compose running in ../llmring-server
-llmring server init --env-file .env.llmring
+# If you're running llmring-server via Docker from the llmring-server repo,
+# it maps to http://localhost:9100 by default (override with LLMRING_HTTP_PORT).
+llmring server init --server http://localhost:9100 --env-file .env.llmring
 source .env.llmring
 ```
 
