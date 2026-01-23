@@ -650,6 +650,7 @@ bindings = []
         assert result == 0
         captured = capsys.readouterr()
         assert "✓ llmring: found llmring.lock" in captured.out
+        assert "Aliases:" in captured.out  # Verify aliases are listed
         assert "1/1 packages OK" in captured.out
 
     def test_returns_1_when_package_not_installed(self, tmp_path, capsys):
