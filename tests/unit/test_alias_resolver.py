@@ -432,3 +432,49 @@ class TestNamespacedAliasEdgeCases:
         # Try to resolve non-existent alias
         with pytest.raises(ValueError, match="not found.*Available aliases"):
             resolver.resolve("test_pkg:nonexistent")
+
+    def test_extends_are_not_recursive(self):
+        """Extends should NOT be recursive - libA's [extends] are ignored.
+
+        When resolving `libA:summarizer`:
+        1. Load libA's lockfile
+        2. Look up `summarizer` in libA's lockfile
+        3. Return the model reference
+
+        We do NOT follow libA's own `[extends]` section. This is by design
+        to keep resolution simple and avoid circular dependency issues.
+        """
+        from llmring.lockfile_core import ExtendsConfig
+
+        # Create libB's lockfile with an alias
+        libB_lockfile = Lockfile()
+        libB_lockfile.set_binding("deep_alias", "anthropic:claude-opus-4")
+
+        # Create libA's lockfile that extends libB
+        libA_lockfile = Lockfile()
+        libA_lockfile.extends = ExtendsConfig(packages=["libB"])
+        libA_lockfile.set_binding("summarizer", "openai:gpt-4")
+        # Note: libA does NOT define "deep_alias" - it's only in libB
+
+        # Create consumer lockfile that extends libA
+        consumer_lockfile = Lockfile()
+        consumer_lockfile.extends = ExtendsConfig(packages=["libA"])
+
+        resolver = AliasResolver(
+            lockfile=consumer_lockfile,
+            available_providers={"openai", "anthropic"},
+        )
+
+        # Inject the package lockfiles for testing
+        resolver._extended_lockfiles["libA"] = libA_lockfile
+        resolver._extended_lockfiles["libB"] = libB_lockfile
+
+        # Resolving libA:summarizer should work
+        result = resolver.resolve("libA:summarizer")
+        assert result == "openai:gpt-4"
+
+        # Resolving libA:deep_alias should fail - we don't follow libA's extends
+        # If extends were recursive, this would resolve to "anthropic:claude-opus-4"
+        # The error should show that deep_alias is not found and list available aliases
+        with pytest.raises(ValueError, match=r"libA:deep_alias.*not found.*Available aliases.*summarizer"):
+            resolver.resolve("libA:deep_alias")

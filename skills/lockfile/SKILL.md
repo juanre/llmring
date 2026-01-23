@@ -644,6 +644,7 @@ models = ["anthropic:claude-3-5-haiku-20241022"]
 - You can define your own aliases in `bindings` regardless of extends
 - Unqualified aliases (like `summarizer`) only resolve from your local lockfile
 - Namespaced aliases (like `libA:summarizer`) resolve from extended libraries
+- **Extends are NOT recursive**: If libA's lockfile has its own `[extends]`, those are ignored when resolving `libA:alias`. Resolution only goes one level deep.
 
 When you extend a library, its aliases become available as namespaced aliases.
 
