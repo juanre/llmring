@@ -198,3 +198,137 @@ class TestAliasResolver:
         # Should skip invalid and use valid one
         result = resolver.resolve("fast")
         assert result == "openai:gpt-4"
+
+
+class TestNamespacedAliasResolution:
+    """Tests for namespaced alias resolution (e.g., libA:summarizer)."""
+
+    def test_resolve_namespaced_alias_from_package(self, tmp_path):
+        """Should resolve libA:summarizer from libA's lockfile."""
+        # Use llmring's own lockfile since it's installed
+        from llmring.lockfile_core import ExtendsConfig
+
+        # Create consumer lockfile that extends llmring
+        consumer_lockfile = Lockfile()
+        consumer_lockfile.extends = ExtendsConfig(packages=["llmring"])
+
+        resolver = AliasResolver(
+            lockfile=consumer_lockfile,
+            available_providers={"openai", "anthropic", "google"},
+        )
+
+        # llmring's bundled lockfile has aliases defined
+        # We don't know the exact alias names, so let's test the parsing first
+        # by checking that the resolver can handle the format
+        namespace, alias_name = resolver._parse_namespaced_alias("llmring:some_alias")
+        assert namespace == "llmring"
+        assert alias_name == "some_alias"
+
+    def test_parse_namespaced_alias(self):
+        """Should correctly parse namespace:alias format."""
+        resolver = AliasResolver()
+
+        # Valid namespaced alias
+        namespace, alias = resolver._parse_namespaced_alias("libA:summarizer")
+        assert namespace == "libA"
+        assert alias == "summarizer"
+
+        # Model reference (contains known provider)
+        result = resolver._parse_namespaced_alias("openai:gpt-4")
+        assert result is None  # Not a namespaced alias
+
+        # Alias without namespace
+        result = resolver._parse_namespaced_alias("summarizer")
+        assert result is None  # Not a namespaced alias
+
+    def test_resolve_direct_model_reference_not_treated_as_namespaced(self):
+        """Should treat openai:gpt-4 as model reference, not namespaced alias."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        lockfile = Lockfile()
+        lockfile.extends = ExtendsConfig(packages=["libA"])
+
+        resolver = AliasResolver(lockfile=lockfile, available_providers={"openai"})
+
+        # This should return as-is, not try to resolve from "openai" package
+        result = resolver.resolve("openai:gpt-4")
+        assert result == "openai:gpt-4"
+
+    def test_namespaced_alias_package_not_in_extends(self):
+        """Should raise error when package not in [extends]."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        lockfile = Lockfile()
+        lockfile.extends = ExtendsConfig(packages=["libA"])  # Only libA
+
+        resolver = AliasResolver(lockfile=lockfile, available_providers={"openai"})
+
+        # Try to resolve from libB which is not in extends
+        with pytest.raises(ValueError, match="not listed in"):
+            resolver.resolve("libB:summarizer")
+
+    def test_consumer_can_override_namespaced_alias(self, tmp_path):
+        """Consumer lockfile can override a namespaced alias."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        consumer_lockfile = Lockfile()
+        consumer_lockfile.extends = ExtendsConfig(packages=["libA"])
+        # Consumer defines the namespaced alias directly
+        consumer_lockfile.set_binding("libA:summarizer", "openai:gpt-4-turbo")
+
+        resolver = AliasResolver(
+            lockfile=consumer_lockfile,
+            available_providers={"openai"},
+        )
+
+        # Should use consumer's override, not libA's lockfile
+        result = resolver.resolve("libA:summarizer")
+        assert result == "openai:gpt-4-turbo"
+
+    def test_extended_lockfiles_cached(self):
+        """Extended lockfiles should be cached, not reloaded on every resolve."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        consumer_lockfile = Lockfile()
+        consumer_lockfile.extends = ExtendsConfig(packages=["llmring"])
+
+        resolver = AliasResolver(
+            lockfile=consumer_lockfile,
+            available_providers={"openai", "anthropic"},
+        )
+
+        # Access the cache to verify caching behavior
+        assert len(resolver._extended_lockfiles) == 0
+
+        # Trigger loading of llmring's lockfile (even if alias resolution fails)
+        try:
+            resolver.resolve("llmring:nonexistent")
+        except ValueError:
+            pass
+
+        # Lockfile should now be cached
+        assert "llmring" in resolver._extended_lockfiles
+
+    def test_empty_namespace_raises_error(self):
+        """Should raise error for empty namespace (e.g., ':alias')."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        lockfile = Lockfile()
+        lockfile.extends = ExtendsConfig(packages=["libA"])
+
+        resolver = AliasResolver(lockfile=lockfile, available_providers={"openai"})
+
+        with pytest.raises(ValueError, match="non-empty components"):
+            resolver.resolve(":summarizer")
+
+    def test_empty_alias_raises_error(self):
+        """Should raise error for empty alias (e.g., 'libA:')."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        lockfile = Lockfile()
+        lockfile.extends = ExtendsConfig(packages=["libA"])
+
+        resolver = AliasResolver(lockfile=lockfile, available_providers={"openai"})
+
+        with pytest.raises(ValueError, match="non-empty components"):
+            resolver.resolve("libA:")

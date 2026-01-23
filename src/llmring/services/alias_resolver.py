@@ -2,14 +2,17 @@
 
 import logging
 import os
-from typing import Optional, Set
+from typing import Dict, Optional, Set, Tuple
 
 from cachetools import TTLCache
 
-from llmring.lockfile_core import Lockfile
+from llmring.lockfile_core import Lockfile, discover_package_lockfile
 from llmring.utils import parse_model_string
 
 logger = logging.getLogger(__name__)
+
+# Known LLM providers (used to distinguish provider:model from namespace:alias)
+KNOWN_PROVIDERS = {"openai", "anthropic", "google", "ollama"}
 
 
 class AliasResolver:
@@ -42,13 +45,78 @@ class AliasResolver:
         self.lockfile = lockfile
         self.available_providers = available_providers or set()
         self._cache: TTLCache = TTLCache(maxsize=cache_size, ttl=cache_ttl)
+        # Cache for extended lockfiles (package_name -> Lockfile)
+        self._extended_lockfiles: Dict[str, Optional[Lockfile]] = {}
+
+    def _parse_namespaced_alias(self, alias_or_model: str) -> Optional[Tuple[str, str]]:
+        """
+        Parse a namespaced alias (e.g., 'libA:summarizer').
+
+        Distinguishes between:
+        - Model references: 'openai:gpt-4' (known provider prefix)
+        - Namespaced aliases: 'libA:summarizer' (package prefix from extends)
+
+        Args:
+            alias_or_model: Input string to parse
+
+        Returns:
+            Tuple of (namespace, alias_name) if namespaced alias, None otherwise
+        """
+        if ":" not in alias_or_model:
+            return None
+
+        prefix, suffix = alias_or_model.split(":", 1)
+
+        # If prefix is a known provider, this is a model reference, not a namespaced alias
+        if prefix.lower() in KNOWN_PROVIDERS:
+            return None
+
+        # Check if the prefix is in extends.packages (if we have a lockfile)
+        if self.lockfile and hasattr(self.lockfile, "extends"):
+            if prefix in self.lockfile.extends.packages:
+                return (prefix, suffix)
+
+        # If we don't have lockfile or prefix not in extends, still return as parsed
+        # The caller will handle the "not in extends" error
+        return (prefix, suffix)
+
+    def _load_extended_lockfile(self, package_name: str) -> Optional[Lockfile]:
+        """
+        Load and cache a lockfile from an extended package.
+
+        Args:
+            package_name: Name of the package to load lockfile from
+
+        Returns:
+            The loaded Lockfile, or None if not found
+        """
+        if package_name in self._extended_lockfiles:
+            return self._extended_lockfiles[package_name]
+
+        lockfile_path = discover_package_lockfile(package_name)
+        if lockfile_path:
+            try:
+                lockfile = Lockfile.load(lockfile_path)
+                self._extended_lockfiles[package_name] = lockfile
+                logger.debug(f"Loaded lockfile from package '{package_name}': {lockfile_path}")
+                return lockfile
+            except Exception as e:
+                logger.warning(f"Failed to load lockfile from package '{package_name}': {e}")
+                self._extended_lockfiles[package_name] = None
+                return None
+        else:
+            self._extended_lockfiles[package_name] = None
+            return None
 
     def resolve(self, alias_or_model: str, profile: Optional[str] = None) -> str:
         """
         Resolve an alias to a model string, or return the input if it's already a model.
 
+        Supports namespaced aliases (e.g., 'libA:summarizer') which resolve from
+        extended packages defined in [extends].packages.
+
         Args:
-            alias_or_model: Either an alias or a model string (provider:model)
+            alias_or_model: Either an alias, namespaced alias, or model string (provider:model)
             profile: Optional profile name (defaults to lockfile default or env var)
 
         Returns:
@@ -57,7 +125,18 @@ class AliasResolver:
         Raises:
             ValueError: If alias cannot be resolved or format is invalid
         """
-        # If it looks like a model reference (contains colon), return as-is
+        # Check for namespaced alias first (e.g., libA:summarizer)
+        parsed = self._parse_namespaced_alias(alias_or_model)
+        if parsed:
+            namespace, alias_name = parsed
+            if not namespace or not alias_name:
+                raise ValueError(
+                    f"Invalid namespaced alias: '{alias_or_model}'. "
+                    f"Format must be 'package:alias' with non-empty components."
+                )
+            return self._resolve_namespaced_alias(namespace, alias_name, profile)
+
+        # If it looks like a model reference (contains colon and is a known provider), return as-is
         if ":" in alias_or_model:
             return alias_or_model
 
@@ -81,6 +160,112 @@ class AliasResolver:
             f"Models must be specified as 'provider:model' (e.g., 'openai:gpt-4'). "
             f"If you meant to use an alias, ensure it's defined in your lockfile."
         )
+
+    def _resolve_namespaced_alias(
+        self, namespace: str, alias_name: str, profile: Optional[str] = None
+    ) -> str:
+        """
+        Resolve a namespaced alias (e.g., libA:summarizer).
+
+        Resolution order:
+        1. Check consumer lockfile for exact match (override)
+        2. Load namespace package's lockfile and resolve alias
+
+        Args:
+            namespace: Package name (e.g., 'libA')
+            alias_name: Alias within the package (e.g., 'summarizer')
+            profile: Optional profile name
+
+        Returns:
+            Resolved model string
+
+        Raises:
+            ValueError: If alias cannot be resolved
+        """
+        full_alias = f"{namespace}:{alias_name}"
+        profile_name = profile or os.getenv("LLMRING_PROFILE")
+
+        # Check cache first
+        cache_key = (full_alias, profile_name)
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        # 1. Check if consumer lockfile has an override
+        if self.lockfile:
+            model_refs = self.lockfile.resolve_alias(full_alias, profile_name)
+            if model_refs:
+                resolved = self._resolve_model_refs_to_first_available(model_refs, full_alias)
+                if resolved:
+                    self._cache[cache_key] = resolved
+                    return resolved
+
+        # 2. Check if namespace is in extends.packages
+        if not self.lockfile or not hasattr(self.lockfile, "extends"):
+            raise ValueError(
+                f"Cannot resolve '{full_alias}'. "
+                f"No lockfile configured or lockfile has no [extends] section."
+            )
+
+        if namespace not in self.lockfile.extends.packages:
+            raise ValueError(
+                f"Cannot resolve '{full_alias}'. "
+                f"Package '{namespace}' is not listed in [extends].packages. "
+                f"Add it to your lockfile: [extends] packages = [\"{namespace}\"]"
+            )
+
+        # 3. Load the package's lockfile
+        package_lockfile = self._load_extended_lockfile(namespace)
+        if not package_lockfile:
+            raise ValueError(
+                f"Cannot resolve '{full_alias}'. "
+                f"Package '{namespace}' is in [extends] but has no llmring.lock. "
+                f"Ensure the package includes a llmring.lock file."
+            )
+
+        # 4. Resolve from package lockfile
+        model_refs = package_lockfile.resolve_alias(alias_name, profile_name)
+        if not model_refs:
+            available = package_lockfile.list_aliases(profile_name)
+            available_str = ", ".join(available) if available else "(none)"
+            raise ValueError(
+                f"Alias '{full_alias}' not found. "
+                f"Package '{namespace}' is in [extends] but its lockfile has no '{alias_name}' alias. "
+                f"Available aliases in {namespace}: {available_str}"
+            )
+
+        resolved = self._resolve_model_refs_to_first_available(model_refs, full_alias)
+        if resolved:
+            self._cache[cache_key] = resolved
+            return resolved
+
+        raise ValueError(
+            f"No available providers for alias '{full_alias}'. "
+            f"Please configure the required API keys."
+        )
+
+    def _resolve_model_refs_to_first_available(
+        self, model_refs: list, alias: str
+    ) -> Optional[str]:
+        """
+        Resolve a list of model refs to the first available one.
+
+        Args:
+            model_refs: List of model references (provider:model)
+            alias: Original alias (for logging)
+
+        Returns:
+            First available model reference, or None if none available
+        """
+        for model_ref in model_refs:
+            try:
+                provider_type, _ = self._parse_model_string(model_ref)
+                if provider_type in self.available_providers:
+                    logger.debug(f"Resolved alias '{alias}' to '{model_ref}'")
+                    return model_ref
+            except ValueError:
+                logger.warning(f"Invalid model reference in alias '{alias}': {model_ref}")
+                continue
+        return None
 
     def resolve_candidates(self, alias_or_model: str, profile: Optional[str] = None) -> list[str]:
         """
