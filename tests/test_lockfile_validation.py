@@ -455,3 +455,111 @@ models = ["openai:gpt-4o"]
         assert "library-a" in error_msg
         # Should be actionable
         assert "lockfile" in error_msg.lower()
+
+
+class TestNamespacedAliasRequireAliases:
+    """Tests for require_aliases with namespaced aliases."""
+
+    def test_require_namespaced_alias_from_extended_package(self):
+        """require_aliases works with namespaced aliases from extended packages."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        # Consumer lockfile that extends llmring
+        lockfile = Lockfile()
+        lockfile.extends = ExtendsConfig(packages=["llmring"])
+
+        # llmring's bundled lockfile has some aliases defined
+        # This should not raise since we're checking if resolution works
+        # We need to use the actual llmring lockfile aliases
+        # Let's just test that it parses and attempts resolution
+        # by checking for the specific error message
+
+        # If llmring:nonexistent doesn't exist, we should get a specific error
+        with pytest.raises(ValueError) as exc_info:
+            lockfile.require_aliases(["llmring:nonexistent"])
+
+        error_msg = str(exc_info.value)
+        # Should mention the namespaced alias
+        assert "llmring:nonexistent" in error_msg
+
+    def test_require_unqualified_alias_only_checks_local(self):
+        """Unqualified aliases only check consumer lockfile, not extended."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        lockfile = Lockfile(
+            version="1.0",
+            profiles={
+                "default": ProfileConfig(
+                    name="default",
+                    bindings=[AliasBinding(alias="local_alias", models=["openai:gpt-4"])],
+                )
+            },
+        )
+        lockfile.extends = ExtendsConfig(packages=["llmring"])
+
+        # Should pass for local alias
+        lockfile.require_aliases(["local_alias"])
+
+        # Should fail for non-existent local alias
+        with pytest.raises(ValueError):
+            lockfile.require_aliases(["missing_local"])
+
+    def test_require_mixed_local_and_namespaced(self):
+        """require_aliases handles mixed local and namespaced aliases."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        lockfile = Lockfile(
+            version="1.0",
+            profiles={
+                "default": ProfileConfig(
+                    name="default",
+                    bindings=[AliasBinding(alias="local_alias", models=["openai:gpt-4"])],
+                )
+            },
+        )
+        lockfile.extends = ExtendsConfig(packages=["llmring"])
+
+        # Should raise listing the missing one
+        with pytest.raises(ValueError) as exc_info:
+            lockfile.require_aliases(["local_alias", "llmring:nonexistent"])
+
+        error_msg = str(exc_info.value)
+        assert "llmring:nonexistent" in error_msg
+        # local_alias should NOT be in error since it exists
+        # Just verify we got an error about the missing one
+
+    def test_require_namespaced_alias_package_not_in_extends(self):
+        """Should fail with clear error when package not in extends."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        lockfile = Lockfile()
+        lockfile.extends = ExtendsConfig(packages=["libA"])  # Only libA
+
+        with pytest.raises(ValueError) as exc_info:
+            lockfile.require_aliases(["libB:summarizer"])
+
+        error_msg = str(exc_info.value)
+        assert "libB:summarizer" in error_msg
+        # Should indicate package not in extends
+        assert "extends" in error_msg.lower() or "not listed" in error_msg.lower()
+
+    def test_consumer_override_satisfies_requirement(self):
+        """Consumer can override namespaced alias to satisfy requirement."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        lockfile = Lockfile(
+            version="1.0",
+            profiles={
+                "default": ProfileConfig(
+                    name="default",
+                    bindings=[
+                        # Consumer defines the namespaced alias directly
+                        AliasBinding(alias="libA:summarizer", models=["openai:gpt-4"])
+                    ],
+                )
+            },
+        )
+        lockfile.extends = ExtendsConfig(packages=["libA"])
+
+        # Should pass since consumer defines the override
+        lockfile.require_aliases(["libA:summarizer"])

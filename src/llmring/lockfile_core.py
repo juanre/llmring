@@ -480,6 +480,9 @@ class Lockfile(BaseModel):
     ) -> None:
         """Validate that all required aliases exist.
 
+        Supports both unqualified aliases (checked in this lockfile) and
+        namespaced aliases like 'libA:summarizer' (checked in extended packages).
+
         Args:
             required: List of alias names that must be defined
             profile: Optional profile name (defaults to default_profile)
@@ -490,16 +493,27 @@ class Lockfile(BaseModel):
 
         Example:
             lockfile.require_aliases(
-                ["summarizer", "analyzer"],
+                ["summarizer", "libA:analyzer"],
                 context="my-library"
             )
         """
         if not required:
             return  # Empty list is valid (no requirements)
 
-        missing = [alias for alias in required if not self.has_alias(alias, profile)]
+        missing_details = []
 
-        if missing:
+        for alias in required:
+            if ":" in alias and not self._is_model_reference(alias):
+                # Namespaced alias (e.g., libA:summarizer)
+                result = self._check_namespaced_alias(alias, profile)
+                if result:
+                    missing_details.append(result)
+            else:
+                # Unqualified alias - check local lockfile
+                if not self.has_alias(alias, profile):
+                    missing_details.append(f"  - {alias}: not found in consumer lockfile")
+
+        if missing_details:
             # Build helpful error message
             context_msg = f" for {context}" if context else ""
             profile_msg = f" (profile: {profile or self.default_profile})"
@@ -509,10 +523,68 @@ class Lockfile(BaseModel):
             if self.file_path:
                 path_msg = f"\nLockfile path: {self.file_path}"
 
+            details = "\n".join(missing_details)
             raise ValueError(
-                f"Lockfile missing required aliases{context_msg}{profile_msg}: {', '.join(missing)}.{path_msg}\n"
-                f"Please ensure your lockfile defines these aliases."
+                f"Missing required aliases{context_msg}{profile_msg}:\n{details}{path_msg}"
             )
+
+    def _is_model_reference(self, value: str) -> bool:
+        """Check if value looks like a provider:model reference."""
+        if ":" not in value:
+            return False
+        prefix = value.split(":", 1)[0].lower()
+        # Known providers
+        return prefix in {"openai", "anthropic", "google", "ollama"}
+
+    def _check_namespaced_alias(self, alias: str, profile: Optional[str]) -> Optional[str]:
+        """Check if a namespaced alias exists and return error message if not.
+
+        Args:
+            alias: Namespaced alias like 'libA:summarizer'
+            profile: Optional profile name
+
+        Returns:
+            Error message string if alias not found, None if found
+        """
+        namespace, alias_name = alias.split(":", 1)
+
+        # Validate non-empty components
+        if not namespace or not alias_name:
+            return f"  - {alias}: invalid format. Expected 'namespace:alias' with non-empty components"
+
+        # First check if consumer lockfile has an override
+        if self.has_alias(alias, profile):
+            return None  # Found as override
+
+        # Check if namespace is in extends.packages
+        if not hasattr(self, "extends") or namespace not in self.extends.packages:
+            return (
+                f"  - {alias}: package '{namespace}' is not listed in [extends].packages. "
+                f"Add to lockfile: [extends] packages = [\"{namespace}\"]"
+            )
+
+        # Try to load the package's lockfile
+        package_lockfile_path = discover_package_lockfile(namespace)
+        if not package_lockfile_path:
+            return (
+                f"  - {alias}: package '{namespace}' is in [extends] but has no llmring.lock"
+            )
+
+        # Load and check
+        try:
+            package_lockfile = Lockfile.load(package_lockfile_path)
+            if package_lockfile.has_alias(alias_name, profile):
+                return None  # Found in package
+
+            # Not found - list available aliases
+            available = package_lockfile.list_aliases(profile)
+            available_str = ", ".join(available) if available else "(none)"
+            return (
+                f"  - {alias}: not found in {namespace}'s lockfile. "
+                f"Available in {namespace}: {available_str}"
+            )
+        except Exception as e:
+            return f"  - {alias}: failed to load {namespace}'s lockfile: {e}"
 
     def save(self, path: Optional[Path] = None):
         """Save the lockfile to disk."""
