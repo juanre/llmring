@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from importlib.resources import files
 from pathlib import Path
@@ -11,6 +12,26 @@ import toml
 from pydantic import BaseModel, Field
 
 from llmring.constants import LOCKFILE_NAME, PROJECT_ROOT_INDICATORS
+
+# Pattern for valid Python package names (PEP 508)
+# Uses \Z instead of $ to prevent trailing newlines, and re.IGNORECASE per spec
+PACKAGE_NAME_PATTERN = re.compile(r"^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])\Z", re.IGNORECASE)
+
+
+class ExtendsConfig(BaseModel):
+    """Configuration for extending other packages' lockfiles."""
+
+    packages: List[str] = Field(default_factory=list, description="Package names to extend from")
+
+    def model_post_init(self, __context) -> None:
+        """Validate package names after initialization."""
+        for package in self.packages:
+            if not PACKAGE_NAME_PATTERN.match(package):
+                raise ValueError(
+                    f"Invalid package name: '{package}'. "
+                    "Package names must follow PEP 508: start and end with alphanumeric, "
+                    "contain only alphanumerics, dots, hyphens, and underscores."
+                )
 
 
 class AliasBinding(BaseModel):
@@ -131,6 +152,11 @@ class Lockfile(BaseModel):
     )
 
     default_profile: str = Field(default="default", description="Default profile name")
+
+    # Extends configuration for lockfile composability
+    extends: ExtendsConfig = Field(
+        default_factory=ExtendsConfig, description="Configuration for extending other lockfiles"
+    )
 
     # Metadata field for additional information
     metadata: Optional[Dict[str, Any]] = Field(
@@ -516,6 +542,12 @@ class Lockfile(BaseModel):
         # Ensure backward compatibility - add empty metadata if not present
         if "metadata" not in data:
             data["metadata"] = {}
+
+        # Convert extends dict to ExtendsConfig object
+        if "extends" in data and isinstance(data["extends"], dict):
+            data["extends"] = ExtendsConfig(**data["extends"])
+        elif "extends" not in data:
+            data["extends"] = ExtendsConfig()
 
         lockfile = cls(**data)
         lockfile.file_path = path

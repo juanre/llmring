@@ -360,3 +360,162 @@ class TestAliasBinding:
         binding = AliasBinding.from_model_refs("alias", "provider:model:version")
         assert binding.provider == "provider"
         assert binding.model == "model:version"  # Everything after first colon
+
+
+class TestExtendsSection:
+    """Test [extends] section parsing for lockfile composability."""
+
+    def test_extends_section_parsed(self, tmp_path):
+        """Test that [extends] section with packages is parsed correctly."""
+        lockfile_content = """
+version = "1.0"
+default_profile = "default"
+
+[extends]
+packages = ["libA", "libB"]
+
+[profiles.default]
+name = "default"
+bindings = []
+"""
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile_path.write_text(lockfile_content)
+
+        lockfile = Lockfile.load(lockfile_path)
+
+        assert lockfile.extends is not None
+        assert lockfile.extends.packages == ["libA", "libB"]
+
+    def test_missing_extends_section_defaults_to_empty(self, tmp_path):
+        """Test that missing [extends] section defaults to empty list."""
+        lockfile_content = """
+version = "1.0"
+default_profile = "default"
+
+[profiles.default]
+name = "default"
+bindings = []
+"""
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile_path.write_text(lockfile_content)
+
+        lockfile = Lockfile.load(lockfile_path)
+
+        # Should have an extends config with empty packages
+        assert lockfile.extends is not None
+        assert lockfile.extends.packages == []
+
+    def test_empty_extends_packages(self, tmp_path):
+        """Test that explicit empty packages list is valid."""
+        lockfile_content = """
+version = "1.0"
+default_profile = "default"
+
+[extends]
+packages = []
+
+[profiles.default]
+name = "default"
+bindings = []
+"""
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile_path.write_text(lockfile_content)
+
+        lockfile = Lockfile.load(lockfile_path)
+
+        assert lockfile.extends.packages == []
+
+    def test_invalid_package_name_raises_error(self, tmp_path):
+        """Test that invalid package names raise ValidationError."""
+        lockfile_content = """
+version = "1.0"
+default_profile = "default"
+
+[extends]
+packages = ["valid-package", "invalid package with spaces"]
+
+[profiles.default]
+name = "default"
+bindings = []
+"""
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile_path.write_text(lockfile_content)
+
+        with pytest.raises(ValueError, match="Invalid package name"):
+            Lockfile.load(lockfile_path)
+
+    def test_save_preserves_extends_section(self, tmp_path):
+        """Test that save() preserves extends section."""
+        lockfile = Lockfile.create_default()
+        # Manually set extends for this test
+        from llmring.lockfile_core import ExtendsConfig
+        lockfile.extends = ExtendsConfig(packages=["packageA", "packageB"])
+
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile.save(lockfile_path)
+
+        # Reload and verify
+        loaded = Lockfile.load(lockfile_path)
+        assert loaded.extends.packages == ["packageA", "packageB"]
+
+    def test_extends_config_model(self):
+        """Test ExtendsConfig model directly."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        # Valid config
+        config = ExtendsConfig(packages=["lib-a", "lib_b", "lib123"])
+        assert config.packages == ["lib-a", "lib_b", "lib123"]
+
+        # Empty is valid
+        config_empty = ExtendsConfig(packages=[])
+        assert config_empty.packages == []
+
+        # Default
+        config_default = ExtendsConfig()
+        assert config_default.packages == []
+
+    def test_empty_string_package_name_raises_error(self, tmp_path):
+        """Test that empty string package names are rejected."""
+        lockfile_content = """
+version = "1.0"
+default_profile = "default"
+
+[extends]
+packages = [""]
+
+[profiles.default]
+name = "default"
+bindings = []
+"""
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile_path.write_text(lockfile_content)
+
+        with pytest.raises(ValueError, match="Invalid package name"):
+            Lockfile.load(lockfile_path)
+
+    def test_special_chars_only_package_name_raises_error(self, tmp_path):
+        """Test that package names with only special chars are rejected."""
+        lockfile_content = """
+version = "1.0"
+default_profile = "default"
+
+[extends]
+packages = ["---"]
+
+[profiles.default]
+name = "default"
+bindings = []
+"""
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile_path.write_text(lockfile_content)
+
+        with pytest.raises(ValueError, match="Invalid package name"):
+            Lockfile.load(lockfile_path)
+
+    def test_package_name_with_trailing_newline_raises_error(self, tmp_path):
+        """Test that package names with trailing newlines are rejected."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        # Direct test of the validation (simulating a crafted name)
+        with pytest.raises(ValueError, match="Invalid package name"):
+            ExtendsConfig(packages=["valid-name\n"])
