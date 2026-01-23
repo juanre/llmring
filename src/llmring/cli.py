@@ -318,6 +318,107 @@ async def cmd_lock_bump_registry(args):
     return 0
 
 
+async def cmd_lock_check(args):
+    """Validate [extends] configuration and list available aliases."""
+    from llmring.lockfile_core import discover_package_lockfile
+
+    # Determine lockfile path
+    if args.lockfile:
+        lockfile_path = Path(args.lockfile)
+    else:
+        package_dir = Lockfile.find_package_directory()
+        if package_dir:
+            lockfile_path = package_dir / LOCKFILE_NAME
+        else:
+            lockfile_path = Path(LOCKFILE_NAME)
+
+    if not lockfile_path.exists():
+        print(format_error(f"No llmring.lock found at {lockfile_path}"))
+        print("Run 'llmring lock init' to create one.")
+        return 2
+
+    try:
+        lockfile = Lockfile.load(lockfile_path)
+    except Exception as e:
+        print(format_error(f"Failed to parse lockfile: {e}"))
+        return 2
+
+    print(f"Checking lockfile: {lockfile_path}\n")
+
+    # Check [extends] section
+    has_errors = False
+    extended_aliases: dict[str, list[str]] = {}  # alias -> [packages defining it]
+    total_extended_aliases = 0
+    packages_ok = 0
+    packages_total = len(lockfile.extends.packages)
+
+    if packages_total > 0:
+        print("[extends]")
+        for package_name in lockfile.extends.packages:
+            pkg_lockfile_path = discover_package_lockfile(package_name)
+
+            if not pkg_lockfile_path:
+                print(f"  ✗ {package_name}: package not installed or has no llmring.lock")
+                has_errors = True
+                continue
+
+            try:
+                pkg_lockfile = Lockfile.load(pkg_lockfile_path)
+                aliases = pkg_lockfile.list_aliases()
+
+                for alias in aliases:
+                    if alias not in extended_aliases:
+                        extended_aliases[alias] = []
+                    extended_aliases[alias].append(package_name)
+
+                total_extended_aliases += len(aliases)
+                packages_ok += 1
+
+                aliases_str = ", ".join(aliases) if aliases else "(none)"
+                print(f"  ✓ {package_name}: found llmring.lock")
+                print(f"    Aliases: {aliases_str}")
+
+            except Exception as e:
+                print(f"  ✗ {package_name}: failed to load lockfile - {e}")
+                has_errors = True
+    else:
+        print("[extends]")
+        print("  (no packages configured)")
+
+    # Check for conflicts
+    conflicts = {alias: pkgs for alias, pkgs in extended_aliases.items() if len(pkgs) > 1}
+    if conflicts:
+        print("\nWarnings:")
+        for alias, pkgs in conflicts.items():
+            if len(pkgs) == 2:
+                print(f"  ⚠ '{alias}' defined in both {pkgs[0]} and {pkgs[1]}")
+            else:
+                pkgs_str = ", ".join(pkgs)
+                print(f"  ⚠ '{alias}' defined in multiple packages: {pkgs_str}")
+            disambiguation = " or ".join(f"{pkg}:{alias}" for pkg in pkgs)
+            print(f"    Use {disambiguation} to disambiguate")
+
+    # List local aliases
+    local_aliases = lockfile.list_aliases()
+    if local_aliases:
+        print("\nLocal aliases:")
+        for alias in local_aliases:
+            binding = lockfile.get_binding(alias)
+            if binding:
+                model_ref = binding.model_ref
+                print(f"  {alias} → {model_ref}")
+    else:
+        print("\nLocal aliases: (none)")
+
+    # Summary
+    print(
+        f"\nSummary: {packages_ok}/{packages_total} packages OK, "
+        f"{total_extended_aliases} extended aliases, {len(local_aliases)} local aliases"
+    )
+
+    return 1 if has_errors else 0
+
+
 def format_models_for_prompt(models_data: dict, providers_data: dict) -> str:
     """
     Format models from registry into a concise summary for system prompt.
@@ -1757,6 +1858,14 @@ def main():
     # lock bump-registry
     lock_subparsers.add_parser("bump-registry", help="Update registry versions")
 
+    # lock check - validate extends configuration
+    check_parser = lock_subparsers.add_parser(
+        "check", help="Validate [extends] packages and list available aliases"
+    )
+    check_parser.add_argument(
+        "--lockfile", "-f", help="Path to lockfile (default: auto-detect)"
+    )
+
     # lock chat - conversational lockfile management
     chat_parser = lock_subparsers.add_parser(
         "chat", help="Conversational lockfile management with natural language"
@@ -2077,6 +2186,7 @@ def main():
             "validate": cmd_lock_validate,
             "bump-registry": cmd_lock_bump_registry,
             "chat": cmd_lock_chat,
+            "check": cmd_lock_check,
         }
 
         if args.lock_command in lock_commands:

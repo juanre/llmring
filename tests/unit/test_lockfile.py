@@ -557,3 +557,158 @@ class TestPackageLockfileDiscovery:
         assert discover_package_lockfile("") is None
         assert discover_package_lockfile("not a valid name") is None
         assert discover_package_lockfile("..") is None
+
+
+class TestCmdLockCheck:
+    """Test cmd_lock_check CLI command."""
+
+    def test_returns_2_when_lockfile_not_found(self, tmp_path, capsys):
+        """Test that cmd_lock_check returns 2 when no lockfile exists."""
+        import asyncio
+        from argparse import Namespace
+        from llmring.cli import cmd_lock_check
+
+        # Point to a directory with no lockfile
+        args = Namespace(lockfile=str(tmp_path / "nonexistent.lock"))
+
+        result = asyncio.run(cmd_lock_check(args))
+
+        assert result == 2
+        captured = capsys.readouterr()
+        assert "No llmring.lock found" in captured.out
+
+    def test_returns_2_when_lockfile_parse_error(self, tmp_path, capsys):
+        """Test that cmd_lock_check returns 2 when lockfile has parse error."""
+        import asyncio
+        from argparse import Namespace
+        from llmring.cli import cmd_lock_check
+
+        # Create invalid lockfile
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile_path.write_text("invalid toml content [[[")
+
+        args = Namespace(lockfile=str(lockfile_path))
+
+        result = asyncio.run(cmd_lock_check(args))
+
+        assert result == 2
+        captured = capsys.readouterr()
+        assert "Failed to parse lockfile" in captured.out
+
+    def test_returns_0_with_no_extends(self, tmp_path, capsys):
+        """Test that cmd_lock_check returns 0 when no extends configured."""
+        import asyncio
+        from argparse import Namespace
+        from llmring.cli import cmd_lock_check
+
+        # Create minimal valid lockfile with no extends
+        lockfile_content = """
+version = "1.0"
+default_profile = "default"
+
+[profiles.default]
+name = "default"
+bindings = []
+"""
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile_path.write_text(lockfile_content)
+
+        args = Namespace(lockfile=str(lockfile_path))
+
+        result = asyncio.run(cmd_lock_check(args))
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "(no packages configured)" in captured.out
+        assert "0/0 packages OK" in captured.out
+
+    def test_returns_0_with_valid_extends(self, tmp_path, capsys):
+        """Test that cmd_lock_check returns 0 when extends packages are valid."""
+        import asyncio
+        from argparse import Namespace
+        from llmring.cli import cmd_lock_check
+
+        # Create lockfile that extends llmring (which has a bundled lockfile)
+        lockfile_content = """
+version = "1.0"
+default_profile = "default"
+
+[extends]
+packages = ["llmring"]
+
+[profiles.default]
+name = "default"
+bindings = []
+"""
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile_path.write_text(lockfile_content)
+
+        args = Namespace(lockfile=str(lockfile_path))
+
+        result = asyncio.run(cmd_lock_check(args))
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "✓ llmring: found llmring.lock" in captured.out
+        assert "1/1 packages OK" in captured.out
+
+    def test_returns_1_when_package_not_installed(self, tmp_path, capsys):
+        """Test that cmd_lock_check returns 1 when extended package is missing."""
+        import asyncio
+        from argparse import Namespace
+        from llmring.cli import cmd_lock_check
+
+        # Create lockfile that extends nonexistent package
+        lockfile_content = """
+version = "1.0"
+default_profile = "default"
+
+[extends]
+packages = ["nonexistent_package_xyz123"]
+
+[profiles.default]
+name = "default"
+bindings = []
+"""
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile_path.write_text(lockfile_content)
+
+        args = Namespace(lockfile=str(lockfile_path))
+
+        result = asyncio.run(cmd_lock_check(args))
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "✗ nonexistent_package_xyz123" in captured.out
+        assert "0/1 packages OK" in captured.out
+
+    def test_shows_local_aliases(self, tmp_path, capsys):
+        """Test that cmd_lock_check shows local aliases."""
+        import asyncio
+        from argparse import Namespace
+        from llmring.cli import cmd_lock_check
+
+        lockfile_content = """
+version = "1.0"
+default_profile = "default"
+
+[profiles.default]
+name = "default"
+bindings = [
+    { alias = "fast", models = ["openai:gpt-4o-mini"] },
+    { alias = "smart", models = ["anthropic:claude-3-5-sonnet-20241022"] }
+]
+"""
+        lockfile_path = tmp_path / "llmring.lock"
+        lockfile_path.write_text(lockfile_content)
+
+        args = Namespace(lockfile=str(lockfile_path))
+
+        result = asyncio.run(cmd_lock_check(args))
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Local aliases:" in captured.out
+        assert "fast → openai:gpt-4o-mini" in captured.out
+        assert "smart → anthropic:claude-3-5-sonnet-20241022" in captured.out
+        assert "2 local aliases" in captured.out
