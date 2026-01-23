@@ -51,8 +51,8 @@ class TestLoggingRegressions:
             origin="test-conversation-regression",
         )
         # Inject the test server client
-        session.server_client._client = llmring_server_client
-        session.logging_service._server_client._client = llmring_server_client
+        session.server_client.client = llmring_server_client
+        session.logging_service.server_client.client = llmring_server_client
 
         # Make a real chat request
         request = LLMRequest(
@@ -76,7 +76,7 @@ class TestLoggingRegressions:
 
         # Check conversation logs
         conv_response = await llmring_server_client.get(
-            "/api/v1/conversations",
+            "/api/v1/conversations/",
             params={"limit": 10},
             headers=project_headers,
         )
@@ -100,7 +100,7 @@ class TestLoggingRegressions:
             api_key="proj_test",
         )
         # Inject the test server client
-        ring.server_client._client = llmring_server_client
+        ring.server_client.client = llmring_server_client
 
         # Make a real chat request
         request = LLMRequest(

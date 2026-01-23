@@ -33,7 +33,7 @@ async def test_llmring_with_server_logs_usage(llmring_server_client, project_hea
         api_key="proj_test",
     )
     # Inject the test server client directly
-    ring.server_client._client = llmring_server_client
+    ring.server_client.client = llmring_server_client
 
     # Make a real chat request
     request = LLMRequest(
@@ -118,7 +118,7 @@ async def test_usage_logging_with_alias(llmring_server_client, project_headers, 
         lockfile_path=str(lockfile_path),
     )
     # Inject the test server client directly
-    ring.server_client._client = llmring_server_client
+    ring.server_client.client = llmring_server_client
 
     # Make a chat request using the alias
     request = LLMRequest(
@@ -160,7 +160,7 @@ async def test_streaming_usage_logging(llmring_server_client, project_headers):
         api_key="proj_test",
     )
     # Inject the test server client directly
-    ring.server_client._client = llmring_server_client
+    ring.server_client.client = llmring_server_client
 
     # Make a streaming request
     request = LLMRequest(
@@ -176,6 +176,10 @@ async def test_streaming_usage_logging(llmring_server_client, project_headers):
 
     # Verify we got chunks
     assert len(chunks) > 0
+
+    # Wait for async logging to complete
+    import asyncio
+    await asyncio.sleep(0.3)
 
     # Query the server to verify the log was stored
     logs_response = await llmring_server_client.get(
@@ -208,7 +212,7 @@ async def test_anthropic_usage_logging(llmring_server_client, project_headers):
         api_key="proj_test",
     )
     # Inject the test server client directly
-    ring.server_client._client = llmring_server_client
+    ring.server_client.client = llmring_server_client
 
     # Make a real chat request
     request = LLMRequest(
