@@ -1,7 +1,6 @@
 """Test configuration and fixtures for llmring"""
 
 import os
-from importlib.util import find_spec
 from typing import AsyncGenerator
 
 import pytest
@@ -26,7 +25,13 @@ pytest_plugins = ["pgdbm.fixtures.conftest"]
 # llmring-server test fixtures
 # -----------------------------------------------------------------------------
 
-LLMRING_SERVER_AVAILABLE = find_spec("llmring_server") is not None
+# Check if llmring-server is properly installed (not just namespace package)
+try:
+    from llmring_server.main import app as _server_app_check  # noqa: F401
+
+    LLMRING_SERVER_AVAILABLE = True
+except ImportError:
+    LLMRING_SERVER_AVAILABLE = False
 
 
 @pytest_asyncio.fixture
