@@ -203,6 +203,8 @@ class TestUsageStatistics:
         mock_stats = Mock()
         mock_stats.total_calls = 50
         mock_stats.total_tokens = 10000
+        mock_stats.total_input_tokens = 7000
+        mock_stats.total_output_tokens = 3000
         mock_stats.total_cost = 0.15
         mock_stats.avg_cost_per_call = 0.003
         mock_stats.most_used_model = "anthropic:claude-3-sonnet"

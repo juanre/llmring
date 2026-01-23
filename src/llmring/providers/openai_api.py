@@ -580,7 +580,16 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             accumulated_content = ""
             accumulated_tool_calls = {}
 
+            final_usage = None
+            final_finish_reason = None
+            final_tool_calls = None
+
             async for chunk in stream:
+                # OpenAI sends usage on a final chunk with empty choices[] when
+                # include_usage=True. Capture it regardless of choices.
+                if getattr(chunk, "usage", None) is not None:
+                    final_usage = chunk.usage.model_dump()
+
                 if chunk.choices and len(chunk.choices) > 0:
                     choice = chunk.choices[0]
 
@@ -621,32 +630,25 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                                         "arguments"
                                     ] += tool_call_delta.function.arguments
 
-                    # Handle finish
+                    # Capture finish_reason for the final chunk (yielded after stream ends)
                     if choice.finish_reason:
-                        # Convert accumulated tool calls to list
-                        tool_calls_list = None
+                        final_finish_reason = choice.finish_reason
                         if accumulated_tool_calls:
-                            tool_calls_list = [
+                            final_tool_calls = [
                                 accumulated_tool_calls[idx]
                                 for idx in sorted(accumulated_tool_calls.keys())
                             ]
 
-                        # Final chunk with provider-reported token usage
-                        # Guard against interrupted streams where final usage may not arrive
-                        usage_payload = (
-                            chunk.usage.model_dump()
-                            if getattr(chunk, "usage", None) is not None
-                            else None
-                        )
-                        yield StreamChunk(
-                            delta="",
-                            model=model,
-                            finish_reason=choice.finish_reason,
-                            tool_calls=tool_calls_list,
-                            usage=usage_payload,
-                        )
-
-                # No need to track usage across chunks; included on final when include_usage=True
+            # Yield final chunk with usage after stream completes
+            # OpenAI sends usage on a separate chunk after finish_reason
+            if final_finish_reason:
+                yield StreamChunk(
+                    delta="",
+                    model=model,
+                    finish_reason=final_finish_reason,
+                    tool_calls=final_tool_calls,
+                    usage=final_usage,
+                )
         except Exception as e:
             # If it's already a typed LLMRing exception, just re-raise it
             from llmring.exceptions import LLMRingError
