@@ -515,11 +515,13 @@ class Lockfile(BaseModel):
             return  # Empty list is valid (no requirements)
 
         missing_details = []
+        # Cache for package lockfiles within this validation run
+        package_lockfile_cache: Dict[str, Optional["Lockfile"]] = {}
 
         for alias in required:
             if ":" in alias and not is_model_reference(alias):
                 # Namespaced alias (e.g., libA:summarizer)
-                result = self._check_namespaced_alias(alias, profile)
+                result = self._check_namespaced_alias(alias, profile, package_lockfile_cache)
                 if result:
                     missing_details.append(result)
             else:
@@ -542,7 +544,12 @@ class Lockfile(BaseModel):
                 f"Missing required aliases{context_msg}{profile_msg}:\n{details}{path_msg}"
             )
 
-    def _check_namespaced_alias(self, alias: str, profile: Optional[str]) -> Optional[str]:
+    def _check_namespaced_alias(
+        self,
+        alias: str,
+        profile: Optional[str],
+        cache: Optional[Dict[str, Optional["Lockfile"]]] = None,
+    ) -> Optional[str]:
         """Check if a namespaced alias exists and return error message if not.
 
         Precondition: alias must contain ':' (enforced by caller in require_aliases).
@@ -550,6 +557,7 @@ class Lockfile(BaseModel):
         Args:
             alias: Namespaced alias like 'libA:summarizer'
             profile: Optional profile name
+            cache: Optional cache dict to avoid reloading lockfiles for same namespace
 
         Returns:
             Error message string if alias not found, None if found
@@ -571,28 +579,38 @@ class Lockfile(BaseModel):
                 f"Add to lockfile: [extends] packages = [\"{namespace}\"]"
             )
 
-        # Try to load the package's lockfile
-        package_lockfile_path = discover_package_lockfile(namespace)
-        if not package_lockfile_path:
+        # Load package lockfile (with caching)
+        package_lockfile: Optional["Lockfile"] = None
+        if cache is not None and namespace in cache:
+            package_lockfile = cache[namespace]
+        else:
+            package_lockfile_path = discover_package_lockfile(namespace)
+            if package_lockfile_path:
+                try:
+                    package_lockfile = Lockfile.load(package_lockfile_path)
+                except Exception as e:
+                    if cache is not None:
+                        cache[namespace] = None
+                    return f"  - {alias}: failed to load {namespace}'s lockfile: {e}"
+            if cache is not None:
+                cache[namespace] = package_lockfile
+
+        if not package_lockfile:
             return (
                 f"  - {alias}: package '{namespace}' is in [extends] but has no llmring.lock"
             )
 
-        # Load and check
-        try:
-            package_lockfile = Lockfile.load(package_lockfile_path)
-            if package_lockfile.has_alias(alias_name, profile):
-                return None  # Found in package
+        # Check alias in package lockfile
+        if package_lockfile.has_alias(alias_name, profile):
+            return None  # Found in package
 
-            # Not found - list available aliases
-            available = package_lockfile.list_aliases(profile)
-            available_str = ", ".join(available) if available else "(none)"
-            return (
-                f"  - {alias}: not found in {namespace}'s lockfile. "
-                f"Available in {namespace}: {available_str}"
-            )
-        except Exception as e:
-            return f"  - {alias}: failed to load {namespace}'s lockfile: {e}"
+        # Not found - list available aliases
+        available = package_lockfile.list_aliases(profile)
+        available_str = ", ".join(available) if available else "(none)"
+        return (
+            f"  - {alias}: not found in {namespace}'s lockfile. "
+            f"Available in {namespace}: {available_str}"
+        )
 
     def save(self, path: Optional[Path] = None):
         """Save the lockfile to disk."""
