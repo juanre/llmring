@@ -610,6 +610,166 @@ lib = MyLibrary(lockfile_path="./my-models.lock")
 - Document required aliases clearly
 - Pass lockfile down when using other llmring libraries
 
+## Lockfile Composability
+
+Libraries can ship lockfiles that consumers extend and override. This allows libraries to define their required aliases while giving consumers control over which models are used.
+
+### Extending Library Lockfiles
+
+Consumer lockfiles can extend library lockfiles using the `[extends]` section:
+
+```toml
+# Consumer's llmring.lock
+version = "1.0"
+default_profile = "default"
+
+[extends]
+packages = ["libA", "libB"]  # Extend these libraries
+
+[profiles.default]
+name = "default"
+bindings = []  # Local bindings (optional)
+```
+
+When you extend a library, its aliases become available as namespaced aliases.
+
+### Namespaced Aliases
+
+Use `package:alias` format to reference aliases from extended libraries:
+
+```python
+from llmring import LLMRing, LLMRequest, Message
+
+async with LLMRing() as service:
+    # Use libA's summarizer alias
+    request = LLMRequest(
+        model="libA:summarizer",  # Resolves from libA's lockfile
+        messages=[Message(role="user", content="Summarize this...")]
+    )
+    response = await service.chat(request)
+```
+
+**Resolution rules:**
+- `libA:summarizer` → Checks consumer lockfile for override, then libA's lockfile
+- `summarizer` (unqualified) → Consumer lockfile only
+
+### Overriding Library Aliases
+
+Consumers can override library aliases by defining them in their lockfile:
+
+```toml
+# Consumer's llmring.lock
+version = "1.0"
+default_profile = "default"
+
+[extends]
+packages = ["libA"]
+
+[profiles.default]
+name = "default"
+
+# Override libA's summarizer to use a different model
+[[profiles.default.bindings]]
+alias = "libA:summarizer"
+models = ["openai:gpt-4o-mini"]  # Consumer's choice
+```
+
+When the consumer's code (or libA's code) resolves `libA:summarizer`, it uses the consumer's override.
+
+### Validating Extended Lockfiles
+
+Use `llmring lock check` to validate your extends configuration:
+
+```bash
+llmring lock check
+```
+
+**Output:**
+```
+Checking lockfile: ./llmring.lock
+
+[extends]
+  ✓ libA: found llmring.lock
+    Aliases: summarizer, analyzer
+  ✓ libB: found llmring.lock
+    Aliases: translator
+  ✗ libC: package not installed or has no llmring.lock
+
+Warnings:
+  ⚠ 'summarizer' defined in both libA and libB
+    Use libA:summarizer or libB:summarizer to disambiguate
+
+Local aliases:
+  myalias → openai:gpt-4o
+
+Summary: 2/3 packages OK, 3 extended aliases, 1 local aliases
+```
+
+**Exit codes:**
+- 0: All OK
+- 1: Missing packages or lockfiles
+- 2: Lockfile parse error
+
+### Library Authors: Supporting Composability
+
+When building a library that uses LLMRing:
+
+**1. Ship a bundled lockfile with your package:**
+
+```
+mylib/
+├── __init__.py
+└── llmring.lock  # Bundled with package
+```
+
+**2. Include lockfile in package distribution:**
+
+```toml
+# pyproject.toml
+[tool.hatch.build]
+include = ["src/mylib/**/*.lock"]
+```
+
+**3. Use `require_aliases()` to validate at startup:**
+
+```python
+from llmring import LLMRing
+
+class MyLibrary:
+    def __init__(self):
+        self.ring = LLMRing()
+        # Validates consumer has required aliases available
+        self.ring.require_aliases(["mylib:summarizer"], context="mylib")
+```
+
+**4. Document which namespaced aliases your library needs:**
+
+```markdown
+## Required Aliases
+
+This library requires:
+- `mylib:summarizer` - Used for text summarization
+
+Extend our lockfile in yours:
+\`\`\`toml
+[extends]
+packages = ["mylib"]
+\`\`\`
+```
+
+### Alias Naming for Libraries
+
+Consider using prefixed names to avoid conflicts:
+
+```toml
+# Library lockfile (mylib/llmring.lock)
+[[profiles.default.bindings]]
+alias = "summarizer"  # Consumers use as mylib:summarizer
+models = ["anthropic:claude-3-5-haiku-20241022"]
+```
+
+The namespace (`mylib:`) is added automatically when consumers extend your library.
+
 ## Common Patterns
 
 ### Development vs Production

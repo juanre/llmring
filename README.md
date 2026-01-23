@@ -830,6 +830,34 @@ include src/my_library/*.lock
 5. **Use semantic names** - Aliases like "summarizer" are clearer than model IDs
 6. **Pass lockfile down** - When using other libraries, pass your lockfile to them
 
+### Lockfile Composability
+
+Users can extend library lockfiles using the `[extends]` section:
+
+```toml
+# User's llmring.lock
+[extends]
+packages = ["my-library", "another-lib"]  # Extend these libraries
+
+# Override a library's alias if needed
+[[profiles.default.bindings]]
+alias = "my-library:summarizer"
+models = ["openai:gpt-4o"]  # Use different model
+```
+
+This allows:
+- Libraries define their required aliases
+- Users control which models are used via namespaced aliases (`my-library:summarizer`)
+- Users can override specific aliases while keeping library defaults
+
+Validate the setup with:
+
+```bash
+llmring lock check
+```
+
+See the [Lockfile Composability Guide](skills/lockfile/SKILL.md#lockfile-composability) for full documentation.
+
 ### Profiles: Environment-Specific Configurations
 
 LLMRing supports **profiles** to manage different model configurations for different environments (dev, staging, prod, etc.):
