@@ -616,7 +616,7 @@ Libraries can ship lockfiles that consumers extend and override. This allows lib
 
 ### Extending Library Lockfiles
 
-Consumer lockfiles can extend library lockfiles using the `[extends]` section:
+Consumer lockfiles can extend library lockfiles using the `[extends]` section. The `[extends]` section is **optional** - you can always define your own aliases without extending any libraries.
 
 ```toml
 # Consumer's llmring.lock
@@ -624,12 +624,26 @@ version = "1.0"
 default_profile = "default"
 
 [extends]
-packages = ["libA", "libB"]  # Extend these libraries
+packages = ["libA", "libB"]  # Extend these libraries (optional)
 
 [profiles.default]
 name = "default"
-bindings = []  # Local bindings (optional)
+
+# Your own local aliases (always works, with or without extends)
+[[profiles.default.bindings]]
+alias = "myalias"
+models = ["openai:gpt-4o"]
+
+[[profiles.default.bindings]]
+alias = "summarizer"
+models = ["anthropic:claude-3-5-haiku-20241022"]
 ```
+
+**Key points:**
+- `[extends]` is optional - skip it if you don't need library lockfiles
+- You can define your own aliases in `bindings` regardless of extends
+- Unqualified aliases (like `summarizer`) only resolve from your local lockfile
+- Namespaced aliases (like `libA:summarizer`) resolve from extended libraries
 
 When you extend a library, its aliases become available as namespaced aliases.
 
