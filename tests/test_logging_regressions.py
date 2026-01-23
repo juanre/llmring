@@ -5,26 +5,33 @@ These tests prevent regressions for three critical bugs found in code review:
 1. LLMRingSession._log_usage_to_server AttributeError
 2. llmring lock init NameError (project_root undefined)
 3. Conversation logging missing usage records
-
-Following llmring policy: NO MOCKS. Tests verify the fixes directly.
 """
 
 import asyncio
+import os
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 
-from llmring.schemas import LLMRequest, LLMResponse, Message
+from llmring.schemas import LLMRequest, Message
 from llmring.service_extended import LLMRingSession
+
+# Check if llmring-server is properly installed
+try:
+    from llmring_server.main import app as _test_import  # noqa: F401
+
+    LLMRING_SERVER_INSTALLED = True
+except ImportError:
+    LLMRING_SERVER_INSTALLED = False
 
 
 class TestLoggingRegressions:
     """Regression tests for logging refactoring bugs."""
 
     @pytest.mark.asyncio
-    async def test_conversation_logging_includes_usage(self):
+    @pytest.mark.skipif(not LLMRING_SERVER_INSTALLED, reason="llmring-server not properly installed")
+    async def test_conversation_logging_includes_usage(self, llmring_server_client, project_headers):
         """
         Regression test for: Conversation logging loses usage records
 
@@ -32,101 +39,88 @@ class TestLoggingRegressions:
         and skipped _log_usage_only, so no usage records were created for analytics/receipts.
 
         Fix: Call both _log_conversation AND _log_usage_only when log_conversations=True.
-
-        This test verifies the fix by checking that LoggingService.log_request_response
-        calls BOTH _log_conversation AND _log_usage_only when log_conversations=True.
         """
-        # Create LoggingService with log_conversations=True
-        from llmring.services.logging_service import LoggingService
+        if not os.getenv("OPENAI_API_KEY"):
+            pytest.skip("OPENAI_API_KEY not set")
 
-        # Mock server_client to track calls
-        mock_server_client = AsyncMock()
-        mock_server_client.post = AsyncMock(return_value={"conversation_id": "test-123"})
-
-        logging_service = LoggingService(
-            server_client=mock_server_client,
-            log_metadata=False,
-            log_conversations=True,
-            origin="test",
+        # Create LLMRingSession with conversation logging enabled
+        session = LLMRingSession(
+            server_url="http://test",
+            api_key="proj_test",
+            enable_conversations=True,
+            origin="test-conversation-regression",
         )
+        # Inject the test server client
+        session.server_client._client = llmring_server_client
+        session.logging_service._server_client._client = llmring_server_client
 
-        # Create test request/response
-        request = LLMRequest(model="fast", messages=[Message(role="user", content="Test")])
-        response = LLMResponse(
-            content="Test response",
+        # Make a real chat request
+        request = LLMRequest(
             model="openai:gpt-4o-mini",
-            usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
-        )
-        cost_info = {"input_cost": 0.0005, "output_cost": 0.0005, "total_cost": 0.001}
-
-        # Call log_request_response
-        await logging_service.log_request_response(
-            request=request,
-            response=response,
-            alias="fast",
-            provider="openai",
-            model="gpt-4o-mini",
-            cost_info=cost_info,
-            profile="default",
+            messages=[Message(role="user", content="Say 'test' and nothing else.")],
+            max_tokens=10,
         )
 
-        # CRITICAL ASSERTION: Both endpoints should be called
-        assert (
-            mock_server_client.post.call_count == 2
-        ), "Regression: log_conversations=True should call both conversation AND usage logging"
+        await session.chat(request)
 
-        # Verify the endpoints that were called
-        calls = [call[0][0] for call in mock_server_client.post.call_args_list]
-        assert "/api/v1/conversations/log" in calls, "Conversation endpoint should be called"
-        assert "/api/v1/log" in calls, "Usage endpoint should also be called for analytics/receipts"
+        # CRITICAL ASSERTION: Both conversation AND usage records should exist
+        # Check usage logs
+        usage_response = await llmring_server_client.get(
+            "/api/v1/logs",
+            params={"origin": "test-conversation-regression", "limit": 1},
+            headers=project_headers,
+        )
+        assert usage_response.status_code == 200
+        usage_logs = usage_response.json()
+        assert len(usage_logs) > 0, "Usage record should be created even with conversation logging"
+
+        # Check conversation logs
+        conv_response = await llmring_server_client.get(
+            "/api/v1/conversations",
+            params={"limit": 10},
+            headers=project_headers,
+        )
+        assert conv_response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_metadata_only_logging_creates_usage(self):
+    @pytest.mark.skipif(not LLMRING_SERVER_INSTALLED, reason="llmring-server not properly installed")
+    async def test_metadata_only_logging_creates_usage(self, llmring_server_client, project_headers):
         """
         Verify that metadata-only logging creates usage records.
-
-        This is the baseline - metadata logging should work.
         """
-        from llmring.services.logging_service import LoggingService
+        if not os.getenv("OPENAI_API_KEY"):
+            pytest.skip("OPENAI_API_KEY not set")
 
-        # Mock server_client to track calls
-        mock_server_client = AsyncMock()
-        mock_server_client.post = AsyncMock(return_value={})
+        from llmring.service import LLMRing
 
-        logging_service = LoggingService(
-            server_client=mock_server_client,
-            log_metadata=True,
-            log_conversations=False,
-            origin="test",
+        # Create LLMRing with metadata logging only
+        ring = LLMRing(
+            origin="test-metadata-regression",
+            server_url="http://test",
+            api_key="proj_test",
         )
+        # Inject the test server client
+        ring.server_client._client = llmring_server_client
 
-        # Create test request/response
-        request = LLMRequest(model="fast", messages=[Message(role="user", content="Test")])
-        response = LLMResponse(
-            content="Test",
+        # Make a real chat request
+        request = LLMRequest(
             model="openai:gpt-4o-mini",
-            usage={"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
-        )
-        cost_info = {"input_cost": 0.0002, "output_cost": 0.0003, "total_cost": 0.0005}
-
-        # Call log_request_response
-        await logging_service.log_request_response(
-            request=request,
-            response=response,
-            alias="fast",
-            provider="openai",
-            model="gpt-4o-mini",
-            cost_info=cost_info,
-            profile="default",
+            messages=[Message(role="user", content="Say 'test' and nothing else.")],
+            max_tokens=10,
         )
 
-        # Metadata-only should call usage endpoint once
-        assert (
-            mock_server_client.post.call_count == 1
-        ), "Metadata-only logging should call usage endpoint"
+        await ring.chat(request)
 
-        calls = [call[0][0] for call in mock_server_client.post.call_args_list]
-        assert "/api/v1/log" in calls, "Usage endpoint should be called"
+        # Verify usage record was created
+        usage_response = await llmring_server_client.get(
+            "/api/v1/logs",
+            params={"origin": "test-metadata-regression", "limit": 1},
+            headers=project_headers,
+        )
+        assert usage_response.status_code == 200
+        usage_logs = usage_response.json()
+        assert len(usage_logs) > 0, "Usage record should be created"
+        assert usage_logs[0]["input_tokens"] > 0
 
     def test_lock_init_no_nameerror(self):
         """

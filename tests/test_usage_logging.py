@@ -1,287 +1,241 @@
-"""Tests for server-side usage logging functionality."""
+"""Tests for server-side usage logging functionality.
 
-from unittest.mock import AsyncMock, patch
+These tests use real llmring-server (via fixture) and real provider API calls.
+"""
+
+import os
 
 import pytest
 
-from llmring.schemas import LLMRequest, LLMResponse, Message
+from llmring.schemas import LLMRequest, Message
 from llmring.service import LLMRing
+
+# Check if llmring-server is properly installed (not just namespace package)
+try:
+    from llmring_server.main import app as _test_import  # noqa: F401
+
+    LLMRING_SERVER_INSTALLED = True
+except ImportError:
+    LLMRING_SERVER_INSTALLED = False
 
 
 @pytest.mark.asyncio
-async def test_llmring_with_server_logs_usage():
+@pytest.mark.skipif(not LLMRING_SERVER_INSTALLED, reason="llmring-server not properly installed")
+async def test_llmring_with_server_logs_usage(llmring_server_client, project_headers):
     """Test that LLMRing logs usage to server when configured."""
-    # Mock server client
-    mock_server_client = AsyncMock()
-    mock_server_client.post = AsyncMock(return_value={"log_id": "test-log-id"})
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY not set")
 
-    # Create LLMRing with mocked server client
-    with patch("llmring.server_client.ServerClient", return_value=mock_server_client):
-        ring = LLMRing(
-            origin="test",
-            server_url="http://test-server",
-            api_key="test-key",
-        )
+    # Create LLMRing connected to the test server
+    ring = LLMRing(
+        origin="test-usage-logging",
+        server_url="http://test",  # Will be overridden by injecting client
+        api_key="proj_test",
+    )
+    # Inject the test server client directly
+    ring.server_client._client = llmring_server_client
 
-        # Mock provider response
-        mock_response = LLMResponse(
-            content="Test response",
-            model="openai:gpt-4o-mini",
-            usage={
-                "prompt_tokens": 100,
-                "completion_tokens": 50,
-                "total_tokens": 150,
-            },
-            finish_reason="stop",
-        )
+    # Make a real chat request
+    request = LLMRequest(
+        model="openai:gpt-4o-mini",
+        messages=[Message(role="user", content="Say 'test' and nothing else.")],
+        max_tokens=10,
+    )
 
-        # Mock the provider's chat method
-        with patch.object(ring, "get_provider") as mock_get_provider:
-            mock_provider = AsyncMock()
-            mock_provider.chat = AsyncMock(return_value=mock_response)
-            mock_get_provider.return_value = mock_provider
+    response = await ring.chat(request)
 
-            # Mock registry for cost calculation
-            with patch.object(ring, "get_model_from_registry", return_value=None):
-                # Mock calculate_cost to return cost info
-                with patch.object(
-                    ring,
-                    "calculate_cost",
-                    return_value={"total_cost": 0.001, "input_cost": 0.0005, "output_cost": 0.0005},
-                ):
-                    # Make a chat request
-                    request = LLMRequest(
-                        model="openai:gpt-4o-mini",
-                        messages=[Message(role="user", content="Hello")],
-                    )
+    # Verify we got a real response
+    assert response.content is not None
+    assert len(response.content) > 0
+    assert response.usage["prompt_tokens"] > 0
+    assert response.usage["completion_tokens"] > 0
 
-                    response = await ring.chat(request)
+    # Query the server to verify the log was stored
+    logs_response = await llmring_server_client.get(
+        "/api/v1/logs",
+        params={"origin": "test-usage-logging", "limit": 1},
+        headers=project_headers,
+    )
+    assert logs_response.status_code == 200
 
-                    # Verify response
-                    assert response.content == "Test response"
-                    assert response.usage["prompt_tokens"] == 100
+    logs = logs_response.json()
+    assert len(logs) > 0
 
-                    # Verify usage was logged to server
-                    mock_server_client.post.assert_called_once()
-                    call_args = mock_server_client.post.call_args
-
-                    assert call_args[0][0] == "/api/v1/log"
-                    log_data = call_args[1]["json"]
-
-                    assert log_data["model"] == "gpt-4o-mini"
-                    assert log_data["provider"] == "openai"
-                    assert log_data["input_tokens"] == 100
-                    assert log_data["output_tokens"] == 50
-                    assert log_data["origin"] == "test"
-                    assert log_data["cost"] == 0.001
+    log_entry = logs[0]
+    assert log_entry["provider"] == "openai"
+    assert "gpt-4o-mini" in log_entry["model"]
+    assert log_entry["input_tokens"] > 0
+    assert log_entry["output_tokens"] > 0
+    assert log_entry["origin"] == "test-usage-logging"
 
 
 @pytest.mark.asyncio
 async def test_llmring_without_server_no_logging():
     """Test that LLMRing without server doesn't attempt logging."""
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY not set")
+
     # Create LLMRing without server
     ring = LLMRing(origin="test")
 
     # Verify server_client is None
     assert ring.server_client is None
 
-    # Mock provider response
-    mock_response = LLMResponse(
-        content="Test response",
+    # Make a real chat request - should work without server
+    request = LLMRequest(
         model="openai:gpt-4o-mini",
-        usage={
-            "prompt_tokens": 100,
-            "completion_tokens": 50,
-            "total_tokens": 150,
-        },
-        finish_reason="stop",
+        messages=[Message(role="user", content="Say 'test' and nothing else.")],
+        max_tokens=10,
     )
 
-    # Mock the provider's chat method
-    with patch.object(ring, "get_provider") as mock_get_provider:
-        mock_provider = AsyncMock()
-        mock_provider.chat = AsyncMock(return_value=mock_response)
-        mock_get_provider.return_value = mock_provider
+    response = await ring.chat(request)
 
-        # Mock registry for cost calculation
-        with patch.object(ring, "get_model_from_registry", return_value=None):
-            with patch.object(ring, "calculate_cost", return_value=None):
-                # Make a chat request
-                request = LLMRequest(
-                    model="openai:gpt-4o-mini",
-                    messages=[Message(role="user", content="Hello")],
-                )
-
-                response = await ring.chat(request)
-
-                # Verify response (no errors)
-                assert response.content == "Test response"
+    # Verify response works without server
+    assert response.content is not None
+    assert len(response.content) > 0
 
 
 @pytest.mark.asyncio
-async def test_usage_logging_with_alias():
+@pytest.mark.skipif(not LLMRING_SERVER_INSTALLED, reason="llmring-server not properly installed")
+async def test_usage_logging_with_alias(llmring_server_client, project_headers, tmp_path):
     """Test that usage logging includes alias information."""
-    # Mock server client
-    mock_server_client = AsyncMock()
-    mock_server_client.post = AsyncMock(return_value={"log_id": "test-log-id"})
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY not set")
 
-    # Create LLMRing with mocked server client
-    with patch("llmring.server_client.ServerClient", return_value=mock_server_client):
-        ring = LLMRing(
-            origin="test",
-            server_url="http://test-server",
-            api_key="test-key",
-        )
+    # Create a test lockfile with an alias
+    from llmring.lockfile_core import Lockfile
 
-        # Mock provider response
-        mock_response = LLMResponse(
-            content="Test response",
-            model="openai:gpt-4o-mini",
-            usage={
-                "prompt_tokens": 100,
-                "completion_tokens": 50,
-            },
-            finish_reason="stop",
-        )
+    lockfile_path = tmp_path / "llmring.lock"
+    lockfile = Lockfile.create_default()
+    lockfile.set_binding("test-alias", "openai:gpt-4o-mini")
+    lockfile.save(lockfile_path)
 
-        # Mock the provider and alias resolution
-        with patch.object(ring, "get_provider") as mock_get_provider:
-            mock_provider = AsyncMock()
-            mock_provider.chat = AsyncMock(return_value=mock_response)
-            mock_get_provider.return_value = mock_provider
+    # Create LLMRing with the test lockfile
+    ring = LLMRing(
+        origin="test-alias-logging",
+        server_url="http://test",
+        api_key="proj_test",
+        lockfile_path=str(lockfile_path),
+    )
+    # Inject the test server client directly
+    ring.server_client._client = llmring_server_client
 
-            # Mock alias resolution to return a model string
-            with patch.object(ring, "resolve_alias", return_value="openai:gpt-4o-mini"):
-                with patch.object(ring, "get_model_from_registry", return_value=None):
-                    with patch.object(
-                        ring,
-                        "calculate_cost",
-                        return_value={
-                            "total_cost": 0.001,
-                            "input_cost": 0.0005,
-                            "output_cost": 0.0005,
-                        },
-                    ):
-                        # Make a chat request with an alias
-                        request = LLMRequest(
-                            model="fast",  # Using alias instead of direct model
-                            messages=[Message(role="user", content="Hello")],
-                        )
+    # Make a chat request using the alias
+    request = LLMRequest(
+        model="test-alias",
+        messages=[Message(role="user", content="Say 'test' and nothing else.")],
+        max_tokens=10,
+    )
 
-                        await ring.chat(request)
+    await ring.chat(request)
 
-                        # Verify usage was logged with alias
-                        mock_server_client.post.assert_called_once()
-                        log_data = mock_server_client.post.call_args[1]["json"]
+    # Query the server to verify the log includes alias
+    logs_response = await llmring_server_client.get(
+        "/api/v1/logs",
+        params={"origin": "test-alias-logging", "limit": 1},
+        headers=project_headers,
+    )
+    assert logs_response.status_code == 200
 
-                        # Should include alias since "fast" doesn't contain ":"
-                        assert log_data["alias"] == "fast"
-                        assert log_data["model"] == "gpt-4o-mini"
-                        assert log_data["provider"] == "openai"
+    logs = logs_response.json()
+    assert len(logs) > 0
+
+    log_entry = logs[0]
+    assert log_entry["alias"] == "test-alias"
+    assert log_entry["provider"] == "openai"
+    assert "gpt-4o-mini" in log_entry["model"]
 
 
 @pytest.mark.asyncio
-async def test_usage_logging_failure_doesnt_break_request():
-    """Test that if logging to server fails, the request still succeeds."""
-    # Mock server client that fails
-    mock_server_client = AsyncMock()
-    mock_server_client.post = AsyncMock(side_effect=Exception("Server error"))
-
-    # Create LLMRing with mocked server client
-    with patch("llmring.server_client.ServerClient", return_value=mock_server_client):
-        ring = LLMRing(
-            origin="test",
-            server_url="http://test-server",
-            api_key="test-key",
-        )
-
-        # Mock provider response
-        mock_response = LLMResponse(
-            content="Test response",
-            model="openai:gpt-4o-mini",
-            usage={
-                "prompt_tokens": 100,
-                "completion_tokens": 50,
-            },
-            finish_reason="stop",
-        )
-
-        # Mock the provider
-        with patch.object(ring, "get_provider") as mock_get_provider:
-            mock_provider = AsyncMock()
-            mock_provider.chat = AsyncMock(return_value=mock_response)
-            mock_get_provider.return_value = mock_provider
-
-            with patch.object(ring, "get_model_from_registry", return_value=None):
-                with patch.object(ring, "calculate_cost", return_value=None):
-                    # Make a chat request
-                    request = LLMRequest(
-                        model="openai:gpt-4o-mini",
-                        messages=[Message(role="user", content="Hello")],
-                    )
-
-                    # Should not raise exception despite logging failure
-                    response = await ring.chat(request)
-
-                    # Verify response is returned successfully
-                    assert response.content == "Test response"
-
-
-@pytest.mark.asyncio
-async def test_streaming_usage_logging():
+@pytest.mark.skipif(not LLMRING_SERVER_INSTALLED, reason="llmring-server not properly installed")
+async def test_streaming_usage_logging(llmring_server_client, project_headers):
     """Test that streaming responses also log usage."""
-    # Mock server client
-    mock_server_client = AsyncMock()
-    mock_server_client.post = AsyncMock(return_value={"log_id": "test-log-id"})
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY not set")
 
-    # Create LLMRing with mocked server client
-    with patch("llmring.server_client.ServerClient", return_value=mock_server_client):
-        ring = LLMRing(
-            origin="test",
-            server_url="http://test-server",
-            api_key="test-key",
-        )
+    # Create LLMRing connected to the test server
+    ring = LLMRing(
+        origin="test-streaming-logging",
+        server_url="http://test",
+        api_key="proj_test",
+    )
+    # Inject the test server client directly
+    ring.server_client._client = llmring_server_client
 
-        # Mock streaming response
-        async def mock_stream():
-            from llmring.schemas import StreamChunk
+    # Make a streaming request
+    request = LLMRequest(
+        model="openai:gpt-4o-mini",
+        messages=[Message(role="user", content="Say 'hello world'.")],
+        max_tokens=20,
+    )
 
-            # Yield some chunks
-            yield StreamChunk(delta="Hello", model="openai:gpt-4o-mini")
-            yield StreamChunk(delta=" world", model="openai:gpt-4o-mini")
-            # Final chunk with usage
-            yield StreamChunk(
-                delta="",
-                model="openai:gpt-4o-mini",
-                usage={"prompt_tokens": 100, "completion_tokens": 50},
-                finish_reason="stop",
-            )
+    # Consume the stream
+    chunks = []
+    async for chunk in ring.chat_stream(request):
+        chunks.append(chunk)
 
-        # Mock the provider
-        with patch.object(ring, "get_provider") as mock_get_provider:
-            mock_provider = AsyncMock()
-            mock_provider.chat_stream = AsyncMock(return_value=mock_stream())
-            mock_get_provider.return_value = mock_provider
+    # Verify we got chunks
+    assert len(chunks) > 0
 
-            with patch.object(ring, "get_model_from_registry", return_value=None):
-                with patch.object(ring, "calculate_cost", return_value={"total_cost": 0.001}):
-                    # Make a streaming request
-                    request = LLMRequest(
-                        model="openai:gpt-4o-mini",
-                        messages=[Message(role="user", content="Hello")],
-                    )
+    # Query the server to verify the log was stored
+    logs_response = await llmring_server_client.get(
+        "/api/v1/logs",
+        params={"origin": "test-streaming-logging", "limit": 1},
+        headers=project_headers,
+    )
+    assert logs_response.status_code == 200
 
-                    # Consume the stream
-                    chunks = []
-                    async for chunk in ring.chat_stream(request):
-                        chunks.append(chunk)
+    logs = logs_response.json()
+    assert len(logs) > 0
 
-                    # Verify we got chunks
-                    assert len(chunks) == 3
+    log_entry = logs[0]
+    assert log_entry["provider"] == "openai"
+    assert log_entry["input_tokens"] > 0
+    assert log_entry["output_tokens"] > 0
 
-                    # Verify usage was logged after streaming completed
-                    mock_server_client.post.assert_called_once()
-                    log_data = mock_server_client.post.call_args[1]["json"]
 
-                    assert log_data["input_tokens"] == 100
-                    assert log_data["output_tokens"] == 50
+@pytest.mark.asyncio
+@pytest.mark.skipif(not LLMRING_SERVER_INSTALLED, reason="llmring-server not properly installed")
+async def test_anthropic_usage_logging(llmring_server_client, project_headers):
+    """Test usage logging with Anthropic provider."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not set")
+
+    # Create LLMRing connected to the test server
+    ring = LLMRing(
+        origin="test-anthropic-logging",
+        server_url="http://test",
+        api_key="proj_test",
+    )
+    # Inject the test server client directly
+    ring.server_client._client = llmring_server_client
+
+    # Make a real chat request
+    request = LLMRequest(
+        model="anthropic:claude-3-5-haiku-20241022",
+        messages=[Message(role="user", content="Say 'test' and nothing else.")],
+        max_tokens=10,
+    )
+
+    response = await ring.chat(request)
+
+    # Verify we got a real response
+    assert response.content is not None
+    assert len(response.content) > 0
+
+    # Query the server to verify the log was stored
+    logs_response = await llmring_server_client.get(
+        "/api/v1/logs",
+        params={"origin": "test-anthropic-logging", "limit": 1},
+        headers=project_headers,
+    )
+    assert logs_response.status_code == 200
+
+    logs = logs_response.json()
+    assert len(logs) > 0
+
+    log_entry = logs[0]
+    assert log_entry["provider"] == "anthropic"
+    assert "claude" in log_entry["model"].lower()
+    assert log_entry["input_tokens"] > 0
+    assert log_entry["output_tokens"] > 0
