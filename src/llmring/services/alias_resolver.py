@@ -129,6 +129,9 @@ class AliasResolver:
         Raises:
             ValueError: If alias cannot be resolved or format is invalid
         """
+        # Normalize profile early for consistent cache keys
+        resolved_profile = profile or os.getenv("LLMRING_PROFILE")
+
         # Check for namespaced alias first (e.g., libA:summarizer)
         parsed = self._parse_namespaced_alias(alias_or_model)
         if parsed:
@@ -138,21 +141,21 @@ class AliasResolver:
                     f"Invalid namespaced alias: '{alias_or_model}'. "
                     f"Format must be 'package:alias' with non-empty components."
                 )
-            return self._resolve_namespaced_alias(namespace, alias_name, profile)
+            return self._resolve_namespaced_alias(namespace, alias_name, resolved_profile)
 
         # If it looks like a model reference (contains colon and is a known provider), return as-is
         if ":" in alias_or_model:
             return alias_or_model
 
         # Check cache first
-        cache_key = (alias_or_model, profile)
+        cache_key = (alias_or_model, resolved_profile)
         if cache_key in self._cache:
             cached_value = self._cache[cache_key]
             logger.debug(f"Using cached resolution for alias '{alias_or_model}': '{cached_value}'")
             return cached_value
 
         # Try to resolve from lockfile
-        resolved = self._resolve_from_lockfile(alias_or_model, profile)
+        resolved = self._resolve_from_lockfile(alias_or_model, resolved_profile)
         if resolved:
             # Add to cache
             self._cache[cache_key] = resolved
@@ -178,7 +181,7 @@ class AliasResolver:
         Args:
             namespace: Package name (e.g., 'libA')
             alias_name: Alias within the package (e.g., 'summarizer')
-            profile: Optional profile name
+            profile: Profile name (already resolved by caller)
 
         Returns:
             Resolved model string
@@ -187,16 +190,15 @@ class AliasResolver:
             ValueError: If alias cannot be resolved
         """
         full_alias = f"{namespace}:{alias_name}"
-        profile_name = profile or os.getenv("LLMRING_PROFILE")
 
-        # Check cache first
-        cache_key = (full_alias, profile_name)
+        # Check cache first (profile is already resolved by caller)
+        cache_key = (full_alias, profile)
         if cache_key in self._cache:
             return self._cache[cache_key]
 
         # 1. Check if consumer lockfile has an override
         if self.lockfile:
-            model_refs = self.lockfile.resolve_alias(full_alias, profile_name)
+            model_refs = self.lockfile.resolve_alias(full_alias, profile)
             if model_refs:
                 resolved = self._resolve_model_refs_to_first_available(model_refs, full_alias)
                 if resolved:
@@ -227,9 +229,9 @@ class AliasResolver:
             )
 
         # 4. Resolve from package lockfile
-        model_refs = package_lockfile.resolve_alias(alias_name, profile_name)
+        model_refs = package_lockfile.resolve_alias(alias_name, profile)
         if not model_refs:
-            available = package_lockfile.list_aliases(profile_name)
+            available = package_lockfile.list_aliases(profile)
             available_str = ", ".join(available) if available else "(none)"
             raise ValueError(
                 f"Alias '{full_alias}' not found. "
@@ -295,8 +297,8 @@ class AliasResolver:
                 f"If you meant to use an alias, ensure it's defined in your lockfile."
             )
 
-        profile_name = profile or os.getenv("LLMRING_PROFILE")
-        model_refs = self.lockfile.resolve_alias(alias_or_model, profile_name)
+        profile = profile or os.getenv("LLMRING_PROFILE")
+        model_refs = self.lockfile.resolve_alias(alias_or_model, profile)
         if not model_refs:
             raise ValueError(
                 f"Invalid model format: '{alias_or_model}'. "
@@ -344,8 +346,8 @@ class AliasResolver:
             return None
 
         # Get profile name from argument, environment, or lockfile default
-        profile_name = profile or os.getenv("LLMRING_PROFILE")
-        model_refs = self.lockfile.resolve_alias(alias, profile_name)
+        profile = profile or os.getenv("LLMRING_PROFILE")
+        model_refs = self.lockfile.resolve_alias(alias, profile)
 
         if not model_refs:
             return None
