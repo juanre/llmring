@@ -212,7 +212,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         combined_text = " ".join(text_parts)
         return pdf_data_list, combined_text
 
-    async def _process_with_responses_file_search(
+    async def _process_with_pdf_upload(
         self,
         messages: List[Message],
         model: str,
@@ -221,7 +221,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
         extra_params: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
     ) -> LLMResponse:
-        """Process messages containing PDFs using OpenAI's Responses API with file upload."""
+        """Process messages containing PDFs using Chat Completions API with file upload."""
         # Extract PDF data and text from messages
         pdf_data_list, combined_text = self._extract_pdf_content_and_text(messages)
         if not pdf_data_list:
@@ -241,42 +241,52 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
                 # Open in binary read mode for upload
                 with open(tmp_file.name, "rb") as f:
-                    # PDFs must use 'assistants' purpose for Responses input_file
-                    file_obj = await self.client.files.create(file=f, purpose="assistants")
+                    # PDFs use 'user_data' purpose for Chat Completions API file type
+                    file_obj = await self.client.files.create(file=f, purpose="user_data")
+                    if not file_obj or not file_obj.id:
+                        raise ProviderResponseError(
+                            f"Failed to upload PDF file {i + 1}: no file ID returned",
+                            provider="openai",
+                        )
                     uploaded_files.append({"file_id": file_obj.id, "temp_path": tmp_file.name})
 
-            # Build Responses API input using input_file items (direct file processing)
-            content_items: List[Dict[str, Any]] = []
-            content_items.append({"type": "input_text", "text": combined_text})
+            # Build Chat Completions message with file references
+            content_parts: List[Dict[str, Any]] = []
             for info in uploaded_files:
-                content_items.append({"type": "input_file", "file_id": info["file_id"]})
+                content_parts.append({"type": "file", "file": {"file_id": info["file_id"]}})
+            content_parts.append({"type": "text", "text": combined_text})
 
-            request_params = {
+            request_params: Dict[str, Any] = {
                 "model": model,
-                "input": [{"role": "user", "content": content_items}],
+                "messages": [{"role": "user", "content": content_parts}],
             }
 
             if temperature is not None:
                 request_params["temperature"] = temperature
             if max_tokens is not None:
-                request_params["max_output_tokens"] = max_tokens
+                request_params["max_tokens"] = max_tokens
 
             # Apply extra parameters if provided
             if extra_params:
                 request_params.update(extra_params)
 
             resp = await self._await_with_timeout(
-                self.client.responses.create(**request_params),
+                self.client.chat.completions.create(**request_params),
                 timeout,
             )
 
-            response_content = resp.output_text if hasattr(resp, "output_text") else str(resp)
-            usage = self._map_responses_usage(getattr(resp, "usage", None))
+            if resp.choices:
+                response_content = resp.choices[0].message.content or ""
+                finish_reason = resp.choices[0].finish_reason
+            else:
+                response_content = ""
+                finish_reason = "stop"
+            usage = self._map_responses_usage(resp.usage)
             return LLMResponse(
-                content=response_content or "",
+                content=response_content,
                 model=model,
                 usage=usage,
-                finish_reason="stop",
+                finish_reason=finish_reason,
             )
         finally:
             # Cleanup uploaded files
@@ -1450,7 +1460,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                     provider="openai",
                 )
 
-            return await self._process_with_responses_file_search(
+            return await self._process_with_pdf_upload(
                 messages=messages,
                 model=model,
                 temperature=temperature,
