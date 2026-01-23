@@ -34,6 +34,41 @@ class ExtendsConfig(BaseModel):
                 )
 
 
+def discover_package_lockfile(package_name: str) -> Optional[Path]:
+    """Find llmring.lock in an installed package.
+
+    Uses importlib.resources to locate the package, then looks for
+    llmring.lock in the package root directory.
+
+    Args:
+        package_name: Name of the installed Python package
+
+    Returns:
+        Path to the lockfile if found, None otherwise.
+        Returns None (without raising) if package not installed or has no lockfile.
+    """
+    from importlib.resources import as_file
+
+    if not package_name or not package_name.strip():
+        return None
+
+    try:
+        package_files = files(package_name)
+        lockfile_traversable = package_files / LOCKFILE_NAME
+
+        # as_file() returns a context manager that materializes the resource.
+        # For installed packages on disk, this returns the actual path directly.
+        with as_file(lockfile_traversable) as lockfile_path:
+            if lockfile_path.exists():
+                return Path(lockfile_path)
+    except (ModuleNotFoundError, TypeError, AttributeError):
+        # ModuleNotFoundError: package not installed
+        # TypeError/AttributeError: defensive catch for malformed package names
+        pass
+
+    return None
+
+
 class AliasBinding(BaseModel):
     """Represents an alias to model binding with fallback support."""
 

@@ -519,3 +519,41 @@ bindings = []
         # Direct test of the validation (simulating a crafted name)
         with pytest.raises(ValueError, match="Invalid package name"):
             ExtendsConfig(packages=["valid-name\n"])
+
+
+class TestPackageLockfileDiscovery:
+    """Test discover_package_lockfile function."""
+
+    def test_returns_path_when_package_has_lockfile(self):
+        """Test that llmring's own lockfile is discovered."""
+        from llmring.lockfile_core import discover_package_lockfile
+
+        # llmring itself has a bundled lockfile
+        path = discover_package_lockfile("llmring")
+        assert path is not None
+        assert path.name == "llmring.lock"
+        assert path.exists()
+
+    def test_returns_none_when_package_not_installed(self):
+        """Test that non-existent package returns None."""
+        from llmring.lockfile_core import discover_package_lockfile
+
+        path = discover_package_lockfile("nonexistent_package_xyz123")
+        assert path is None
+
+    def test_returns_none_when_package_has_no_lockfile(self):
+        """Test that package without lockfile returns None."""
+        from llmring.lockfile_core import discover_package_lockfile
+
+        # pytest is installed but doesn't have llmring.lock
+        path = discover_package_lockfile("pytest")
+        assert path is None
+
+    def test_handles_invalid_package_name_gracefully(self):
+        """Test that invalid package name returns None without error."""
+        from llmring.lockfile_core import discover_package_lockfile
+
+        # These should return None, not raise exceptions
+        assert discover_package_lockfile("") is None
+        assert discover_package_lockfile("not a valid name") is None
+        assert discover_package_lockfile("..") is None
