@@ -40,8 +40,9 @@ class ExtendsConfig(BaseModel):
 def discover_package_lockfile(package_name: str) -> Optional[Path]:
     """Find llmring.lock in an installed package.
 
-    Uses importlib.util.find_spec to locate the package WITHOUT importing it,
-    then looks for llmring.lock in the package root directory.
+    Uses importlib.util.find_spec to locate the package directory. For top-level
+    packages, this avoids importing the package. For dotted names (a.b), parent
+    packages may be imported but the target package itself is not.
 
     Args:
         package_name: Name of the installed Python package
@@ -478,20 +479,14 @@ class Lockfile(BaseModel):
             profile: Optional profile name (defaults to default_profile)
 
         Returns:
-            True if alias exists and can be resolved, False otherwise.
-            Raises exceptions for unexpected errors (e.g., code bugs).
+            True if alias exists and has at least one model, False otherwise.
 
         Example:
             if lockfile.has_alias("summarizer"):
                 models = lockfile.resolve_alias("summarizer")
         """
-        try:
-            models = self.resolve_alias(alias, profile)
-            return len(models) > 0
-        except (KeyError, ValueError):
-            # Expected: alias not found, invalid format
-            return False
-        # Let AttributeError, IndexError propagate - they indicate bugs
+        models = self.resolve_alias(alias, profile)
+        return len(models) > 0
 
     def require_aliases(
         self, required: List[str], profile: Optional[str] = None, context: Optional[str] = None
