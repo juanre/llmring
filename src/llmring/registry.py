@@ -12,6 +12,16 @@ from pydantic import BaseModel, Field, field_validator
 from llmring.validation import InputValidator
 
 
+def _parse_iso_datetime(value: str) -> datetime:
+    """Parse ISO 8601 datetime string, handling 'Z' suffix for UTC.
+
+    Python 3.10's fromisoformat() doesn't handle 'Z' (added in 3.11).
+    """
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    return datetime.fromisoformat(value)
+
+
 class RegistryModel(BaseModel):
     """Model information from the registry."""
 
@@ -266,7 +276,7 @@ class RegistryClient:
                 version_info = RegistryVersion(
                     provider=provider,
                     version=version,
-                    updated_at=datetime.fromisoformat(
+                    updated_at=_parse_iso_datetime(
                         data.get("updated_at", datetime.now(timezone.utc).isoformat())
                     ),
                     models=[RegistryModel(**m) for m in data.get("models", [])],
@@ -287,7 +297,7 @@ class RegistryClient:
                 version_info = RegistryVersion(
                     provider=provider,
                     version=version,
-                    updated_at=datetime.fromisoformat(
+                    updated_at=_parse_iso_datetime(
                         data.get("updated_at", datetime.now(timezone.utc).isoformat())
                     ),
                     models=[RegistryModel(**m) for m in data.get("models", [])],
@@ -310,7 +320,7 @@ class RegistryClient:
                 version_info = RegistryVersion(
                     provider=provider,
                     version=version,
-                    updated_at=datetime.fromisoformat(
+                    updated_at=_parse_iso_datetime(
                         data.get("updated_at", datetime.now(timezone.utc).isoformat())
                     ),
                     models=[RegistryModel(**m) for m in data.get("models", [])],
