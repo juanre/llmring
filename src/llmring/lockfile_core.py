@@ -1,10 +1,11 @@
 """Lockfile management for llmring with alias bindings and profile support. Handles reading, writing, and validating llmring.lock configuration files."""
 
+import importlib.util
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
-from importlib.resources import files
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -12,6 +13,8 @@ import toml
 from pydantic import BaseModel, Field
 
 from llmring.constants import LOCKFILE_NAME, PROJECT_ROOT_INDICATORS
+
+logger = logging.getLogger(__name__)
 
 # Pattern for valid Python package names (PEP 508)
 # Uses \Z instead of $ to prevent trailing newlines, and re.IGNORECASE per spec
@@ -37,8 +40,8 @@ class ExtendsConfig(BaseModel):
 def discover_package_lockfile(package_name: str) -> Optional[Path]:
     """Find llmring.lock in an installed package.
 
-    Uses importlib.resources to locate the package, then looks for
-    llmring.lock in the package root directory.
+    Uses importlib.util.find_spec to locate the package WITHOUT importing it,
+    then looks for llmring.lock in the package root directory.
 
     Args:
         package_name: Name of the installed Python package
@@ -47,26 +50,38 @@ def discover_package_lockfile(package_name: str) -> Optional[Path]:
         Path to the lockfile if found, None otherwise.
         Returns None (without raising) if package not installed or has no lockfile.
     """
-    from importlib.resources import as_file
-
     if not package_name or not package_name.strip():
         return None
 
     try:
-        package_files = files(package_name)
-        lockfile_traversable = package_files / LOCKFILE_NAME
+        # find_spec locates a module WITHOUT importing it (no __init__.py execution)
+        spec = importlib.util.find_spec(package_name)
+        if spec is None:
+            return None
 
-        # as_file() returns a context manager that materializes the resource.
-        # For installed packages on disk, this returns the actual path directly.
-        with as_file(lockfile_traversable) as lockfile_path:
-            if lockfile_path.exists():
-                return Path(lockfile_path)
-    except (ModuleNotFoundError, TypeError, AttributeError):
+        # Get package directory from spec
+        if spec.submodule_search_locations:
+            # It's a package - use its location
+            package_dir = Path(spec.submodule_search_locations[0])
+        elif spec.origin:
+            # It's a single-file module - use parent dir
+            package_dir = Path(spec.origin).parent
+        else:
+            return None
+
+        lockfile_path = package_dir / LOCKFILE_NAME
+        if lockfile_path.exists():
+            return lockfile_path
+        return None
+
+    except (ModuleNotFoundError, ImportError):
         # ModuleNotFoundError: package not installed
-        # TypeError/AttributeError: defensive catch for malformed package names
-        pass
-
-    return None
+        # ImportError: invalid module name (e.g., relative like "..")
+        return None
+    except (TypeError, ValueError) as e:
+        # Unexpected error - log for debugging but return None gracefully
+        logger.warning(f"Unexpected error discovering lockfile for {package_name!r}: {e}")
+        return None
 
 
 class AliasBinding(BaseModel):
@@ -667,20 +682,11 @@ class Lockfile(BaseModel):
         Returns:
             Path to the bundled llmring.lock file within the package.
         """
-        try:
-            # Use importlib.resources to get the bundled lockfile
-            package_files = files("llmring")
-            lockfile_resource = package_files / LOCKFILE_NAME
-
-            # For Python 3.9+, we can use as_file context manager
-            # For now, return the path directly
-            return Path(str(lockfile_resource))
-        except Exception as e:
-            # Fallback: try to find it relative to this file
-            fallback_path = Path(__file__).parent / LOCKFILE_NAME
-            if fallback_path.exists():
-                return fallback_path
-            raise RuntimeError(f"Could not find bundled llmring.lock: {e}")
+        # Use __file__ to locate the bundled lockfile - reliable since we're in llmring
+        lockfile_path = Path(__file__).parent / LOCKFILE_NAME
+        if lockfile_path.exists():
+            return lockfile_path
+        raise RuntimeError(f"Could not find bundled llmring.lock at {lockfile_path}")
 
     @classmethod
     def load_package_lockfile(cls) -> "Lockfile":
