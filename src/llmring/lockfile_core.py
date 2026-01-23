@@ -478,7 +478,8 @@ class Lockfile(BaseModel):
             profile: Optional profile name (defaults to default_profile)
 
         Returns:
-            True if alias exists and can be resolved, False otherwise
+            True if alias exists and can be resolved, False otherwise.
+            Raises exceptions for unexpected errors (e.g., code bugs).
 
         Example:
             if lockfile.has_alias("summarizer"):
@@ -487,8 +488,10 @@ class Lockfile(BaseModel):
         try:
             models = self.resolve_alias(alias, profile)
             return len(models) > 0
-        except (KeyError, ValueError, IndexError, AttributeError):
+        except (KeyError, ValueError):
+            # Expected: alias not found, invalid format
             return False
+        # Let AttributeError, IndexError propagate - they indicate bugs
 
     def require_aliases(
         self, required: List[str], profile: Optional[str] = None, context: Optional[str] = None
