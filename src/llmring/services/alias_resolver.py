@@ -7,13 +7,11 @@ from typing import Dict, Optional, Set, Tuple
 
 from cachetools import TTLCache
 
+from llmring.constants import KNOWN_PROVIDERS
 from llmring.lockfile_core import Lockfile, discover_package_lockfile
 from llmring.utils import parse_model_string
 
 logger = logging.getLogger(__name__)
-
-# Known LLM providers (used to distinguish provider:model from namespace:alias)
-KNOWN_PROVIDERS = {"openai", "anthropic", "google", "ollama"}
 
 
 class AliasResolver:

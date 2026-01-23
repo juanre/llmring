@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 import toml
 from pydantic import BaseModel, Field
 
-from llmring.constants import LOCKFILE_NAME, PROJECT_ROOT_INDICATORS
+from llmring.constants import KNOWN_PROVIDERS, LOCKFILE_NAME, PROJECT_ROOT_INDICATORS
 
 logger = logging.getLogger(__name__)
 
@@ -548,8 +548,7 @@ class Lockfile(BaseModel):
         if ":" not in value:
             return False
         prefix = value.split(":", 1)[0].lower()
-        # Known providers
-        return prefix in {"openai", "anthropic", "google", "ollama"}
+        return prefix in KNOWN_PROVIDERS
 
     def _check_namespaced_alias(self, alias: str, profile: Optional[str]) -> Optional[str]:
         """Check if a namespaced alias exists and return error message if not.
