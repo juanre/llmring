@@ -2,6 +2,7 @@
 
 import logging
 import os
+import threading
 from typing import Dict, Optional, Set, Tuple
 
 from cachetools import TTLCache
@@ -47,6 +48,7 @@ class AliasResolver:
         self._cache: TTLCache = TTLCache(maxsize=cache_size, ttl=cache_ttl)
         # Cache for extended lockfiles (package_name -> Lockfile)
         self._extended_lockfiles: Dict[str, Optional[Lockfile]] = {}
+        self._extended_lockfiles_lock = threading.Lock()
 
     def _parse_namespaced_alias(self, alias_or_model: str) -> Optional[Tuple[str, str]]:
         """
@@ -84,29 +86,33 @@ class AliasResolver:
         """
         Load and cache a lockfile from an extended package.
 
+        Thread-safe with double-checked locking for performance.
+
         Args:
             package_name: Name of the package to load lockfile from
 
         Returns:
             The loaded Lockfile, or None if not found
         """
+        # First check (without lock) for cached value
         if package_name in self._extended_lockfiles:
             return self._extended_lockfiles[package_name]
 
+        # Load lockfile outside lock to avoid blocking other threads
         lockfile_path = discover_package_lockfile(package_name)
+        lockfile: Optional[Lockfile] = None
         if lockfile_path:
             try:
                 lockfile = Lockfile.load(lockfile_path)
-                self._extended_lockfiles[package_name] = lockfile
                 logger.debug(f"Loaded lockfile from package '{package_name}': {lockfile_path}")
-                return lockfile
             except Exception as e:
                 logger.warning(f"Failed to load lockfile from package '{package_name}': {e}")
-                self._extended_lockfiles[package_name] = None
-                return None
-        else:
-            self._extended_lockfiles[package_name] = None
-            return None
+
+        # Second check (with lock) before writing to cache
+        with self._extended_lockfiles_lock:
+            if package_name not in self._extended_lockfiles:
+                self._extended_lockfiles[package_name] = lockfile
+            return self._extended_lockfiles[package_name]
 
     def resolve(self, alias_or_model: str, profile: Optional[str] = None) -> str:
         """
