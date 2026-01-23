@@ -332,3 +332,103 @@ class TestNamespacedAliasResolution:
 
         with pytest.raises(ValueError, match="non-empty components"):
             resolver.resolve("libA:")
+
+
+class TestNamespacedAliasEdgeCases:
+    """Edge case tests for lockfile composability."""
+
+    def test_concurrent_cache_access(self):
+        """Should handle concurrent access to _extended_lockfiles cache."""
+        import threading
+        from llmring.lockfile_core import ExtendsConfig
+
+        consumer_lockfile = Lockfile()
+        consumer_lockfile.extends = ExtendsConfig(packages=["llmring"])
+
+        resolver = AliasResolver(
+            lockfile=consumer_lockfile,
+            available_providers={"openai", "anthropic"},
+        )
+
+        errors = []
+        results = []
+
+        def resolve_alias():
+            try:
+                # Try to resolve - even if alias doesn't exist, the package loading happens
+                try:
+                    resolver.resolve("llmring:fast")
+                except ValueError:
+                    pass  # Alias may not exist, but loading should work
+                results.append("ok")
+            except Exception as e:
+                errors.append(str(e))
+
+        # Launch multiple threads concurrently
+        threads = [threading.Thread(target=resolve_alias) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # All threads should complete without errors
+        assert len(errors) == 0, f"Concurrent access errors: {errors}"
+        assert len(results) == 10
+
+    def test_namespaced_alias_with_profile(self, tmp_path):
+        """Should resolve namespaced alias with specific profile."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        # Create a package lockfile with profile-specific bindings
+        pkg_lockfile_path = tmp_path / "pkg" / "llmring.lock"
+        pkg_lockfile_path.parent.mkdir()
+        pkg_lockfile = Lockfile()
+        pkg_lockfile.set_binding("summarizer", "openai:gpt-4", profile="default")
+        pkg_lockfile.set_binding("summarizer", "anthropic:claude-3-sonnet-20240229", profile="dev")
+        pkg_lockfile.save(pkg_lockfile_path)
+
+        # Create consumer lockfile extending the package
+        consumer_lockfile = Lockfile()
+        consumer_lockfile.extends = ExtendsConfig(packages=["test_pkg"])
+
+        resolver = AliasResolver(
+            lockfile=consumer_lockfile,
+            available_providers={"openai", "anthropic"},
+        )
+
+        # Manually inject the package lockfile into cache for testing
+        resolver._extended_lockfiles["test_pkg"] = pkg_lockfile
+
+        # Resolve with default profile
+        result_default = resolver._resolve_namespaced_alias("test_pkg", "summarizer", profile="default")
+        assert result_default == "openai:gpt-4"
+
+        # Clear resolver cache to test profile-specific
+        resolver._cache.clear()
+
+        # Resolve with dev profile
+        result_dev = resolver._resolve_namespaced_alias("test_pkg", "summarizer", profile="dev")
+        assert result_dev == "anthropic:claude-3-sonnet-20240229"
+
+    def test_package_lockfile_with_no_matching_alias(self):
+        """Should return clear error when package lockfile has no matching alias."""
+        from llmring.lockfile_core import ExtendsConfig
+
+        # Create package lockfile with only one alias
+        pkg_lockfile = Lockfile()
+        pkg_lockfile.set_binding("existing_alias", "openai:gpt-4")
+
+        consumer_lockfile = Lockfile()
+        consumer_lockfile.extends = ExtendsConfig(packages=["test_pkg"])
+
+        resolver = AliasResolver(
+            lockfile=consumer_lockfile,
+            available_providers={"openai"},
+        )
+
+        # Inject the package lockfile
+        resolver._extended_lockfiles["test_pkg"] = pkg_lockfile
+
+        # Try to resolve non-existent alias
+        with pytest.raises(ValueError, match="not found.*Available aliases"):
+            resolver.resolve("test_pkg:nonexistent")
