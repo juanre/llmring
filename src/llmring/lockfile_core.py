@@ -551,6 +551,8 @@ class Lockfile(BaseModel):
     def _check_namespaced_alias(self, alias: str, profile: Optional[str]) -> Optional[str]:
         """Check if a namespaced alias exists and return error message if not.
 
+        Precondition: alias must contain ':' (enforced by caller in require_aliases).
+
         Args:
             alias: Namespaced alias like 'libA:summarizer'
             profile: Optional profile name
