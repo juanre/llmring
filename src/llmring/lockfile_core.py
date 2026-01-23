@@ -12,7 +12,8 @@ from typing import Any, Dict, List, Optional, Union
 import toml
 from pydantic import BaseModel, Field
 
-from llmring.constants import KNOWN_PROVIDERS, LOCKFILE_NAME, PROJECT_ROOT_INDICATORS
+from llmring.constants import LOCKFILE_NAME, PROJECT_ROOT_INDICATORS
+from llmring.utils import is_model_reference
 
 logger = logging.getLogger(__name__)
 
@@ -516,7 +517,7 @@ class Lockfile(BaseModel):
         missing_details = []
 
         for alias in required:
-            if ":" in alias and not self._is_model_reference(alias):
+            if ":" in alias and not is_model_reference(alias):
                 # Namespaced alias (e.g., libA:summarizer)
                 result = self._check_namespaced_alias(alias, profile)
                 if result:
@@ -540,13 +541,6 @@ class Lockfile(BaseModel):
             raise ValueError(
                 f"Missing required aliases{context_msg}{profile_msg}:\n{details}{path_msg}"
             )
-
-    def _is_model_reference(self, value: str) -> bool:
-        """Check if value looks like a provider:model reference."""
-        if ":" not in value:
-            return False
-        prefix = value.split(":", 1)[0].lower()
-        return prefix in KNOWN_PROVIDERS
 
     def _check_namespaced_alias(self, alias: str, profile: Optional[str]) -> Optional[str]:
         """Check if a namespaced alias exists and return error message if not.

@@ -7,9 +7,8 @@ from typing import Dict, Optional, Set, Tuple
 
 from cachetools import TTLCache
 
-from llmring.constants import KNOWN_PROVIDERS
 from llmring.lockfile_core import Lockfile, discover_package_lockfile
-from llmring.utils import parse_model_string
+from llmring.utils import is_model_reference, parse_model_string
 
 logger = logging.getLogger(__name__)
 
@@ -65,11 +64,11 @@ class AliasResolver:
         if ":" not in alias_or_model:
             return None
 
-        prefix, suffix = alias_or_model.split(":", 1)
-
-        # If prefix is a known provider, this is a model reference, not a namespaced alias
-        if prefix.lower() in KNOWN_PROVIDERS:
+        # If it's a model reference (known provider prefix), not a namespaced alias
+        if is_model_reference(alias_or_model):
             return None
+
+        prefix, suffix = alias_or_model.split(":", 1)
 
         # Check if the prefix is in extends.packages (if we have a lockfile)
         if self.lockfile and hasattr(self.lockfile, "extends"):

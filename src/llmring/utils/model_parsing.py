@@ -1,11 +1,43 @@
-"""Model string parsing utilities for provider:model format. Extracts provider and model names from qualified model strings."""
+"""Utilities for parsing and validating model reference strings.
 
+This module provides functions for the 'provider:model' format used throughout
+LLMRing, including parsing, validation, and distinguishing model references
+from namespaced aliases.
 """
-Utilities for parsing model reference strings.
 
-This module provides a centralized function for parsing the 'provider:model' format
-used throughout LLMRing, eliminating duplicate parsing logic.
-"""
+from llmring.constants import KNOWN_PROVIDERS
+
+
+def is_model_reference(value: str) -> bool:
+    """Check if value is a provider:model reference (vs namespace:alias).
+
+    Returns True for model references like "openai:gpt-4".
+    Returns False for namespaced aliases like "libA:summarizer".
+
+    Args:
+        value: String to check
+
+    Returns:
+        True if value starts with a known provider prefix (case-insensitive)
+
+    Examples:
+        >>> is_model_reference("openai:gpt-4")
+        True
+        >>> is_model_reference("OpenAI:gpt-4")  # Case insensitive
+        True
+        >>> is_model_reference("libA:summarizer")
+        False
+        >>> is_model_reference("fast")  # No colon
+        False
+        >>> is_model_reference("")  # Empty string
+        False
+        >>> is_model_reference("openai:gpt-4:extra")  # Multiple colons - checks first segment
+        True
+    """
+    if ":" not in value:
+        return False
+    prefix = value.split(":", 1)[0].lower()
+    return prefix in KNOWN_PROVIDERS
 
 
 def parse_model_string(model: str) -> tuple[str, str]:
