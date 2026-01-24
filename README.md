@@ -10,6 +10,7 @@ A Python library for LLM integration with unified interface and MCP support. Sup
 - Unified Structured Output: JSON schema works across all providers with automatic adaptation
 - Conversational Configuration: MCP chat interface for natural language lockfile setup
 - Aliases: Semantic aliases (`deep`, `fast`, `balanced`) with registry-based recommendations
+- Lockfile Composability: Extend lockfiles from other packages with namespaced aliases
 - Cost Tracking: Token usage and cost calculation
 - Registry Integration: Centralized model capabilities and pricing
 - Fallback Models: Automatic failover to alternative models
@@ -606,6 +607,7 @@ Key features:
 - Fallback models provide automatic failover
 - Cost analysis and recommendations
 - Environment-specific configurations for dev/staging/prod
+- **Lockfile composability**: Libraries can ship their own lockfiles, and users can extend them with `[extends]` to use namespaced aliases (`my-library:summarizer`) while keeping control of model selection
 
 ## Using LLMRing in Libraries
 
