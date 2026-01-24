@@ -67,72 +67,6 @@ async with LLMRing() as service:
     print(response.content)
 ```
 
-## Claude Code Skills
-
-LLMRing provides **expert guidance skills** for Claude Code that teach Claude how to work with the library effectively. When you use Claude Code with LLMRing, these skills automatically activate to provide:
-
-- ✅ Production-ready code examples
-- ✅ Best practices and patterns
-- ✅ Common pitfalls to avoid
-- ✅ Multi-provider integration guidance
-- ✅ Configuration and setup help
-
-**No manual needed** - just ask Claude naturally and the right skills load automatically!
-
-### Installation
-
-```bash
-# In Claude Code terminal, add the marketplace
-/plugin marketplace add juanre/ai-tools
-
-# Install all llmring skills (recommended)
-/plugin install llmring@juanre-ai-tools
-
-# Or install individual skills
-/plugin install llmring-chat@juanre-ai-tools
-/plugin install llmring-streaming@juanre-ai-tools
-```
-
-### Available Skills
-
-| Skill | Description | Install |
-|-------|-------------|---------|
-| `llmring` | All llmring skills (recommended) | `/plugin install llmring@juanre-ai-tools` |
-| `llmring-chat` | Basic chat completions | `/plugin install llmring-chat@juanre-ai-tools` |
-| `llmring-streaming` | Streaming responses | `/plugin install llmring-streaming@juanre-ai-tools` |
-| `llmring-tools` | Function calling and tool use | `/plugin install llmring-tools@juanre-ai-tools` |
-| `llmring-structured` | JSON schema and typed responses | `/plugin install llmring-structured@juanre-ai-tools` |
-| `llmring-lockfile` | Aliases, profiles, and configuration | `/plugin install llmring-lockfile@juanre-ai-tools` |
-| `llmring-providers` | Multi-provider switching and fallbacks | `/plugin install llmring-providers@juanre-ai-tools` |
-
-### How It Works
-
-**Example: Setting up streaming**
-
-**You ask:**
-> "Help me add streaming responses from OpenAI"
-
-**What happens:**
-1. Claude sees "streaming", "OpenAI"
-2. Automatically loads `llmring-streaming` skill
-3. Provides expert guidance with working code
-4. Shows you exactly what you need
-
-**Result:** Production-ready streaming implementation with best practices built-in!
-
-**Example: Configuring lockfiles**
-
-**You ask:**
-> "Set up model aliases for development and production"
-
-**What happens:**
-1. Claude sees "aliases", "development", "production"
-2. Loads `llmring-lockfile` skill
-3. Guides you through profiles and configuration
-4. Shows you how to use `llmring lock chat` for conversational setup
-
-**Result:** Complete lockfile configuration with environment-specific settings!
-
 ## Overview
 
 ### Streaming
@@ -1160,6 +1094,15 @@ response = await llm.chat([
   - [Quick Start](examples/quick_start.py) - Basic usage patterns
   - [MCP Chat](examples/mcp_chat_example.py) - MCP integration
   - [Streaming](examples/mcp_streaming_example.py) - Streaming with tools
+
+## Claude Code Skills
+
+LLMRing provides skills for Claude Code that activate automatically when you ask about streaming, lockfiles, tool calling, etc. Install with:
+
+```bash
+/plugin marketplace add juanre/ai-tools
+/plugin install llmring@juanre-ai-tools
+```
 
 ## Development
 
