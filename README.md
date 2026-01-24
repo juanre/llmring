@@ -67,6 +67,55 @@ async with LLMRing() as service:
     print(response.content)
 ```
 
+## Model Aliases and Lockfiles
+
+LLMRing uses lockfiles to map semantic aliases to models, with support for fallback pools and environment-specific profiles:
+
+```bash
+# Initialize lockfile (explicit creation at current directory)
+llmring lock init
+
+# Conversational configuration with AI advisor (recommended)
+llmring lock chat  # Natural language interface for lockfile management
+
+# View current aliases
+llmring aliases
+```
+
+**Lockfile Resolution Order:**
+1. Explicit path via `lockfile_path` parameter (file must exist)
+2. `LLMRING_LOCKFILE_PATH` environment variable (file must exist)
+3. `./llmring.lock` in current directory (if exists)
+4. Bundled lockfile at `src/llmring/llmring.lock` (minimal fallback with advisor alias)
+
+**Conversational Configuration** via `llmring lock chat`:
+- Describe your requirements in natural language
+- Get AI-powered recommendations based on registry analysis
+- Configure aliases with multiple fallback models
+- Understand cost implications and tradeoffs
+- Set up environment-specific profiles
+
+```python
+# Use semantic aliases (always current, with fallbacks)
+request = LLMRequest(
+    model="deep",      # → most capable reasoning model
+    messages=[Message(role="user", content="Hello")]
+)
+# Or use other aliases:
+# model="fast"      → cost-effective quick responses
+# model="balanced"  → optimal all-around model
+# model="advisor"   → Claude Opus 4.1 - powers conversational config
+```
+
+Key features:
+- Registry-based recommendations
+- Fallback models provide automatic failover
+- Cost analysis and recommendations
+- Environment-specific configurations for dev/staging/prod
+- **Lockfile composability**: Libraries can ship their own lockfiles, and users can extend them with `[extends]` to use namespaced aliases (`my-library:summarizer`) while keeping control of model selection
+
+See [Lockfile Documentation](docs/lockfile.md) for complete details.
+
 ## Overview
 
 ### Streaming
@@ -255,11 +304,11 @@ async with LLMRing() as service:
 
 **Provider Support:**
 
-| Provider | Lazy Upload | Use in Chat | Notes |
-|----------|-------------|-------------|-------|
-| **Anthropic** | ✅ On first use | ✅ Document blocks | 500MB limit, code execution |
-| **OpenAI** | ✅ On first use | ⚠️ Assistants only | 512MB limit, not in Chat Completions |
-| **Google** | ✅ On first use | ✅ Cached content | Text-only, TTL-based |
+| Provider      | Lazy Upload     | Use in Chat        | Notes                                |
+|---------------|-----------------|--------------------|--------------------------------------|
+| **Anthropic** | ✅ On first use | ✅ Document blocks | 500MB limit, code execution          |
+| **OpenAI**    | ✅ On first use | ⚠️ Assistants only  | 512MB limit, not in Chat Completions |
+| **Google**    | ✅ On first use | ✅ Cached content  | Text-only, TTL-based                 |
 
 See [File Registration Documentation](docs/file-uploads.md) for complete guide.
 
@@ -482,66 +531,6 @@ result = await agent.run("Hello")
 - ❌ Provider-specific frameworks
 
 ---
-
-## Feedback & Contributions
-
-Have a feature request or found a workaround we should document?
-- Open an issue: [github.com/juanre/llmring/issues](https://github.com/juanre/llmring/issues)
-- Contribute: [github.com/juanre/llmring/blob/main/CONTRIBUTING.md](https://github.com/juanre/llmring/blob/main/CONTRIBUTING.md)
-
-### Model Aliases and Lockfiles
-
-LLMRing uses lockfiles to map semantic aliases to models, with support for fallback pools and environment-specific profiles:
-
-```bash
-# Initialize lockfile (explicit creation at current directory)
-llmring lock init
-
-# Conversational configuration with AI advisor (recommended)
-llmring lock chat  # Natural language interface for lockfile management
-
-# View current aliases
-llmring aliases
-```
-
-**Lockfile Resolution Order:**
-1. Explicit path via `lockfile_path` parameter (file must exist)
-2. `LLMRING_LOCKFILE_PATH` environment variable (file must exist)
-3. `./llmring.lock` in current directory (if exists)
-4. Bundled lockfile at `src/llmring/llmring.lock` (minimal fallback with advisor alias)
-
-**Packaging Your Own Lockfile:**
-Libraries using LLMRing can ship with their own lockfiles. See [Lockfile Documentation](docs/lockfile.md) for details on:
-- Including lockfiles in your package distribution
-- Lockfile resolution order and precedence
-- Creating lockfiles with fallback models
-- Environment-specific profiles and configuration
-
-**Conversational Configuration** via `llmring lock chat`:
-- Describe your requirements in natural language
-- Get AI-powered recommendations based on registry analysis
-- Configure aliases with multiple fallback models
-- Understand cost implications and tradeoffs
-- Set up environment-specific profiles
-
-```python
-# Use semantic aliases (always current, with fallbacks)
-request = LLMRequest(
-    model="deep",      # → most capable reasoning model
-    messages=[Message(role="user", content="Hello")]
-)
-# Or use other aliases:
-# model="fast"      → cost-effective quick responses
-# model="balanced"  → optimal all-around model
-# model="advisor"   → Claude Opus 4.1 - powers conversational config
-```
-
-Key features:
-- Registry-based recommendations
-- Fallback models provide automatic failover
-- Cost analysis and recommendations
-- Environment-specific configurations for dev/staging/prod
-- **Lockfile composability**: Libraries can ship their own lockfiles, and users can extend them with `[extends]` to use namespaced aliases (`my-library:summarizer`) while keeping control of model selection
 
 ## Using LLMRing in Libraries
 
