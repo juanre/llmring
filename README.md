@@ -18,13 +18,9 @@ A Python library for LLM integration with unified interface and MCP support. Sup
 - MCP Integration: Model Context Protocol support for tool ecosystems
 - MCP Chat Client: Chat interface with persistent history for any MCP server
 
-## Quick Start
+## Getting Started
 
-### Requirements
-
-- Python 3.11 or higher
-
-### Installation
+### 1. Install
 
 ```bash
 # With uv (recommended)
@@ -34,85 +30,70 @@ uv add llmring
 pip install llmring
 ```
 
-**Including Lockfiles in Your Package:**
+Requires Python 3.11 or higher.
 
-To ship your `llmring.lock` with your package (like llmring does), add to your `pyproject.toml`:
+### 2. Set up API keys
 
-```toml
-[tool.hatch.build]
-include = [
-    "src/yourpackage/**/*.py",
-    "src/yourpackage/**/*.lock",  # Include lockfiles
-]
+```bash
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+# Add whichever providers you want to use
 ```
 
-### Basic Usage
+### 3. Create a lockfile
+
+LLMRing uses lockfiles to map semantic aliases (like `fast`, `deep`, `balanced`) to actual models. Create one interactively:
+
+```bash
+llmring lock chat
+```
+
+This starts a conversation where you describe your needs and get AI-powered recommendations. Or create a minimal lockfile manually:
+
+```bash
+llmring lock init
+```
+
+View your configured aliases:
+
+```bash
+llmring aliases
+```
+
+### 4. Use it
 
 ```python
 from llmring.service import LLMRing
 from llmring.schemas import LLMRequest, Message
 
-# Initialize service with context manager (auto-closes resources)
 async with LLMRing() as service:
-    # Simple chat
     request = LLMRequest(
-        model="fast",
+        model="fast",  # Uses your lockfile alias
         messages=[
-            Message(role="system", content="You are a helpful assistant."),
             Message(role="user", content="Hello!")
         ]
     )
-
     response = await service.chat(request)
     print(response.content)
 ```
 
+The alias `fast` resolves to whatever model you configured in your lockfile. Change models by editing the lockfile, not your code.
+
 ## Model Aliases and Lockfiles
 
-LLMRing uses lockfiles to map semantic aliases to models, with support for fallback pools and environment-specific profiles:
+Lockfiles let you:
+- Use semantic aliases (`fast`, `deep`, `balanced`) instead of model IDs
+- Configure fallback models for automatic failover
+- Set up environment-specific profiles (dev/staging/prod)
+- Share configurations across projects
 
-```bash
-# Initialize lockfile (explicit creation at current directory)
-llmring lock init
+**Lockfile resolution order:**
+1. Explicit `lockfile_path` parameter
+2. `LLMRING_LOCKFILE_PATH` environment variable
+3. `./llmring.lock` in current directory
+4. Bundled fallback lockfile
 
-# Conversational configuration with AI advisor (recommended)
-llmring lock chat  # Natural language interface for lockfile management
-
-# View current aliases
-llmring aliases
-```
-
-**Lockfile Resolution Order:**
-1. Explicit path via `lockfile_path` parameter (file must exist)
-2. `LLMRING_LOCKFILE_PATH` environment variable (file must exist)
-3. `./llmring.lock` in current directory (if exists)
-4. Bundled lockfile at `src/llmring/llmring.lock` (minimal fallback with advisor alias)
-
-**Conversational Configuration** via `llmring lock chat`:
-- Describe your requirements in natural language
-- Get AI-powered recommendations based on registry analysis
-- Configure aliases with multiple fallback models
-- Understand cost implications and tradeoffs
-- Set up environment-specific profiles
-
-```python
-# Use semantic aliases (always current, with fallbacks)
-request = LLMRequest(
-    model="deep",      # → most capable reasoning model
-    messages=[Message(role="user", content="Hello")]
-)
-# Or use other aliases:
-# model="fast"      → cost-effective quick responses
-# model="balanced"  → optimal all-around model
-# model="advisor"   → Claude Opus 4.1 - powers conversational config
-```
-
-Key features:
-- Registry-based recommendations
-- Fallback models provide automatic failover
-- Cost analysis and recommendations
-- Environment-specific configurations for dev/staging/prod
-- **Lockfile composability**: Libraries can ship their own lockfiles, and users can extend them with `[extends]` to use namespaced aliases (`my-library:summarizer`) while keeping control of model selection
+**Lockfile composability**: Libraries can ship their own lockfiles, and users can extend them with `[extends]` to use namespaced aliases (`my-library:summarizer`) while keeping control of model selection.
 
 See [Lockfile Documentation](docs/lockfile.md) for complete details.
 
