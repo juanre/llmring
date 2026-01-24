@@ -580,6 +580,14 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
             accumulated_content = ""
             accumulated_tool_calls = {}
 
+            # OpenAI streaming behavior with include_usage=True:
+            # 1. Content chunks arrive with delta.content
+            # 2. A chunk with finish_reason signals end of content
+            # 3. A SEPARATE final chunk arrives with usage data (after finish_reason)
+            # 4. This final usage chunk has empty choices[] array
+            #
+            # We must capture usage regardless of choices[] and yield it AFTER
+            # the stream completes to ensure we don't lose usage data.
             final_usage = None
             final_finish_reason = None
             final_tool_calls = None
