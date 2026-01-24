@@ -1256,6 +1256,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 )
             except Exception:
                 await self._error_handler.handle_error(e, model)
+                raise  # unreachable - handle_error always raises
 
         # Extract text
         content_text: str
@@ -1603,6 +1604,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         except Exception as e:
             await self._error_handler.handle_error(e, model)
+            raise  # unreachable - handle_error always raises
 
     async def upload_file(
         self,
@@ -1713,6 +1715,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         except Exception as e:
             await self._error_handler.handle_error(e, "files")
+            raise  # unreachable - handle_error always raises
 
     async def list_files(
         self, purpose: Optional[str] = None, limit: int = 100
@@ -1774,6 +1777,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         except Exception as e:
             await self._error_handler.handle_error(e, "files")
+            raise  # unreachable - handle_error always raises
 
     async def get_file(self, file_id: str) -> FileMetadata:
         """
@@ -1812,6 +1816,7 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         except Exception as e:
             await self._error_handler.handle_error(e, "files")
+            raise  # unreachable - handle_error always raises
 
     async def delete_file(self, file_id: str) -> bool:
         """
@@ -1829,3 +1834,4 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
 
         except Exception as e:
             await self._error_handler.handle_error(e, "files")
+            raise  # unreachable - handle_error always raises
