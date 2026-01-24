@@ -1,20 +1,22 @@
-# Pre-commit hooks for automatic code formatting
-# See https://pre-commit.com for more information
+# Pre-commit hooks for code quality
+# Run `pre-commit install` to set up, then hooks run on every commit
+# Run `pre-commit install --hook-type pre-push` for pre-push hooks
 repos:
-  # Black - Python code formatter
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
+  # Ruff - fast Python linter and formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
     hooks:
-      - id: black
-        language_version: python3
-        args: ['--config=pyproject.toml']
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
 
-  # isort - Python import sorter
-  - repo: https://github.com/PyCQA/isort
-    rev: 5.13.2
+  # Pyright - static type checker
+  - repo: https://github.com/RobertCraiworthy/mirrors-pyright
+    rev: v1.1.391
     hooks:
-      - id: isort
-        args: ['--settings-path=pyproject.toml']
+      - id: pyright
+        additional_dependencies: []
+        args: [src/llmring/]
 
   # Basic file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -31,9 +33,5 @@ repos:
       - id: mixed-line-ending
         args: ['--fix=lf']
 
-# Configuration
 default_stages: [pre-commit]
 fail_fast: false
-
-# Note: Run `uv run ruff check .` manually for linting
-# Or `uv run ruff check --fix .` to auto-fix issues
