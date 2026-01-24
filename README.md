@@ -19,6 +19,10 @@ A Python library for LLM integration with unified interface and MCP support. Sup
 
 ## Quick Start
 
+### Requirements
+
+- Python 3.11 or higher
+
 ### Installation
 
 ```bash
@@ -849,6 +853,10 @@ This allows:
 - Libraries define their required aliases
 - Users control which models are used via namespaced aliases (`my-library:summarizer`)
 - Users can override specific aliases while keeping library defaults
+
+**Important notes:**
+- Extends are **not recursive**: If `libA` extends `libCore`, extending `libA` does not include `libCore`'s aliases
+- Only extend packages you trust, as package discovery may execute import hooks
 
 Validate the setup with:
 
