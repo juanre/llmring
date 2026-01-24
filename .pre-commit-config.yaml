@@ -1,24 +1,5 @@
-# Pre-commit hooks for code quality
-# Run `pre-commit install` to set up, then hooks run on every commit
-# Run `pre-commit install --hook-type pre-push` for pre-push hooks
+# See https://pre-commit.com for more information
 repos:
-  # Ruff - fast Python linter and formatter
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-
-  # Pyright - static type checker
-  - repo: https://github.com/RobertCraiworthy/mirrors-pyright
-    rev: v1.1.391
-    hooks:
-      - id: pyright
-        additional_dependencies: []
-        args: [src/llmring/]
-
-  # Basic file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -30,8 +11,37 @@ repos:
       - id: check-json
       - id: check-toml
       - id: check-merge-conflict
+      - id: debug-statements
+      - id: detect-private-key
       - id: mixed-line-ending
         args: ['--fix=lf']
 
-default_stages: [pre-commit]
-fail_fast: false
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        language_version: python3
+        args: ['--config=pyproject.toml']
+
+  - repo: https://github.com/pycqa/isort
+    rev: 6.0.1
+    hooks:
+      - id: isort
+        args: ['--settings-path=pyproject.toml']
+
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.12.5
+    hooks:
+      - id: ruff
+        args: ['--fix', '--exit-non-zero-on-fix']
+
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: uv run pyright src/llmring/
+        language: system
+        types: [python]
+        pass_filenames: false
+
+default_stages: [pre-push]
