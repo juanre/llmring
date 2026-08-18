@@ -29,18 +29,23 @@ def count_tokens_openai(messages: List[Dict[str, Any]], model: str) -> int:
         logger.warning("tiktoken not installed, using character estimation")
         return _estimate_tokens_from_messages(messages)
 
-    # Select encoding for the model
+    # Select encoding for the model.
+    # o200k_base covers gpt-4o and every model released after it (gpt-4.1,
+    # gpt-5*, o1/o3/o4). cl100k_base is only correct for gpt-4 (non-o) and
+    # gpt-3.5. Defaulting unknown models to cl100k_base mis-tokenised every
+    # current OpenAI model, so the default is now o200k_base.
     try:
         if "gpt-4o" in model:
             encoding = tiktoken.get_encoding("o200k_base")
-        elif "gpt-4" in model:
-            encoding = tiktoken.get_encoding("cl100k_base")
         elif "gpt-3.5" in model:
             encoding = tiktoken.get_encoding("cl100k_base")
+        elif model.startswith("gpt-4") and not model.startswith("gpt-4."):
+            # Original gpt-4 / gpt-4-turbo family
+            encoding = tiktoken.get_encoding("cl100k_base")
         else:
-            encoding = tiktoken.get_encoding("cl100k_base")  # Default
+            encoding = tiktoken.get_encoding("o200k_base")  # Default: current models
     except Exception:
-        encoding = tiktoken.get_encoding("cl100k_base")
+        encoding = tiktoken.get_encoding("o200k_base")
 
     # Cache the encoding
     _tokenizer_cache[f"openai_{model}"] = encoding
