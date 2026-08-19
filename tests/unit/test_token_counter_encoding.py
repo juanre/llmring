@@ -7,9 +7,12 @@ uses o200k_base; only the original gpt-4 family and gpt-3.5 use cl100k_base.
 
 import pytest
 
-tiktoken = pytest.importorskip("tiktoken")
-
 from llmring.token_counter import count_tokens_openai
+
+# token_counter imports tiktoken lazily inside its functions, so importing the
+# module above is safe without it; only the expectations below need the real
+# encodings.
+tiktoken = pytest.importorskip("tiktoken")
 
 # Long enough that the two encodings disagree on the token count.
 TEXT = (

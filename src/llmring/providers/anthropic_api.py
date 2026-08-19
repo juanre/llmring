@@ -81,15 +81,10 @@ def build_usage_dict(usage: Any) -> Dict[str, Any]:
     cache_creation_detail = getattr(usage, "cache_creation", None)
     if cache_creation_detail:
         if hasattr(cache_creation_detail, "ephemeral_5m_input_tokens"):
-            usage_dict["cache_creation_5m_tokens"] = (
-                cache_creation_detail.ephemeral_5m_input_tokens
-            )
+            usage_dict["cache_creation_5m_tokens"] = cache_creation_detail.ephemeral_5m_input_tokens
         if hasattr(cache_creation_detail, "ephemeral_1h_input_tokens"):
-            usage_dict["cache_creation_1h_tokens"] = (
-                cache_creation_detail.ephemeral_1h_input_tokens
-            )
+            usage_dict["cache_creation_1h_tokens"] = cache_creation_detail.ephemeral_1h_input_tokens
     return usage_dict
-
 
 
 class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggingMixin):

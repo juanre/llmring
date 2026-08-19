@@ -24,12 +24,18 @@ from llmring.services.cost_calculator import (
 USAGE = {"prompt_tokens": 2000, "completion_tokens": 150, "total_tokens": 2150}
 
 PRICED = RegistryModel(
-    provider="anthropic", model_name="m", display_name="m",
-    dollars_per_million_tokens_input=3.0, dollars_per_million_tokens_output=15.0,
+    provider="anthropic",
+    model_name="m",
+    display_name="m",
+    dollars_per_million_tokens_input=3.0,
+    dollars_per_million_tokens_output=15.0,
 )
 UNPRICED = RegistryModel(
-    provider="anthropic", model_name="m", display_name="m",
-    dollars_per_million_tokens_input=None, dollars_per_million_tokens_output=None,
+    provider="anthropic",
+    model_name="m",
+    display_name="m",
+    dollars_per_million_tokens_input=None,
+    dollars_per_million_tokens_output=None,
 )
 
 
@@ -79,6 +85,7 @@ async def test_calculate_cost_still_returns_just_the_cost():
 # strict mode, through the real chat() path
 # --------------------------------------------------------------------------
 
+
 class _StubProvider:
     """Returns a fixed response with usage but for a model nobody prices."""
 
@@ -86,9 +93,7 @@ class _StubProvider:
         self.model = model
 
     async def chat(self, **kwargs):
-        return LLMResponse(
-            content="ok", model=self.model, usage=dict(USAGE), finish_reason="stop"
-        )
+        return LLMResponse(content="ok", model=self.model, usage=dict(USAGE), finish_reason="stop")
 
     async def get_default_model(self):
         return self.model
@@ -106,8 +111,7 @@ def _ring_with_stub(**kw):
 @pytest.mark.asyncio
 async def test_unpriced_call_records_status_and_warns(caplog):
     ring = _ring_with_stub()
-    req = LLMRequest(model="stub:ghost-model-9000",
-                     messages=[Message(role="user", content="hi")])
+    req = LLMRequest(model="stub:ghost-model-9000", messages=[Message(role="user", content="hi")])
     with caplog.at_level(logging.WARNING):
         resp = await ring.chat(req)
     assert resp.usage["cost_status"] == COST_STATUS_MODEL_NOT_IN_REGISTRY
@@ -119,8 +123,7 @@ async def test_unpriced_call_records_status_and_warns(caplog):
 @pytest.mark.asyncio
 async def test_strict_mode_raises_instead_of_recording_a_silent_zero():
     ring = _ring_with_stub(strict_cost=True)
-    req = LLMRequest(model="stub:ghost-model-9000",
-                     messages=[Message(role="user", content="hi")])
+    req = LLMRequest(model="stub:ghost-model-9000", messages=[Message(role="user", content="hi")])
     with pytest.raises(CostTrackingError) as exc:
         await ring.chat(req)
     assert exc.value.cost_status == COST_STATUS_MODEL_NOT_IN_REGISTRY

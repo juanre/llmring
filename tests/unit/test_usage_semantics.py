@@ -51,13 +51,18 @@ GPT5_MINI = RegistryModel(
 # Anthropic
 # --------------------------------------------------------------------------
 
+
 def test_anthropic_prompt_tokens_include_cache_reads():
     """input_tokens excludes cache reads, so we must add them back."""
     usage = build_usage_dict(
-        _Obj(input_tokens=1500, output_tokens=150, cache_read_input_tokens=8000,
-             cache_creation_input_tokens=0)
+        _Obj(
+            input_tokens=1500,
+            output_tokens=150,
+            cache_read_input_tokens=8000,
+            cache_creation_input_tokens=0,
+        )
     )
-    assert usage["prompt_tokens"] == 9500          # 1500 fresh + 8000 cache reads
+    assert usage["prompt_tokens"] == 9500  # 1500 fresh + 8000 cache reads
     assert usage["cache_read_input_tokens"] == 8000
     assert usage["input_tokens_uncached"] == 1500  # provider's raw figure preserved
 
@@ -66,8 +71,12 @@ def test_anthropic_cache_writes_are_not_folded_into_prompt_tokens():
     """Cache-creation tokens bill at the write rate; counting them in
     prompt_tokens too would bill them twice."""
     usage = build_usage_dict(
-        _Obj(input_tokens=1000, output_tokens=50, cache_read_input_tokens=0,
-             cache_creation_input_tokens=4000)
+        _Obj(
+            input_tokens=1000,
+            output_tokens=50,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=4000,
+        )
     )
     assert usage["prompt_tokens"] == 1000
     assert usage["cache_creation_input_tokens"] == 4000
@@ -77,8 +86,12 @@ def test_anthropic_cache_writes_are_not_folded_into_prompt_tokens():
 @pytest.mark.asyncio
 async def test_anthropic_cached_call_costs_the_published_amount():
     usage = build_usage_dict(
-        _Obj(input_tokens=1500, output_tokens=150, cache_read_input_tokens=8000,
-             cache_creation_input_tokens=0)
+        _Obj(
+            input_tokens=1500,
+            output_tokens=150,
+            cache_read_input_tokens=8000,
+            cache_creation_input_tokens=0,
+        )
     )
     got = await CostCalculator(registry=None).calculate_cost(
         LLMResponse(content="", model="anthropic:claude-sonnet-4-5-20250929", usage=usage),
@@ -93,10 +106,13 @@ async def test_anthropic_cached_call_costs_the_published_amount():
 @pytest.mark.asyncio
 async def test_anthropic_cache_write_billed_at_write_rate_not_twice():
     usage = build_usage_dict(
-        _Obj(input_tokens=1000, output_tokens=50, cache_read_input_tokens=0,
-             cache_creation_input_tokens=4000,
-             cache_creation=_Obj(ephemeral_5m_input_tokens=4000,
-                                 ephemeral_1h_input_tokens=0))
+        _Obj(
+            input_tokens=1000,
+            output_tokens=50,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=4000,
+            cache_creation=_Obj(ephemeral_5m_input_tokens=4000, ephemeral_1h_input_tokens=0),
+        )
     )
     got = await CostCalculator(registry=None).calculate_cost(
         LLMResponse(content="", model="anthropic:claude-sonnet-4-5-20250929", usage=usage),
@@ -110,11 +126,16 @@ async def test_anthropic_cache_write_billed_at_write_rate_not_twice():
 # OpenAI
 # --------------------------------------------------------------------------
 
+
 def test_openai_cached_tokens_are_surfaced():
     mapped = OpenAIProvider._map_responses_usage(
         None,
-        _Obj(prompt_tokens=9500, completion_tokens=150, total_tokens=9650,
-             prompt_tokens_details=_Obj(cached_tokens=8000)),
+        _Obj(
+            prompt_tokens=9500,
+            completion_tokens=150,
+            total_tokens=9650,
+            prompt_tokens_details=_Obj(cached_tokens=8000),
+        ),
     )
     assert mapped["cached_tokens"] == 8000
     # OpenAI already counts cached tokens inside prompt_tokens - do not add them again.
@@ -124,8 +145,12 @@ def test_openai_cached_tokens_are_surfaced():
 def test_openai_reasoning_tokens_are_surfaced():
     mapped = OpenAIProvider._map_responses_usage(
         None,
-        _Obj(prompt_tokens=100, completion_tokens=900, total_tokens=1000,
-             completion_tokens_details=_Obj(reasoning_tokens=800)),
+        _Obj(
+            prompt_tokens=100,
+            completion_tokens=900,
+            total_tokens=1000,
+            completion_tokens_details=_Obj(reasoning_tokens=800),
+        ),
     )
     assert mapped["reasoning_tokens"] == 800
 
@@ -141,8 +166,12 @@ def test_openai_usage_without_details_still_maps():
 async def test_openai_cached_call_costs_the_published_amount():
     mapped = OpenAIProvider._map_responses_usage(
         None,
-        _Obj(prompt_tokens=9500, completion_tokens=150, total_tokens=9650,
-             prompt_tokens_details=_Obj(cached_tokens=8000)),
+        _Obj(
+            prompt_tokens=9500,
+            completion_tokens=150,
+            total_tokens=9650,
+            prompt_tokens_details=_Obj(cached_tokens=8000),
+        ),
     )
     got = await CostCalculator(registry=None).calculate_cost(
         LLMResponse(content="", model="openai:gpt-5-mini", usage=mapped),
@@ -158,13 +187,21 @@ async def test_the_two_providers_agree_on_an_identical_billing_situation():
     native convention, must produce the same cost. This is the invariant the
     old code violated in opposite directions."""
     anthropic_usage = build_usage_dict(
-        _Obj(input_tokens=1500, output_tokens=150, cache_read_input_tokens=8000,
-             cache_creation_input_tokens=0)
+        _Obj(
+            input_tokens=1500,
+            output_tokens=150,
+            cache_read_input_tokens=8000,
+            cache_creation_input_tokens=0,
+        )
     )
     openai_usage = OpenAIProvider._map_responses_usage(
         None,
-        _Obj(prompt_tokens=9500, completion_tokens=150, total_tokens=9650,
-             prompt_tokens_details=_Obj(cached_tokens=8000)),
+        _Obj(
+            prompt_tokens=9500,
+            completion_tokens=150,
+            total_tokens=9650,
+            prompt_tokens_details=_Obj(cached_tokens=8000),
+        ),
     )
     assert anthropic_usage["prompt_tokens"] == openai_usage["prompt_tokens"] == 9500
 
@@ -178,7 +215,9 @@ async def test_the_two_providers_agree_on_an_identical_billing_situation():
     o_model = RegistryModel(provider="openai", model_name="m", display_name="m", **same_rates)
     calc = CostCalculator(registry=None)
     a = await calc.calculate_cost(
-        LLMResponse(content="", model="anthropic:m", usage=anthropic_usage), registry_model=a_model)
+        LLMResponse(content="", model="anthropic:m", usage=anthropic_usage), registry_model=a_model
+    )
     o = await calc.calculate_cost(
-        LLMResponse(content="", model="openai:m", usage=openai_usage), registry_model=o_model)
+        LLMResponse(content="", model="openai:m", usage=openai_usage), registry_model=o_model
+    )
     assert a["total_cost"] == pytest.approx(o["total_cost"], rel=1e-9)

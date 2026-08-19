@@ -87,6 +87,7 @@ async def test_explicit_temperature_is_passed_through():
 # error classification
 # --------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "message,expected_unknown_model",
     [
@@ -104,7 +105,5 @@ async def test_explicit_temperature_is_passed_through():
         ("invalid model", True),
     ],
 )
-def test_only_real_missing_model_errors_are_classified_as_such(
-    message, expected_unknown_model
-):
+def test_only_real_missing_model_errors_are_classified_as_such(message, expected_unknown_model):
     assert ProviderErrorHandler._mentions_unknown_model(message) is expected_unknown_model

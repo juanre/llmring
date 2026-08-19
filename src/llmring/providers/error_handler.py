@@ -252,14 +252,11 @@ class ProviderErrorHandler:
             # "`temperature` is deprecated for this model", which surfaced as
             # "Model 'claude-sonnet-5' not available" and sent a reviewer
             # chasing a nonexistent model problem during an outage test.
-            if self.provider_name == "anthropic" and self._mentions_unknown_model(
-                str(exception)
-            ):
+            if self.provider_name == "anthropic" and self._mentions_unknown_model(str(exception)):
                 return "model_not_found"
             return "bad_request"
 
         return None
-
 
     @staticmethod
     def _mentions_unknown_model(message: str) -> bool:

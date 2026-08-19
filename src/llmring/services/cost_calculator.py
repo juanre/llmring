@@ -1,7 +1,7 @@
 """Cost calculation service for token usage across providers. Calculates costs using registry pricing data and token counts."""
 
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from llmring.registry import RegistryClient, RegistryModel
 from llmring.schemas import LLMResponse
@@ -121,8 +121,10 @@ class CostCalculator:
         model_name: str,
     ) -> Dict[str, float]:
         """Price a response whose usage and registry pricing are already validated."""
-        # Extract token counts
-        usage = response.usage
+        # Extract token counts. calculate_cost_detailed has already established
+        # that usage is present; bind a non-Optional local so this method is also
+        # sound on its own terms rather than relying on its caller.
+        usage: Dict[str, Any] = response.usage or {}
         prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
         completion_tokens = int(usage.get("completion_tokens", 0) or 0)
 

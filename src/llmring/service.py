@@ -723,9 +723,7 @@ class LLMRing:
 
                 cost_info = None
                 if response.usage:
-                    registry_model = await self._get_registry_model_for(
-                        provider_type, model_name
-                    )
+                    registry_model = await self._get_registry_model_for(provider_type, model_name)
                     (
                         cost_info,
                         cost_status,
@@ -741,9 +739,7 @@ class LLMRing:
                             f"Calculated cost for {provider_type}:{model_name}: ${cost_info['total_cost']:.6f}"
                         )
                     else:
-                        self._handle_unpriced_call(
-                            f"{provider_type}:{model_name}", cost_status
-                        )
+                        self._handle_unpriced_call(f"{provider_type}:{model_name}", cost_status)
 
                 if self.logging_service:
                     await self.logging_service.log_request_response(
