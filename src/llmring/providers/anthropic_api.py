@@ -39,6 +39,59 @@ from llmring.utils import strip_provider_prefix
 logger = logging.getLogger(__name__)
 
 
+def build_usage_dict(usage: Any) -> Dict[str, Any]:
+    """Normalise an Anthropic usage object into llmring's provider-neutral shape.
+
+    Anthropic reports ``input_tokens`` EXCLUDING both ``cache_read_input_tokens``
+    and ``cache_creation_input_tokens``; the true input total is the sum of all
+    three. OpenAI, by contrast, reports ``prompt_tokens`` INCLUDING cached reads.
+
+    llmring's cost calculator assumes the OpenAI convention: it computes
+    ``prompt_tokens - cache_read_tokens`` to get the tokens billed at the base
+    input rate. Passing Anthropic's raw ``input_tokens`` through made that
+    subtraction remove tokens that were never included, so fresh input tokens
+    were billed as zero and the call was under-costed.
+
+    We therefore set ``prompt_tokens = input_tokens + cache_read_input_tokens``.
+    Cache-creation tokens are deliberately NOT folded in: they are billed
+    separately at the cache-write rate, and including them here would bill them
+    twice. The provider's raw figure is preserved as ``input_tokens_uncached``.
+    """
+    input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+    output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+    cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+    cache_creation = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+
+    billable_input = input_tokens + cache_read
+
+    usage_dict: Dict[str, Any] = {
+        "prompt_tokens": billable_input,
+        "completion_tokens": output_tokens,
+        # Total of everything the provider counted, cache writes included.
+        "total_tokens": input_tokens + cache_read + cache_creation + output_tokens,
+        # Anthropic's raw input_tokens, kept for traceability.
+        "input_tokens_uncached": input_tokens,
+    }
+
+    if hasattr(usage, "cache_creation_input_tokens"):
+        usage_dict["cache_creation_input_tokens"] = cache_creation
+    if hasattr(usage, "cache_read_input_tokens"):
+        usage_dict["cache_read_input_tokens"] = cache_read
+
+    cache_creation_detail = getattr(usage, "cache_creation", None)
+    if cache_creation_detail:
+        if hasattr(cache_creation_detail, "ephemeral_5m_input_tokens"):
+            usage_dict["cache_creation_5m_tokens"] = (
+                cache_creation_detail.ephemeral_5m_input_tokens
+            )
+        if hasattr(cache_creation_detail, "ephemeral_1h_input_tokens"):
+            usage_dict["cache_creation_1h_tokens"] = (
+                cache_creation_detail.ephemeral_1h_input_tokens
+            )
+    return usage_dict
+
+
+
 class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggingMixin):
     """Implementation of Anthropic Claude API provider using the official SDK."""
 
@@ -388,20 +441,7 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                 elif event.type == "message_delta":
                     # Final event with usage information
                     if hasattr(event, "usage"):
-                        usage_dict = {
-                            "prompt_tokens": event.usage.input_tokens,
-                            "completion_tokens": event.usage.output_tokens,
-                            "total_tokens": event.usage.input_tokens + event.usage.output_tokens,
-                        }
-                        # Add cache-related usage if available
-                        if hasattr(event.usage, "cache_creation_input_tokens"):
-                            usage_dict["cache_creation_input_tokens"] = (
-                                event.usage.cache_creation_input_tokens
-                            )
-                        if hasattr(event.usage, "cache_read_input_tokens"):
-                            usage_dict["cache_read_input_tokens"] = (
-                                event.usage.cache_read_input_tokens
-                            )
+                        usage_dict = build_usage_dict(event.usage)
 
                         yield StreamChunk(
                             delta="",
@@ -764,27 +804,8 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
                     }
                 )
 
-        # Prepare the response with cache-aware usage
-        usage_dict: Dict[str, Any] = {
-            "prompt_tokens": int(response.usage.input_tokens),
-            "completion_tokens": int(response.usage.output_tokens),
-            "total_tokens": int(response.usage.input_tokens + response.usage.output_tokens),
-        }
-
-        # Add cache-related usage if available
-        # The Anthropic SDK returns these as separate fields
-        if hasattr(response.usage, "cache_creation_input_tokens"):
-            usage_dict["cache_creation_input_tokens"] = response.usage.cache_creation_input_tokens
-        if hasattr(response.usage, "cache_read_input_tokens"):
-            usage_dict["cache_read_input_tokens"] = response.usage.cache_read_input_tokens
-
-        # Also check for cache_creation detail object which has ephemeral token info
-        if hasattr(response.usage, "cache_creation") and response.usage.cache_creation:
-            cache_creation = response.usage.cache_creation
-            if hasattr(cache_creation, "ephemeral_5m_input_tokens"):
-                usage_dict["cache_creation_5m_tokens"] = cache_creation.ephemeral_5m_input_tokens
-            if hasattr(cache_creation, "ephemeral_1h_input_tokens"):
-                usage_dict["cache_creation_1h_tokens"] = cache_creation.ephemeral_1h_input_tokens
+        # Prepare the response with cache-aware usage (see build_usage_dict)
+        usage_dict: Dict[str, Any] = build_usage_dict(response.usage)
 
         llm_response = LLMResponse(
             content=content.strip() if content else "",

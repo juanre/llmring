@@ -1030,11 +1030,46 @@ class OpenAIProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLoggin
                 prompt_tokens is not None or completion_tokens is not None
             ):
                 total_tokens = (prompt_tokens or 0) + (completion_tokens or 0)
-            return {
+            mapped: Dict[str, Any] = {
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": total_tokens,
             }
+
+            # Cached prompt tokens. OpenAI nests these under
+            # prompt_tokens_details.cached_tokens (Chat) or
+            # input_tokens_details.cached_tokens (Responses). Dropping them made
+            # the cost calculator bill every cache hit at the full input rate,
+            # overstating cost by up to ~3x on cache-heavy workloads.
+            # Note: OpenAI's prompt_tokens ALREADY includes these, so the
+            # calculator subtracts them to find the non-cached remainder.
+            for details_attr in ("prompt_tokens_details", "input_tokens_details"):
+                details = getattr(usage_obj, details_attr, None)
+                if details is None:
+                    continue
+                cached = getattr(details, "cached_tokens", None)
+                if cached is None and isinstance(details, dict):
+                    cached = details.get("cached_tokens")
+                if cached is not None:
+                    mapped["cached_tokens"] = int(cached)
+                    break
+
+            # Reasoning tokens (o-series, gpt-5). Already counted inside
+            # completion_tokens and billed at the output rate; surfaced for
+            # visibility and so the calculator can price a distinct thinking
+            # rate when the registry publishes one.
+            for details_attr in ("completion_tokens_details", "output_tokens_details"):
+                details = getattr(usage_obj, details_attr, None)
+                if details is None:
+                    continue
+                reasoning = getattr(details, "reasoning_tokens", None)
+                if reasoning is None and isinstance(details, dict):
+                    reasoning = details.get("reasoning_tokens")
+                if reasoning is not None:
+                    mapped["reasoning_tokens"] = int(reasoning)
+                    break
+
+            return mapped
         except Exception:
             return None
 
