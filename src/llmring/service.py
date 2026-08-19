@@ -17,6 +17,7 @@ from llmring.base import (
 )
 from llmring.constants import LOCKFILE_NAME
 from llmring.exceptions import (
+    CostTrackingError,
     ModelNotFoundError,
     ProviderAuthenticationError,
     ProviderError,
@@ -33,7 +34,10 @@ from llmring.providers.openai_api import OpenAIProvider
 from llmring.registry import RegistryClient, RegistryModel
 from llmring.schemas import LLMRequest, LLMResponse, ProviderFileUpload, RegisteredFile, StreamChunk
 from llmring.services.alias_resolver import AliasResolver
-from llmring.services.cost_calculator import CostCalculator
+from llmring.services.cost_calculator import (
+    COST_STATUS_NO_USAGE,
+    CostCalculator,
+)
 from llmring.services.logging_service import LoggingService
 from llmring.services.schema_adapter import SchemaAdapter
 from llmring.services.validation_service import ValidationService
@@ -69,6 +73,7 @@ class LLMRing:
         alias_cache_size: int = 100,
         alias_cache_ttl: int = 3600,
         timeout: TimeoutSetting = TIMEOUT_UNSET,
+        strict_cost: bool = False,
     ):
         """
         Initialize the LLM service.
@@ -84,6 +89,10 @@ class LLMRing:
             alias_cache_size: Maximum number of cached alias resolutions (default: 100)
             alias_cache_ttl: TTL for alias cache entries in seconds (default: 3600)
             timeout: Default timeout in seconds for all requests (None disables; defaults to env or 60s)
+            strict_cost: Raise CostTrackingError when a call's cost cannot be
+                determined, instead of silently recording no cost. Also settable
+                with LLMRING_STRICT_COST=1. Recommended for metered batch jobs,
+                where a silent zero is indistinguishable from a free call.
         """
         self.origin = origin
         self.providers: Dict[str, BaseLLMProvider] = {}
@@ -141,6 +150,7 @@ class LLMRing:
 
         # Cost calculator service
         self._cost_calculator = CostCalculator(self.registry)
+        self.strict_cost = strict_cost or _env_flag_enabled(os.getenv("LLMRING_STRICT_COST"))
 
         # Validation service
         self._validation_service = ValidationService(self.registry)
@@ -713,11 +723,26 @@ class LLMRing:
 
                 cost_info = None
                 if response.usage:
-                    cost_info = await self.calculate_cost(response)
+                    registry_model = await self._get_registry_model_for(
+                        provider_type, model_name
+                    )
+                    (
+                        cost_info,
+                        cost_status,
+                    ) = await self._cost_calculator.calculate_cost_detailed(
+                        response, registry_model
+                    )
+                    # Always record WHY, so a missing cost is a fact in the record
+                    # rather than an absence someone has to infer.
+                    response.usage["cost_status"] = cost_status
                     if cost_info:
                         self._cost_calculator.add_cost_to_response(response, cost_info)
                         logger.debug(
                             f"Calculated cost for {provider_type}:{model_name}: ${cost_info['total_cost']:.6f}"
+                        )
+                    else:
+                        self._handle_unpriced_call(
+                            f"{provider_type}:{model_name}", cost_status
                         )
 
                 if self.logging_service:
@@ -1213,6 +1238,37 @@ class LLMRing:
             registry_model = None
 
         return await self._validation_service.validate_context_limit(request, registry_model)
+
+    def _handle_unpriced_call(self, model: str, cost_status: str) -> None:
+        """React to a call whose cost could not be determined.
+
+        In strict mode this raises; otherwise it warns. Either way it is never
+        silent - the previous behaviour logged at DEBUG, so a run could record
+        thousands of zero-cost calls with nothing visible at normal log levels.
+        """
+        if cost_status == COST_STATUS_NO_USAGE:
+            return  # provider genuinely returned no usage; not a pricing failure
+        message = (
+            f"No cost recorded for {model}: {cost_status}. "
+            "Token usage was captured but the call could not be priced."
+        )
+        if self.strict_cost:
+            raise CostTrackingError(message, model=model, cost_status=cost_status)
+        logger.warning(message)
+
+    async def _get_registry_model_for(
+        self, provider_type: str, model_name: str
+    ) -> Optional[RegistryModel]:
+        """Best-effort registry lookup; never raises."""
+        try:
+            models = await self.registry.fetch_current_models(provider_type)
+        except Exception as e:  # pragma: no cover - network/registry failure
+            logger.debug(f"Registry lookup failed for {provider_type}: {e}")
+            return None
+        for m in models:
+            if m.model_name == model_name:
+                return m
+        return None
 
     async def calculate_cost(self, response: "LLMResponse") -> Optional[Dict[str, float]]:
         """

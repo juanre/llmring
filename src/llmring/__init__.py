@@ -8,6 +8,7 @@ from .base import BaseLLMProvider
 from .exceptions import (
     ConfigurationError,
     ConversationNotFoundError,
+    CostTrackingError,
     LLMRingError,
     ModelNotFoundError,
     ProviderAuthenticationError,
@@ -58,6 +59,7 @@ __all__ = [
     # Exceptions
     "LLMRingError",
     "ConfigurationError",
+    "CostTrackingError",
     "ProviderError",
     "ProviderNotFoundError",
     "ProviderAuthenticationError",

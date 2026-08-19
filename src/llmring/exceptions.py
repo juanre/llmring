@@ -165,6 +165,19 @@ class ModelCapabilityError(ModelError):
 
 
 # Registry Errors
+class CostTrackingError(LLMRingError):
+    """Raised when a call's cost cannot be determined and strict cost tracking is on.
+
+    Carries the machine-readable ``cost_status`` so a caller can distinguish
+    "the model is not in the registry" from "the registry has no prices for it".
+    """
+
+    def __init__(self, message: str, *, model: str, cost_status: str, **kwargs):
+        super().__init__(message, **kwargs)
+        self.model = model
+        self.cost_status = cost_status
+
+
 class RegistryError(LLMRingError):
     """Base error for registry-related issues."""
 
@@ -175,6 +188,21 @@ class RegistryConnectionError(RegistryError):
     """Cannot connect to registry."""
 
     pass
+
+
+class RegistryStaleError(RegistryError):
+    """Raised when the model registry is older than the caller is willing to accept.
+
+    Registry staleness is the upstream cause of silent zero-cost calls: a model
+    released after the last registry publish has no prices, so it cannot be
+    costed. Callers committing to a metered batch should assert freshness first.
+    """
+
+    def __init__(self, message: str, *, provider: str, updated_at, age_days: float, **kwargs):
+        super().__init__(message, **kwargs)
+        self.provider = provider
+        self.updated_at = updated_at
+        self.age_days = age_days
 
 
 class RegistryValidationError(RegistryError):

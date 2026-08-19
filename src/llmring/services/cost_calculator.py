@@ -9,6 +9,12 @@ from llmring.utils import parse_model_string
 
 logger = logging.getLogger(__name__)
 
+COST_STATUS_PRICED = "priced"
+COST_STATUS_NO_USAGE = "no_usage"
+COST_STATUS_INVALID_MODEL_FORMAT = "invalid_model_format"
+COST_STATUS_MODEL_NOT_IN_REGISTRY = "model_not_in_registry"
+COST_STATUS_NO_PRICING_IN_REGISTRY = "no_pricing_in_registry"
+
 
 class CostCalculator:
     """
@@ -28,6 +34,48 @@ class CostCalculator:
             registry: Registry client for fetching pricing information
         """
         self.registry = registry
+
+    async def calculate_cost_detailed(
+        self, response: LLMResponse, registry_model: Optional[RegistryModel] = None
+    ) -> "tuple[Optional[Dict[str, float]], str]":
+        """Calculate cost and report WHY it could not be calculated, if it could not.
+
+        Returns ``(cost_info, cost_status)``. ``cost_status`` is one of:
+
+        - ``priced``                 - a cost was computed
+        - ``no_usage``               - the provider returned no usage block
+        - ``invalid_model_format``   - model string was not ``provider:name``
+        - ``model_not_in_registry``  - the registry has no entry for this model
+        - ``no_pricing_in_registry`` - entry exists but carries no input/output price
+
+        ``calculate_cost`` returns only the cost and is kept for compatibility;
+        anything that needs to distinguish "free" from "unknown" should use this.
+        """
+        if not response.usage:
+            logger.debug("No usage information available for cost calculation")
+            return None, COST_STATUS_NO_USAGE
+
+        if ":" not in response.model:
+            logger.warning(f"Invalid model format for cost calculation: {response.model}")
+            return None, COST_STATUS_INVALID_MODEL_FORMAT
+
+        provider, model_name = parse_model_string(response.model)
+
+        if not registry_model:
+            registry_model = await self._get_registry_model(provider, model_name)
+
+        if not registry_model:
+            logger.debug(f"Model not found in registry: {provider}:{model_name}")
+            return None, COST_STATUS_MODEL_NOT_IN_REGISTRY
+
+        if (
+            registry_model.dollars_per_million_tokens_input is None
+            or registry_model.dollars_per_million_tokens_output is None
+        ):
+            logger.debug(f"Pricing not available for {provider}:{model_name}")
+            return None, COST_STATUS_NO_PRICING_IN_REGISTRY
+
+        return self._compute(response, registry_model, provider, model_name), COST_STATUS_PRICED
 
     async def calculate_cost(
         self, response: LLMResponse, registry_model: Optional[RegistryModel] = None
@@ -62,33 +110,17 @@ class CostCalculator:
             >>> cost = await calculator.calculate_cost(response)
             >>> print(f"Total: ${cost['total_cost']:.4f}")
         """
-        if not response.usage:
-            logger.debug("No usage information available for cost calculation")
-            return None
+        cost_info, _status = await self.calculate_cost_detailed(response, registry_model)
+        return cost_info
 
-        # Parse model string to get provider and model name
-        if ":" not in response.model:
-            logger.warning(f"Invalid model format for cost calculation: {response.model}")
-            return None
-
-        provider, model_name = parse_model_string(response.model)
-
-        # Get pricing info from registry if not provided
-        if not registry_model:
-            registry_model = await self._get_registry_model(provider, model_name)
-
-        if not registry_model:
-            logger.debug(f"Model not found in registry: {provider}:{model_name}")
-            return None
-
-        # Check if pricing information is available
-        if (
-            registry_model.dollars_per_million_tokens_input is None
-            or registry_model.dollars_per_million_tokens_output is None
-        ):
-            logger.debug(f"Pricing not available for {provider}:{model_name}")
-            return None
-
+    def _compute(
+        self,
+        response: LLMResponse,
+        registry_model: RegistryModel,
+        provider: str,
+        model_name: str,
+    ) -> Dict[str, float]:
+        """Price a response whose usage and registry pricing are already validated."""
         # Extract token counts
         usage = response.usage
         prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)

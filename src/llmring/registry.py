@@ -1,7 +1,8 @@
 """Registry client for fetching model metadata from GitHub Pages. Provides caching, version management, and drift detection for provider models."""
 
 import json
-from datetime import datetime, timezone
+import logging
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
@@ -9,7 +10,10 @@ import httpx
 from cachetools import TTLCache
 from pydantic import BaseModel, Field, field_validator
 
+from llmring.exceptions import RegistryStaleError
 from llmring.validation import InputValidator
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_iso_datetime(value: str) -> datetime:
@@ -138,6 +142,30 @@ class RegistryVersion(BaseModel):
     models: List[RegistryModel] = Field(default_factory=list, description="Models in this version")
 
 
+class RegistrySourceInfo(BaseModel):
+    """Provenance for one provider's slice of the registry."""
+
+    provider: str
+    version: Optional[int] = None
+    updated_at: Optional[datetime] = None
+    url: str
+    from_cache: bool = False
+
+    @property
+    def age(self) -> Optional[timedelta]:
+        if self.updated_at is None:
+            return None
+        updated = self.updated_at
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) - updated
+
+    @property
+    def age_days(self) -> Optional[float]:
+        age = self.age
+        return None if age is None else age.total_seconds() / 86400.0
+
+
 class RegistryClient:
     """Client for fetching model information from the registry."""
 
@@ -168,6 +196,8 @@ class RegistryClient:
         cache_ttl = self.CACHE_DURATION_HOURS * 3600  # Convert to seconds
         self._cache: TTLCache = TTLCache(maxsize=100, ttl=cache_ttl)
         self._pinned_version: Optional[int] = None
+        # Provenance for whatever payload we last parsed, per provider.
+        self._source_info: Dict[str, RegistrySourceInfo] = {}
 
     async def fetch_models(
         self, provider: str, version: Optional[int] = None
@@ -213,6 +243,7 @@ class RegistryClient:
             with open(cache_file, "r") as f:
                 data = json.load(f)
                 models = self._parse_models_dict(data.get("models", {}))
+                self._record_source_info(provider, data, url, from_cache=True)
                 self._cache[cache_key] = models
                 return models
 
@@ -234,6 +265,7 @@ class RegistryClient:
 
             # Parse models from dictionary
             models = self._parse_models_dict(data.get("models", {}))
+            self._record_source_info(provider, data, url, from_cache=False)
 
             # Save to cache
             with open(cache_file, "w") as f:
@@ -247,8 +279,69 @@ class RegistryClient:
             if cache_file.exists():
                 with open(cache_file, "r") as f:
                     data = json.load(f)
+                    self._record_source_info(provider, data, url, from_cache=True)
                     return self._parse_models_dict(data.get("models", {}))
             raise Exception(f"Failed to fetch registry for {provider}: {e}")
+
+    def _record_source_info(
+        self, provider: str, data: Dict[str, Any], url: str, *, from_cache: bool
+    ) -> None:
+        updated_at = None
+        raw = data.get("updated_at")
+        if raw:
+            try:
+                updated_at = _parse_iso_datetime(raw)
+            except (ValueError, TypeError):
+                logger.debug("Unparseable registry updated_at for %s: %r", provider, raw)
+        version = data.get("version")
+        self._source_info[provider] = RegistrySourceInfo(
+            provider=provider,
+            version=int(version) if isinstance(version, int) else None,
+            updated_at=updated_at,
+            url=url,
+            from_cache=from_cache,
+        )
+
+    async def get_source_info(self, provider: str) -> RegistrySourceInfo:
+        """Return provenance (version, updated_at, age) for a provider's registry data.
+
+        Fetches the provider slice if it has not been loaded yet.
+        """
+        if provider not in self._source_info:
+            await self.fetch_current_models(provider)
+        return self._source_info[provider]
+
+    async def assert_fresh(self, provider: str, max_age_days: float) -> RegistrySourceInfo:
+        """Raise RegistryStaleError if this provider's registry data is too old.
+
+        Prices are the reason this matters: a registry published before a model
+        existed cannot price that model, and the call then records no cost at
+        all. Assert freshness before committing to a metered batch.
+
+        An unknown ``updated_at`` is treated as stale - it cannot be shown to be
+        fresh, and silently passing would defeat the check.
+        """
+        info = await self.get_source_info(provider)
+        age_days = info.age_days
+        if age_days is None:
+            raise RegistryStaleError(
+                f"Registry for '{provider}' has no usable updated_at timestamp, "
+                "so its age cannot be verified.",
+                provider=provider,
+                updated_at=None,
+                age_days=float("inf"),
+            )
+        if age_days > max_age_days:
+            raise RegistryStaleError(
+                f"Registry for '{provider}' is {age_days:.1f} days old "
+                f"(updated {info.updated_at:%Y-%m-%d}, version {info.version}), "
+                f"which exceeds the {max_age_days} day limit. Model prices may be "
+                "missing or wrong; refresh the registry before relying on costs.",
+                provider=provider,
+                updated_at=info.updated_at,
+                age_days=age_days,
+            )
+        return info
 
     async def fetch_version(self, provider: str, version: int) -> RegistryVersion:
         """
