@@ -220,12 +220,18 @@ class RegistryClient:
         # Otherwise fetch current
         return await self.fetch_current_models(provider)
 
-    async def fetch_current_models(self, provider: str) -> List[RegistryModel]:
+    async def fetch_current_models(
+        self, provider: str, force_refresh: bool = False
+    ) -> List[RegistryModel]:
         """
         Fetch current models for a provider.
 
         Args:
             provider: Provider name (e.g., 'openai', 'anthropic')
+            force_refresh: Bypass both the in-memory and on-disk caches and read
+                from the origin. Use when the answer must reflect what is
+                published right now rather than what was published up to 24h ago
+                - see assert_fresh for why age alone is not enough.
 
         Returns:
             List of current models
@@ -234,12 +240,12 @@ class RegistryClient:
         cache_key = f"current_{provider}"
 
         # Check in-memory cache
-        if cache_key in self._cache:
+        if not force_refresh and cache_key in self._cache:
             return self._cache[cache_key]
 
         # Check file cache
         cache_file = self.cache_dir / f"{provider}_current.json"
-        if self._is_cache_valid(cache_file):
+        if not force_refresh and self._is_cache_valid(cache_file):
             with open(cache_file, "r") as f:
                 data = json.load(f)
                 models = self._parse_models_dict(data.get("models", {}))
@@ -302,16 +308,41 @@ class RegistryClient:
             from_cache=from_cache,
         )
 
-    async def get_source_info(self, provider: str) -> RegistrySourceInfo:
+    def invalidate_cache(self, provider: Optional[str] = None) -> None:
+        """Drop cached registry payloads so the next read comes from the origin.
+
+        Call after publishing a registry update. Without this the process, and
+        any other process on the machine, keeps serving the previous payload
+        for up to CACHE_DURATION_HOURS.
+        """
+        providers = [provider] if provider else ["openai", "anthropic", "google"]
+        for prov in providers:
+            self._cache.pop(f"current_{prov}", None)
+            self._source_info.pop(prov, None)
+            cache_file = self.cache_dir / f"{prov}_current.json"
+            try:
+                cache_file.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as e:  # pragma: no cover
+                logger.warning("Could not remove registry cache %s: %s", cache_file, e)
+
+    async def get_source_info(
+        self, provider: str, force_refresh: bool = False
+    ) -> RegistrySourceInfo:
         """Return provenance (version, updated_at, age) for a provider's registry data.
 
-        Fetches the provider slice if it has not been loaded yet.
+        Fetches the provider slice if it has not been loaded yet. Pass
+        force_refresh to describe what is published now rather than what is
+        cached locally.
         """
-        if provider not in self._source_info:
-            await self.fetch_current_models(provider)
+        if force_refresh or provider not in self._source_info:
+            await self.fetch_current_models(provider, force_refresh=force_refresh)
         return self._source_info[provider]
 
-    async def assert_fresh(self, provider: str, max_age_days: float) -> RegistrySourceInfo:
+    async def assert_fresh(
+        self, provider: str, max_age_days: float, force_refresh: bool = True
+    ) -> RegistrySourceInfo:
         """Raise RegistryStaleError if this provider's registry data is too old.
 
         Prices are the reason this matters: a registry published before a model
@@ -320,8 +351,15 @@ class RegistryClient:
 
         An unknown ``updated_at`` is treated as stale - it cannot be shown to be
         fresh, and silently passing would defeat the check.
+
+        ``force_refresh`` defaults to True, and that default is load-bearing.
+        Age alone cannot detect a cache that is merely a VERSION behind: a
+        payload published hours ago is "fresh" by age while already superseded,
+        and it will keep being served for up to 24h. Validating against the
+        origin is what makes this check version-aware. Pass force_refresh=False
+        only to describe the local cache deliberately.
         """
-        info = await self.get_source_info(provider)
+        info = await self.get_source_info(provider, force_refresh=force_refresh)
         age_days = info.age_days
         if age_days is None:
             raise RegistryStaleError(

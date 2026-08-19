@@ -90,3 +90,82 @@ async def test_naive_timestamp_is_treated_as_utc(tmp_path):
     root = _write_registry(tmp_path / "reg", "openai", naive)
     info = await _client(root, tmp_path / "c").get_source_info("openai")
     assert info.age_days == pytest.approx(5, abs=1)
+
+
+# --------------------------------------------------------------------------
+# version-awareness: age alone cannot detect a cache that is a VERSION behind
+# --------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_age_check_alone_does_not_catch_a_version_behind_cache(tmp_path):
+    """The real-world miss: a payload published hours ago is 'fresh' by age
+    while already superseded, and is served for up to 24h. This pins the
+    limitation so nobody mistakes assert_fresh's age test for a version test."""
+    origin = _write_registry(tmp_path / "reg", "openai",
+                             datetime.now(timezone.utc).isoformat(), version=9)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    # A cache holding v8, written moments ago - recent, but a version behind.
+    (cache / "openai_current.json").write_text(json.dumps({
+        "provider": "openai", "version": 8,
+        "updated_at": (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat(),
+        "models": {},
+    }))
+    c = _client(origin, cache)
+    stale = await c.get_source_info("openai", force_refresh=False)
+    assert stale.version == 8 and stale.from_cache is True
+    assert stale.age_days < 1          # passes an age test...
+    await c.assert_fresh("openai", max_age_days=30, force_refresh=False)  # ...and passes this
+
+
+@pytest.mark.asyncio
+async def test_assert_fresh_defaults_to_checking_the_origin(tmp_path):
+    """Default force_refresh=True is what makes the check version-aware."""
+    origin = _write_registry(tmp_path / "reg", "openai",
+                             datetime.now(timezone.utc).isoformat(), version=9)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "openai_current.json").write_text(json.dumps({
+        "provider": "openai", "version": 8,
+        "updated_at": (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat(),
+        "models": {},
+    }))
+    c = _client(origin, cache)
+    info = await c.assert_fresh("openai", max_age_days=30)   # default force_refresh
+    assert info.version == 9
+    assert info.from_cache is False
+
+
+@pytest.mark.asyncio
+async def test_validating_heals_the_cache(tmp_path):
+    """After a forced check, ordinary reads see the current payload too -
+    so validation repairs the staleness rather than merely reporting it."""
+    origin = _write_registry(tmp_path / "reg", "openai",
+                             datetime.now(timezone.utc).isoformat(), version=9)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "openai_current.json").write_text(json.dumps({
+        "provider": "openai", "version": 8,
+        "updated_at": (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat(),
+        "models": {},
+    }))
+    c = _client(origin, cache)
+    await c.assert_fresh("openai", max_age_days=30)
+    after = await c.get_source_info("openai", force_refresh=False)
+    assert after.version == 9
+
+
+@pytest.mark.asyncio
+async def test_invalidate_cache_removes_the_stored_payload(tmp_path):
+    origin = _write_registry(tmp_path / "reg", "openai",
+                             datetime.now(timezone.utc).isoformat(), version=9)
+    cache = tmp_path / "cache"
+    c = _client(origin, cache)
+    await c.fetch_current_models("openai")
+    assert (cache / "openai_current.json").exists()
+    c.invalidate_cache("openai")
+    assert not (cache / "openai_current.json").exists()
+
+
+def test_invalidate_cache_is_safe_when_nothing_is_cached(tmp_path):
+    _client(tmp_path / "reg", tmp_path / "cache").invalidate_cache()
