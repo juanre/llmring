@@ -245,12 +245,60 @@ class ProviderErrorHandler:
         elif "RateLimitError" in exception_type:
             return "rate_limit"
         elif "BadRequestError" in exception_type:
-            # Special handling for Anthropic's BadRequestError with model issues
-            if self.provider_name == "anthropic" and "model" in str(exception).lower():
+            # A 400 is a complaint about the REQUEST, not about the model's
+            # existence: Anthropic returns 404 not_found_error for an unknown
+            # model. Matching on the bare substring "model" misclassified any
+            # parameter complaint that merely mentions the word - notably
+            # "`temperature` is deprecated for this model", which surfaced as
+            # "Model 'claude-sonnet-5' not available" and sent a reviewer
+            # chasing a nonexistent model problem during an outage test.
+            if self.provider_name == "anthropic" and self._mentions_unknown_model(
+                str(exception)
+            ):
                 return "model_not_found"
             return "bad_request"
 
         return None
+
+
+    @staticmethod
+    def _mentions_unknown_model(message: str) -> bool:
+        """True only when the text says the MODEL is unknown or unsupported,
+        not merely that a model was involved.
+
+        Order matters: a complaint about a PARAMETER is never a missing-model
+        error, even though such messages routinely contain the word "model"
+        ("`temperature` is deprecated for this model"). Parameter complaints are
+        excluded first, then genuine model signals are matched.
+
+        Deliberately narrow. Mislabelling a parameter error as a missing model
+        is the more damaging direction: it hides the real cause and, during an
+        outage, sends whoever is debugging after a model that is in fact fine.
+        """
+        text = message.lower()
+
+        parameter_complaint = (
+            "deprecated" in text
+            or "unsupported parameter" in text
+            or "unexpected keyword" in text
+            or "invalid parameter" in text
+        )
+        if parameter_complaint:
+            return False
+
+        return any(
+            phrase in text
+            for phrase in (
+                "model not found",
+                "model not supported",
+                "unsupported model",
+                "unknown model",
+                "model does not exist",
+                "invalid model",
+                "no such model",
+                "not_found_error",
+            )
+        )
 
     def _detect_google_error(self, exception: BaseException, exception_type: str) -> Optional[str]:
         """Detect errors for Google SDK."""

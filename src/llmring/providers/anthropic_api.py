@@ -372,10 +372,16 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         request_params: Dict[str, Any] = {
             "model": model,
             "messages": anthropic_messages,
-            "temperature": temperature or 0.7,
             "max_tokens": max_tokens or 4096,
             "stream": True,
         }
+        # Only send temperature when the caller actually asked for one.
+        # `temperature or 0.7` was wrong twice: it invented a temperature for
+        # callers that passed None - defeating the service layer's strip for
+        # models where the parameter is deprecated and turning it into a hard
+        # 400 - and it silently rewrote a deliberate 0.0 to 0.7.
+        if temperature is not None:
+            request_params["temperature"] = temperature
 
         if system_message:
             # Add system message with cache control if available
@@ -715,9 +721,11 @@ class AnthropicProvider(BaseLLMProvider, RegistryModelSelectorMixin, ProviderLog
         request_params: Dict[str, Any] = {
             "model": model,
             "messages": anthropic_messages,
-            "temperature": temperature or 0.7,
             "max_tokens": max_tokens or 4096,
         }
+        # See _stream_chat: never invent a temperature, and never rewrite 0.0.
+        if temperature is not None:
+            request_params["temperature"] = temperature
 
         if system_message:
             # Add system message with cache control if available
